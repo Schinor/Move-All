@@ -190,12 +190,10 @@ kbd {
   place-items: center;
   width: 28px;
   height: 28px;
-  color: #000;
-  font-family: var(--font-display);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  background: var(--brand);
-  border-radius: var(--r-sm);
+  color: var(--text-2);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
 }
 
 .account-copy {

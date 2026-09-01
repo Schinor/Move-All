@@ -3,6 +3,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 import { LayoutService } from '../../../core/services/layout.service';
 import { IconComponent, IconName } from '../../ui/icon/icon.component';
 import { BrandMarkComponent } from '../../ui/brand-mark/brand-mark.component';
+import { BrandLockupComponent } from '../../ui/brand-lockup/brand-lockup.component';
 
 interface NavItem {
   path: string;
@@ -21,7 +22,7 @@ interface NavGroup {
 @Component({
   selector: 'app-sidebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterLinkActive, IconComponent, BrandMarkComponent],
+  imports: [RouterLink, RouterLinkActive, IconComponent, BrandMarkComponent, BrandLockupComponent],
   templateUrl: './app-sidebar.component.html',
   styleUrl: './app-sidebar.component.css',
 })

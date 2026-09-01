@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { BrandMarkComponent } from '../../../shared/ui/brand-mark/brand-mark.component';
+import { BrandLockupComponent } from '../../../shared/ui/brand-lockup/brand-lockup.component';
 import { IconComponent } from '../../../shared/ui/icon/icon.component';
 
 @Component({
   selector: 'app-cadastro',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, BrandMarkComponent, IconComponent],
+  imports: [FormsModule, RouterLink, BrandLockupComponent, IconComponent],
   templateUrl: './cadastro.component.html',
   styleUrl: './cadastro.component.css',
 })

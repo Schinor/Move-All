@@ -34,18 +34,9 @@
   border-bottom: 1px solid var(--border);
 }
 
-.brand-mark {
-  color: var(--brand);
-}
-
-.brand-text {
-  overflow: hidden;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  line-height: 1.1;
-  white-space: nowrap;
+.brand-rail {
+  display: none;
+  color: var(--brand-lockup);
 }
 
 .nav {
@@ -143,11 +134,15 @@
   padding: 0;
 }
 
-:host(.sidebar-collapsed) .brand-text,
+:host(.sidebar-collapsed) .brand-full,
 :host(.sidebar-collapsed) .section-label,
 :host(.sidebar-collapsed) .nav-label,
 :host(.sidebar-collapsed) .soon {
   display: none;
+}
+
+:host(.sidebar-collapsed) .brand-rail {
+  display: block;
 }
 
 :host(.sidebar-collapsed) .nav {
@@ -185,11 +180,15 @@
     padding-inline: var(--sp-5);
   }
 
-  :host(.sidebar-collapsed) .brand-text,
+  :host(.sidebar-collapsed) .brand-full,
   :host(.sidebar-collapsed) .section-label,
   :host(.sidebar-collapsed) .nav-label,
   :host(.sidebar-collapsed) .soon {
     display: revert;
+  }
+
+  :host(.sidebar-collapsed) .brand-rail {
+    display: none;
   }
 
   :host(.sidebar-collapsed) .nav a {

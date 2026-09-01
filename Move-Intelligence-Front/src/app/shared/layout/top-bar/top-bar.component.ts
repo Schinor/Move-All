@@ -11,18 +11,17 @@ import { ThemeService } from '../../../core/services/theme.service';
 import { CommandPaletteComponent } from '../../ui/command-palette/command-palette.component';
 import { IconComponent } from '../../ui/icon/icon.component';
 
-const ROUTE_LABELS: Record<string, string> = {
-  '/': 'Executivo',
-  '/ranking': 'Ranking',
-  '/comparador': 'Comparador',
-  '/sinais': 'Sinais & Alertas',
-  '/ai-copilot': 'AI Copilot',
-  '/sourcing': 'Sourcing',
-  '/mercados': 'Mercados',
-  '/pipeline': 'Pipeline',
-  '/recomendacoes': 'Recomendações',
-  '/login': 'Login',
-  '/cadastro': 'Cadastro',
+/** Rota -> [grupo da navegação, nome da tela]. O breadcrumb espelha a sidebar. */
+const ROUTE_TRAIL: Record<string, [string, string]> = {
+  '/': ['Decidir', 'Executivo'],
+  '/ranking': ['Decidir', 'Ranking'],
+  '/comparador': ['Decidir', 'Comparador'],
+  '/sinais': ['Investigar', 'Sinais & Alertas'],
+  '/mercados': ['Investigar', 'Mercados'],
+  '/ai-copilot': ['Investigar', 'AI Copilot'],
+  '/sourcing': ['Executar', 'Sourcing'],
+  '/pipeline': ['Executar', 'Pipeline'],
+  '/recomendacoes': ['Executar', 'Recomendações'],
 };
 
 /** Barra de contexto global: navegação, busca, tema e alertas reais. */
@@ -44,13 +43,18 @@ export class TopBarComponent {
   readonly notificationsOpen = signal(false);
   readonly accountOpen = signal(false);
 
-  readonly breadcrumb = toSignal(
+  readonly trail = toSignal(
     this.router.events.pipe(
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
-      map((event) => this.routeLabel(event.urlAfterRedirects)),
+      map((event) => this.routeTrail(event.urlAfterRedirects)),
     ),
-    { initialValue: this.routeLabel(this.router.url) },
+    { initialValue: this.routeTrail(this.router.url) },
   );
+
+  /** ⌘ no macOS, Ctrl no resto — o atalho anunciado precisa ser o atalho real. */
+  readonly shortcutKey = /mac|iphone|ipad/i.test(navigator.platform || navigator.userAgent)
+    ? '⌘'
+    : 'Ctrl';
 
   readonly unreadAlerts = computed(() => {
     const state = this.alertsState();
@@ -96,10 +100,10 @@ export class TopBarComponent {
     return ['read', 'resolved', 'closed', 'dismissed'].includes(status);
   }
 
-  private routeLabel(url: string): string {
+  private routeTrail(url: string): [string, string] {
     const cleanUrl = url.split('?')[0].split('#')[0];
-    if (ROUTE_LABELS[cleanUrl]) return ROUTE_LABELS[cleanUrl];
-    if (cleanUrl.startsWith('/tendencia/')) return 'Dossiê de tendência';
-    return 'Move Intelligence';
+    if (ROUTE_TRAIL[cleanUrl]) return ROUTE_TRAIL[cleanUrl];
+    if (cleanUrl.startsWith('/tendencia/')) return ['Decidir', 'Dossiê de tendência'];
+    return ['Move Intelligence', 'Página não encontrada'];
   }
 }

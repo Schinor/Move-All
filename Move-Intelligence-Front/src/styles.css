@@ -6,7 +6,7 @@
 
 :root {
   /* ---- Tipografia ---- */
-  --font-display: 'Archivo', 'Inter', system-ui, sans-serif;
+  --font-display: 'Outfit', 'Inter', system-ui, sans-serif;
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   --fs-display: 2.25rem;
@@ -59,21 +59,22 @@
   --content-max: 1440px;
 
   /* ---- Tema claro (padrão quando o sistema é claro) ---- */
-  --bg: #ffffff;
-  --bg-subtle: #f7f7f8;
-  --surface: #ffffff;
-  --surface-2: #f4f4f5;
-  --surface-3: #ebebed;
-  --border: #e3e3e6;
-  --border-strong: #c9c9ce;
-  --text: #0a0a0b;
-  --text-2: #55565c;
-  --text-3: #7a7b82;
+  --bg: #edeff0;
+  --bg-subtle: #e6e9eb;
+  --surface: #fafbfb;
+  --surface-2: #f1f3f4;
+  --surface-3: #e6e9eb;
+  --border: #d9dddf;
+  --border-strong: #bcc2c6;
+  --text: #14171a;
+  --text-2: #4e555a;
+  --text-3: #656c71;
 
   --brand: #75f852;
   --brand-ink: #000000;
   --brand-text: #2c6b18;
-  --brand-weak: #eafde2;
+  --brand-weak: #e7f9de;
+  --brand-lockup: #14171a;
 
   --success: #17803d;
   --success-bg: #e9f7ee;
@@ -138,6 +139,7 @@
   --brand-ink: #000000;
   --brand-text: #75f852;
   --brand-weak: #16250f;
+  --brand-lockup: #75f852;
   --success: #03eb88;
   --success-bg: #062218;
   --warning: #fde441;
@@ -175,6 +177,7 @@
     --brand-ink: #000000;
     --brand-text: #75f852;
     --brand-weak: #16250f;
+    --brand-lockup: #75f852;
     --success: #03eb88;
     --success-bg: #062218;
     --warning: #fde441;
