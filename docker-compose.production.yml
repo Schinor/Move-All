@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: move-postgres-prod
+    restart: unless-stopped
+    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=512MB", "-c", "work_mem=16MB"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-move_intelligence}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./Move-Intelligence-Back/prisma/init-extensions.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-move_intelligence}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: move-redis-prod
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Move-Intelligence-Back/Dockerfile
+    container_name: move-backend-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-move_intelligence}?schema=public
+      MOVE_ETL_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-move_intelligence}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET para producao}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      BRIGHTDATA_MCP_URL: ${BRIGHTDATA_MCP_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Move-Intelligence-Front/Dockerfile
+    container_name: move-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "${PORT:-80}:80"
+    depends_on:
+      - backend
+
+  collector-scheduler:
+    build:
+      context: .
+      dockerfile: Move-Intelligence-Dados/Dockerfile
+    container_name: move-collector-scheduler-prod
+    restart: unless-stopped
+    environment:
+      MOVE_ETL_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-move_intelligence}
+      SCHEDULE_INTERVAL_HOURS: ${SCHEDULE_INTERVAL_HOURS:-168}
+      RUN_INIT_ON_STARTUP: "${RUN_INIT_COLLECTION:-false}"
+      COLLECTION_PERIOD_YEARS: ${COLLECTION_PERIOD_YEARS:-2}
+      BRIGHTDATA_MCP_URL: ${BRIGHTDATA_MCP_URL:-}
+    command: ["python3", "scripts/collector_scheduler.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:

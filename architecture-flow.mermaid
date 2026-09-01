@@ -1,0 +1,94 @@
+graph TD
+    %% ==========================================================
+    %% MOVE INTELLIGENCE - ARQUITETURA E FLUXO DE DADOS COMPLETO
+    %% ==========================================================
+
+    subgraph FontesExteriores["1. FONTES EXTERNAS DE DADOS"]
+        BD_MCP["Bright Data MCP & SERP<br/>(Amazon BR/US, ML, Shopee, Alibaba, 1688, Taobao, TikTok Shop)"]
+        TA_COMEX["Dados Aduaneiros e Comércio Exterior<br/>(TradeAtlas / Comex Anual)"]
+        FX_API["APIs Cambiais & Mercado<br/>(USD/BRL Exchange Rate)"]
+    end
+
+    subgraph DadosETL["2. CAMADA DE DADOS & ETL (Move-Intelligence-Dados)"]
+        EXTRACT["Extratores Modulares<br/>(search_engine + scrape_as_markdown)"]
+        FITNESS_FILTER{"Filtro de Escopo Fitness<br/>(Rejeita não-fitness via tokens negativos)"}
+        NORM_PRICE["Normalização de Preço e Câmbio<br/>(parse_price + convert_to_brl)"]
+        NORM_DEMAND["Normalização Min-Max Demanda<br/>trend_index = (raw-min)/(max-min)*100"]
+        CORRELATE["Correlação e Entity Resolution<br/>(Mapeamento de Clusters por YAML)"]
+        
+        EXTRACT --> FITNESS_FILTER
+        FITNESS_FILTER -->|Aprovado| NORM_PRICE
+        FITNESS_FILTER -->|Aprovado| NORM_DEMAND
+        NORM_PRICE --> CORRELATE
+        NORM_DEMAND --> CORRELATE
+    end
+
+    subgraph Armazenamento["3. PERSISTÊNCIA & BANCO DE DADOS"]
+        POSTGRES[("PostgreSQL 16 (Oficial)<br/>- products (Snapshots)<br/>- demand_signals<br/>- product_demand_link<br/>- product_clusters<br/>- shipments<br/>- ai_recommendations<br/>- ai_conversations / ai_messages<br/>- ai_call_logs")]
+        REDIS[("Redis 7<br/>Cache de Sessão & Filas BullMQ")]
+    end
+
+    subgraph BackendMotores["4. MOTORES DETERMINÍSTICOS (Move-Intelligence-Back)"]
+        direction TB
+        
+        subgraph TrendEngine["Trend Engine (Score de Tendência 0-1)"]
+            TE_CALC["- Crescimento Relativo: (end - start)/start<br/>- Log-Vol: log10(1+v)/log10(1+maxRef)<br/>- Rating Norm: (rating-3)/(5-3)<br/>- Inversão BSR (Best Seller Rank)<br/>Score = Σ (peso_i * componente_i)"]
+        end
+
+        subgraph MarginEngine["Margin Engine (Score de Margem 0-1)"]
+            ME_CALC["- Landed Cost = FOB_BRL + Frete_BRL + Imposto_Import + Taxas<br/>- Margem Bruta = Preço Venda - Landed Cost<br/>- Margem % = Margem / Preço Venda<br/>- Score = Margem % / MinMarginPct (clamp 0..1)"]
+        end
+
+        subgraph OpportunityEngine["Opportunity Engine (Score de Oportunidade)"]
+            OE_CALC["OpportunityScore = TrendScore * MarginScore * (1 - WesternSaturationScore)"]
+        end
+
+        subgraph MonteCarloEngine["Simulador Monte Carlo & VPL (Python Runner)"]
+            MC_CALC["- Decomposição de Cholesky (Câmbio x Lead Time, corr=0.35)<br/>- Elasticidade de Preço: Q = Qref * (Pref/P)^elasticidade<br/>- Fluxo Descontado com Curva de Rampa e Salvage<br/>- 1.000.000 cenários: P(VPL > 0), CVaR 5%, ROI, IL<br/>Decisão: >85% AVANÇAR | 70-85% RESSALVAS | <70% REPROVAR"]
+        end
+    end
+
+    subgraph CamadaIA["5. CAMADA DE IA NATIVE NVIDIA (ai.md Grounded)"]
+        NVIDIA_GW["NvidiaService (Chat Completions Gateway)<br/>Modelo: z-ai/glm-5.2 / Qwen / Llama 3"]
+        
+        S1["Superfície 1: Cartão Decisão<br/>Grounded em scores reais + stats snapshots (Cache 24h)"]
+        S2["Superfície 2: Premissas Monte Carlo<br/>Grounded em medianas históricas de preço, vol e MOQ"]
+        S3["Superfície 3: AI Copilot (Tool-Use)<br/>Chama 5 ferramentas SQL: search, details, signals, suppliers, status"]
+        
+        NVIDIA_GW --> S1
+        NVIDIA_GW --> S2
+        NVIDIA_GW --> S3
+    end
+
+    subgraph Frontend["6. INTERFACE FRONTEND (Move-Intelligence-Front - Angular)"]
+        UI_OPP["Dashboard de Oportunidades<br/>(Matriz Risco x Retorno, Filtro Fitness)"]
+        UI_DEC["Aba Decisão & Tendência<br/>(AiRecommendationCardComponent)"]
+        UI_SIM["Aba Simulação Monte Carlo<br/>(Preencher com IA + Sliders Interativos)"]
+        UI_COP["AI Copilot Chat<br/>(Histórico, Ferramentas consultadas & Badges)"]
+    end
+
+    %% Conexões entre Módulos
+    BD_MCP --> EXTRACT
+    TA_COMEX --> POSTGRES
+    FX_API --> NORM_PRICE
+    
+    CORRELATE -->|Upsert Transacional| POSTGRES
+    
+    POSTGRES --> TrendEngine
+    POSTGRES --> MarginEngine
+    TrendEngine --> OpportunityEngine
+    MarginEngine --> OpportunityEngine
+    
+    POSTGRES --> MonteCarloEngine
+    OpportunityEngine --> MonteCarloEngine
+    
+    POSTGRES --> CamadaIA
+    OpportunityEngine --> S1
+    MonteCarloEngine --> S2
+    POSTGRES --> S3
+    
+    OpportunityEngine --> UI_OPP
+    S1 --> UI_DEC
+    MonteCarloEngine --> UI_SIM
+    S2 --> UI_SIM
+    S3 --> UI_COP
