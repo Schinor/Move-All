@@ -104,6 +104,54 @@
     }
   </section>
 
+  <section class="trend-section" aria-labelledby="trend-title">
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow"><app-icon name="trending-up" [size]="14" /> Tendências</span>
+        <h2 id="trend-title">Produtos em destaque</h2>
+      </div>
+      <a class="text-link" routerLink="/ranking">
+        Ver ranking completo <app-icon name="arrow-right" [size]="14" />
+      </a>
+    </div>
+
+    @switch (products().status) {
+      @case ('loading') {
+        <div class="trend-grid" role="status" aria-label="Carregando produtos em destaque">
+          @for (card of [1, 2, 3, 4, 5, 6]; track card) {
+            <div class="trend-card-skeleton">
+              <app-skeleton [width]="'55%'" [height]="'12px'" />
+              <app-skeleton [width]="'82%'" [height]="'20px'" />
+              <app-skeleton [width]="'30%'" [height]="'44px'" />
+              <app-skeleton [height]="'58px'" />
+            </div>
+          }
+        </div>
+      }
+      @case ('error') {
+        <app-state-panel
+          [state]="products()"
+          emptyMessage="Não foi possível carregar os produtos em destaque."
+        />
+      }
+      @case ('empty') {
+        <app-empty-state
+          [compact]="true"
+          icon="trending-up"
+          title="Sem tendências em destaque"
+          description="Os cartões aparecem quando houver produtos pontuados na coleta."
+        />
+      }
+      @case ('ready') {
+        <div class="trend-grid">
+          @for (product of featuredProducts(); track product.productClusterId) {
+            <app-trend-card [trend]="product" />
+          }
+        </div>
+      }
+    }
+  </section>
+
   <section class="insight-grid" aria-label="Sinais e contexto operacional">
     <article class="surface-panel signals-panel">
       <header class="panel-heading">

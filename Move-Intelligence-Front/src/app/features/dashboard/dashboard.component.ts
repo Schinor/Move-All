@@ -8,6 +8,7 @@ import { SourceStatus, TimeWindow, TrendProduct } from '../../core/models/contra
 import { RiskMatrixComponent } from '../../shared/components/intel/risk-matrix/risk-matrix.component';
 import { SignalSourceCardComponent } from '../../shared/components/intel/signal-source-card/signal-source-card.component';
 import { StatCardComponent } from '../../shared/components/intel/stat-card/stat-card.component';
+import { TrendCardComponent } from '../../shared/components/intel/trend-card/trend-card.component';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';
 import { ExplainComponent } from '../../shared/ui/explain/explain.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
@@ -27,6 +28,7 @@ import { HumanizePipe } from '../../shared/util/humanize.pipe';
     PageHeaderComponent,
     WindowSelectorComponent,
     StatCardComponent,
+    TrendCardComponent,
     RiskMatrixComponent,
     SignalSourceCardComponent,
     StatePanelComponent,
@@ -69,6 +71,12 @@ export class DashboardComponent {
     [...this.productRows()]
       .sort((a, b) => (b.trendScore.value ?? -1) - (a.trendScore.value ?? -1))
       .slice(0, 5),
+  );
+
+  readonly featuredProducts = computed(() =>
+    [...this.productRows()]
+      .sort((a, b) => (b.trendScore.value ?? -1) - (a.trendScore.value ?? -1))
+      .slice(0, 6),
   );
 
   readonly sourceRows = computed<SourceStatus[]>(() => {

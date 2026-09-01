@@ -28,6 +28,7 @@
 
 .decision-panel,
 .kpi-section,
+.trend-section,
 .sources-section,
 .insight-grid {
   min-width: 0;
@@ -154,9 +155,30 @@
 }
 
 .kpi-section,
+.trend-section,
 .sources-section {
   display: grid;
   gap: var(--sp-4);
+}
+
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+}
+
+.trend-grid app-trend-card {
+  min-width: 0;
+}
+
+.trend-card-skeleton {
+  display: grid;
+  gap: var(--sp-4);
+  min-height: 286px;
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
 }
 
 .kpi-grid {
@@ -169,6 +191,10 @@
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: var(--sp-4);
+}
+
+.insight-grid > * {
+  min-width: 0;
 }
 
 .surface-panel {
@@ -250,6 +276,10 @@
   .insight-grid {
     grid-template-columns: 1fr;
   }
+
+  .trend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767px) {
@@ -288,6 +318,10 @@
   }
 
   .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-grid {
     grid-template-columns: 1fr;
   }
 
