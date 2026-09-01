@@ -1,0 +1,24 @@
+<article class="matrix glass">
+  <header>
+    <span>Risco x demanda</span>
+    <strong>{{ products().length }} oportunidades</strong>
+  </header>
+
+  <div class="grid" role="table">
+    @for (cell of cells(); track cell.demand + cell.risk) {
+      <div class="cell" role="cell">
+        <span class="axis">{{ cell.demand }} · {{ cell.risk }}</span>
+        <div class="chips">
+          @for (item of cell.items; track item.productClusterId) {
+            <a [routerLink]="['/tendencia', item.productClusterId]" class="chip">
+              {{ item.canonicalName }}
+            </a>
+          }
+          @if (!cell.items.length) {
+            <span class="empty">—</span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</article>

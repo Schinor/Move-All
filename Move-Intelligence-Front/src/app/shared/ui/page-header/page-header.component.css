@@ -1,0 +1,26 @@
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+.subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted-foreground);
+  max-width: 60ch;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

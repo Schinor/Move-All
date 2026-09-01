@@ -1,0 +1,19 @@
+<section class="chart-card glass">
+  <header>
+    <div>
+      <span class="chart-title">{{ config().title }}</span>
+      <small class="chart-subtitle">{{ config().subtitle }}</small>
+    </div>
+    <div class="header-metrics">
+      @if (growthPct() !== null) {
+        <span class="growth-tag" [class.positive]="growthPct()! >= 0" [class.negative]="growthPct()! < 0">
+          <app-icon [name]="growthPct()! >= 0 ? 'chevron-up' : 'chevron-down'" [size]="12" />
+          {{ growthPct()! >= 0 ? '+' : '' }}{{ growthPct() }}%
+        </span>
+      }
+      <span class="points-badge">{{ points().length }} pontos</span>
+    </div>
+  </header>
+  <app-chart [options]="options()" />
+</section>
+

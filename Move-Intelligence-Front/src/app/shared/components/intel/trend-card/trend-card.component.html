@@ -1,0 +1,55 @@
+<a class="trend-card" [routerLink]="['/tendencia', trend().productClusterId]">
+  <div class="topline"></div>
+  <div class="glow"></div>
+
+  <div class="inner">
+    <div class="head">
+      <div class="head-left">
+        <div class="tags">
+          <span class="cat">{{ trend().category ?? '—' }}</span>
+          <span class="sep"></span>
+          @if (stageLabel()) {
+            <span class="stage">{{ stageLabel() }}</span>
+          }
+        </div>
+        <h3 class="name">{{ trend().canonicalName }}</h3>
+      </div>
+      <span class="arrow"><app-icon name="arrow-up-right" [size]="16" /></span>
+    </div>
+
+    <div class="score-row">
+      <div>
+        <div class="score num text-gradient">{{ scoreValue() ?? '—' }}</div>
+        <div class="score-label">Trend Score</div>
+      </div>
+      @if (trend().spark?.length) {
+        <div class="spark">
+          <app-sparkline [data]="trend().spark!" [up]="up()" />
+        </div>
+      }
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="s-label">Crescimento</div>
+        <div class="s-value num" [class.down]="!up()">
+          <app-icon [name]="up() ? 'trending-up' : 'trending-down'" [size]="12" />
+          {{ trend().growthPct !== null ? (up() ? '+' : '') + trend().growthPct + '%' : '—' }}
+        </div>
+      </div>
+      <div class="stat">
+        <div class="s-label">Margem</div>
+        <div class="s-value num">{{ trend().marginPct !== null ? trend().marginPct + '%' : '—' }}</div>
+      </div>
+      <div class="stat">
+        <div class="s-label">Lead-time</div>
+        <div class="s-value num">{{ trend().leadTimeDays !== null ? trend().leadTimeDays + 'd' : '—' }}</div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <app-risk-badge [level]="trend().risk" of="de mercado" />
+      <div class="pipeline">Pipeline <span class="num">{{ pipeline() }}</span></div>
+    </div>
+  </div>
+</a>

@@ -1,0 +1,69 @@
+# Palavras-chave de Produtos para Monitoramento - Ramo Fitness (Residencial e Comercial)
+
+categories:
+  - name: "musculacao_pesos_livres"
+    description: "Equipamentos de musculação, pesos livres residenciais e profissionais"
+    keywords:
+      - "haltere ajustavel"
+      - "kit halteres sextavados"
+      - "kettlebell ferro fundido"
+      - "anilha olimpica emborrachada"
+      - "barra macica musculacao"
+      - "banco de musculacao inclinavel"
+      - "estacao de musculacao multifuncional"
+      - "gaiola de agachamento power rack"
+      - "smith machine academia"
+      - "leg press 45 profissional"
+
+  - name: "cardio_fitness"
+    description: "Aparelhos de cardio para uso residencial e academias comerciais"
+    keywords:
+      - "esteira eletrica dobravel"
+      - "walking pad esteira compacta"
+      - "bicicleta ergometrica spinning"
+      - "bike indoor residencial"
+      - "eliptico ergometrico transport"
+      - "maquina de remo indoor air rower"
+      - "simulador de escada academia"
+      - "air bike crossfit"
+
+  - name: "treino_funcional_crossfit"
+    description: "Acessórios para treino funcional, crossfit e alta intensidade"
+    keywords:
+      - "kit faixas elasticas resistance band"
+      - "super band elastico treino"
+      - "mini band kit 5 intensidades"
+      - "corda de pular speed rope crossfit"
+      - "roda abdominal dupla ab wheel"
+      - "push up board suporte flexao"
+      - "fita de suspensao tipo trx"
+      - "caixa pliometrica salto plyo box"
+      - "slam ball medicine ball"
+
+  - name: "calistenia_peso_corporal"
+    description: "Equipamentos para treino com peso do corpo e calistenia"
+    keywords:
+      - "barra fixa de porta ajustavel"
+      - "barra fixa de parede calistenia"
+      - "barra paralela dip station"
+      - "argolas olimpicas de madeira"
+      - "colete de peso para treino"
+
+  - name: "pilates_yoga_mobilidade"
+    description: "Acessórios para pilates, yoga, solo e mobilidade"
+    keywords:
+      - "tapete de yoga mat antiderrapante"
+      - "colchonete academia fitness"
+      - "rolo de liberacao miofascial foam roller"
+      - "bola suica pilates 65cm"
+      - "anel pilates magic circle flexivel"
+      - "reformer pilates portatil"
+      - "bloco de yoga eva"
+
+  - name: "recuperacao_fisioterapia"
+    description: "Aparelhos de recuperação muscular e fisioterapia esportiva"
+    keywords:
+      - "pistola massageadora muscular percussiva"
+      - "plataforma vibratoria fitness"
+      - "prancha de equilibrio balance board"
+      - "eletroestimulador muscular tens fes"

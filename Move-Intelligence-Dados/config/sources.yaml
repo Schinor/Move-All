@@ -1,0 +1,66 @@
+# Configuração do ETL v2. Segredos devem ser fornecidos apenas por ambiente.
+
+database:
+  # PostgreSQL é o destino do MVP. Pode ser sobrescrito por
+  # MOVE_ETL_DATABASE_URL sem colocar credenciais no repositório.
+  connection_string: "postgresql+psycopg2://move:move@localhost:5432/move_intelligence"
+
+marketplaces:
+  alibaba:
+    country: us
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 40
+  amazon:
+    country: us
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 40
+  tiktok_shop:
+    country: us
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 35
+  taobao:
+    country: cn
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 35
+  "1688":
+    country: cn
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 30
+  amazon_br:
+    country: br
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 30
+  mercado_livre:
+    country: br
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 30
+  shopee_br:
+    country: br
+    provider: bright_data_mcp
+    concurrency: 2
+    limit: 30
+
+demand_signal:
+  google_trends:
+    timeframe: "today 12-m"
+    geos: [BR, US, GLOBAL]
+    cadence: weekly
+    provider: bright_data
+    normalization: min_max
+  tiktok_search:
+    geos: [BR, US, GLOBAL]
+    cadence: weekly
+    historical_support: false
+
+exchange_rate:
+  # Conversão não altera os valores nativos em products; quando a camada
+  # analítica precisar de BRL, a referência será um snapshot mensal.
+  granularity: monthly
+  provider: configured_later

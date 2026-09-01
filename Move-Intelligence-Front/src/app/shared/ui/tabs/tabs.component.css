@@ -1,0 +1,30 @@
+:host {
+  display: block;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 0.5rem 0;
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  backdrop-filter: blur(16px);
+}
+.tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted-foreground);
+  padding: 0.7rem 0.85rem;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab.active {
+  color: var(--foreground);
+  border-color: var(--primary);
+}

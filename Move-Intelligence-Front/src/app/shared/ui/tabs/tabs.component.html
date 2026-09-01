@@ -1,0 +1,12 @@
+<nav class="tabs" aria-label="Seções da tendência">
+  @for (tab of tabs(); track tab.id) {
+    <button
+      type="button"
+      class="tab"
+      [class.active]="tab.id === active()"
+      (click)="changed.emit(tab.id)"
+    >
+      {{ tab.label }}
+    </button>
+  }
+</nav>

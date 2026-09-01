@@ -1,0 +1,21 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.market {
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.m-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.country {
+  font-weight: 600;
+  font-size: 0.95rem;
+}

@@ -1,0 +1,169 @@
+.selection-bar {
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.selection-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.selection-head h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.selection-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: rgba(15, 118, 110, 0.15);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+}
+
+.product-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.chip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chip-btn.selected {
+  background: rgba(15, 118, 110, 0.2);
+  border-color: #0f766e;
+  color: #5eead4;
+  font-weight: 600;
+}
+
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+
+.chip-dot.active {
+  background: #5eead4;
+}
+
+.comparison-table-section {
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+th, td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.metric-col {
+  width: 220px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted-foreground);
+  font-weight: 600;
+  border-right: 1px solid var(--border);
+}
+
+.metric-name {
+  background: rgba(255, 255, 255, 0.02);
+  font-weight: 600;
+  color: var(--muted-foreground);
+  border-right: 1px solid var(--border);
+}
+
+.product-col {
+  text-align: left;
+  border-top: 3px solid transparent;
+  vertical-align: top;
+}
+
+.product-header-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.color-badge {
+  width: 24px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.cat-tag {
+  font-size: 0.7rem;
+  color: var(--muted-foreground);
+}
+
+.kpi-num {
+  font-size: 1.05rem;
+}
+
+.positive {
+  color: #10b981;
+}
+
+.negative {
+  color: #ef4444;
+}
+
+.btn-detail {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.btn-detail:hover {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+.loading-state {
+  padding: 3rem;
+  text-align: center;
+  color: var(--muted-foreground);
+  border-radius: var(--radius-lg);
+}

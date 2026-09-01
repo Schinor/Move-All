@@ -1,0 +1,25 @@
+.decision {
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+}
+.eyebrow {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+h3 {
+  margin: 0.35rem 0;
+  font-size: 1.8rem;
+  color: var(--primary);
+}
+p,
+li {
+  color: var(--muted-foreground);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+ul {
+  margin: 0.8rem 0 0;
+  padding-left: 1rem;
+}

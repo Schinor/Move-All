@@ -1,0 +1,26 @@
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { SparklineComponent } from '../sparkline/sparkline.component';
+import { RiskBadgeComponent } from '../../../ui/risk-badge/risk-badge.component';
+import { IconComponent } from '../../../ui/icon/icon.component';
+import { TrendProduct } from '../../../../core/models/contract.models';
+import { STAGE_LABEL, formatBRL } from '../../../util/format';
+
+/** Cartão de tendência (portado do TrendCard do mockup). Dado via @Input. */
+@Component({
+  selector: 'app-trend-card',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, SparklineComponent, RiskBadgeComponent, IconComponent],
+  templateUrl: './trend-card.component.html',
+  styleUrl: './trend-card.component.css',
+})
+export class TrendCardComponent {
+  readonly trend = input.required<TrendProduct>();
+
+  readonly up = computed(() => (this.trend().growthPct ?? 0) >= 0);
+  readonly stageLabel = computed(() =>
+    this.trend().stage ? (STAGE_LABEL[this.trend().stage as string] ?? '') : '',
+  );
+  readonly scoreValue = computed(() => this.trend().trendScore?.value ?? null);
+  readonly pipeline = computed(() => formatBRL(this.trend().projectedRevenue));
+}

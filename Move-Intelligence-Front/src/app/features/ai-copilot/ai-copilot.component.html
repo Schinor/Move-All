@@ -1,0 +1,113 @@
+<app-page-header
+  title="AI Copilot"
+  subtitle="Assistente de inteligência de mercado e sourcing fundamentado em dados reais do catálogo."
+>
+  @if (messages().length > 0) {
+    <button type="button" class="btn-clear glass" (click)="clearConversation()">
+      <app-icon name="sparkles" [size]="14" />
+      Nova conversa
+    </button>
+  }
+</app-page-header>
+
+<div class="chat glass">
+  <div class="messages" #messagesContainer>
+    @if (messages().length === 0) {
+      <div class="welcome-screen">
+        <div class="welcome-icon">
+          <app-icon name="sparkles" [size]="36" />
+        </div>
+        <h2 class="welcome-title">Como posso acelerar sua análise hoje?</h2>
+        <p class="welcome-desc">
+          O Move AI Copilot consulta diretamente os scores determinísticos, dados alfandegários e histórico de preços do PostgreSQL.
+        </p>
+
+        <div class="suggestions-grid">
+          @for (sug of suggestions; track sug.label) {
+            <button type="button" class="suggestion-card glass" (click)="useSuggestion(sug)">
+              <span class="suggestion-label">{{ sug.label }}</span>
+              <span class="suggestion-query">{{ sug.query }}</span>
+              <span class="suggestion-arrow"><app-icon name="arrow-up-right" [size]="14" /></span>
+            </button>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="thread">
+        @for (msg of messages(); track $index) {
+          <div class="message-row" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
+            <div class="message-bubble glass" [class.bubble-user]="msg.role === 'user'" [class.bubble-assistant]="msg.role === 'assistant'">
+              <div class="message-header">
+                <span class="sender-name">
+                  @if (msg.role === 'user') {
+                    Você
+                  } @else {
+                    <span class="ai-badge"><app-icon name="sparkles" [size]="12" /> Move AI</span>
+                  }
+                </span>
+                @if (msg.timestamp) {
+                  <span class="timestamp">{{ msg.timestamp }}</span>
+                }
+              </div>
+
+              <div class="message-content">
+                {{ msg.content }}
+              </div>
+
+              @if (msg.role === 'assistant' && msg.toolCallsExecuted && msg.toolCallsExecuted > 0) {
+                <div class="grounding-meta">
+                  <span class="grounding-badge">
+                    <app-icon name="zap" [size]="12" />
+                    {{ msg.toolCallsExecuted }} {{ msg.toolCallsExecuted === 1 ? 'consulta ao banco executada' : 'consultas ao banco executadas' }}
+                  </span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (isThinking()) {
+          <div class="message-row assistant">
+            <div class="message-bubble glass bubble-assistant thinking-bubble">
+              <span class="ai-badge"><app-icon name="sparkles" [size]="12" /> Move AI</span>
+              <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+              <span class="thinking-text">Consultando catálogo e scores determinísticos...</span>
+            </div>
+          </div>
+        }
+
+        @if (errorMessage()) {
+          <div class="error-banner glass">
+            <p class="error-text">{{ errorMessage() }}</p>
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <form class="composer" (submit)="$event.preventDefault(); sendMessage()">
+    <input
+      type="text"
+      placeholder="Pergunte sobre produtos fitness, scores, fornecedores ou tendências…"
+      [ngModel]="inputMessage()"
+      (ngModelChange)="inputMessage.set($event)"
+      (keydown)="onKeyDown($event)"
+      [disabled]="isThinking()"
+      name="copilotInput"
+      aria-label="Mensagem para o Copilot"
+      autocomplete="off"
+    />
+    <button type="submit" [disabled]="!inputMessage().trim() || isThinking()">
+      @if (isThinking()) {
+        <app-icon name="sparkles" [size]="16" />
+      } @else {
+        Enviar
+      }
+    </button>
+  </form>
+</div>
+

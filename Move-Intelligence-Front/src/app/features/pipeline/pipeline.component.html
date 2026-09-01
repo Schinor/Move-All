@@ -1,0 +1,27 @@
+<app-page-header
+  title="Pipeline de Decisão"
+  subtitle="Fluxo monitorar → validar → comprar (módulo de workflow em desenvolvimento)."
+/>
+
+@switch (board().status) {
+  @case ('ready') {
+    <div class="kanban">
+      @for (col of $any(board()).data.columns; track col.id) {
+        <div class="column glass">
+          <h3 class="col-title">{{ col.label }}</h3>
+          <ul>
+            @for (card of col.cards; track card.id) {
+              <li class="kcard">{{ card.title }}</li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  }
+  @default {
+    <app-state-panel
+      [state]="board()"
+      emptyMessage="Pipeline ainda não disponível — módulo de workflow em desenvolvimento."
+    />
+  }
+}

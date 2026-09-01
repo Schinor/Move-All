@@ -1,0 +1,15 @@
+<div class="gauge" [style.width.px]="size()" [style.height.px]="size()">
+  <svg [attr.width]="size()" [attr.height]="size()" [attr.viewBox]="viewBox()" aria-hidden="true">
+    <circle class="track" [attr.cx]="center()" [attr.cy]="center()" [attr.r]="radius()" />
+    <circle
+      class="value"
+      [attr.cx]="center()"
+      [attr.cy]="center()"
+      [attr.r]="radius()"
+      [attr.stroke]="color()"
+      [attr.stroke-dasharray]="dash() + ' ' + circumference()"
+    />
+  </svg>
+  <span class="score num">{{ value() ?? '—' }}</span>
+  <span class="label">{{ label() }}</span>
+</div>

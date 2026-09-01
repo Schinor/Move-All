@@ -1,0 +1,164 @@
+<app-page-header title="Sinais de Mercado & Alertas Proativos" subtitle="Monitoramento de busca, redes sociais e disparo automático de alertas em canais corporativos">
+  <app-window-selector [value]="window()" (changed)="setWindow($event)" />
+</app-page-header>
+
+<!-- Painel de Configuração de Alertas Proativos (Telegram / Slack / Webhook) -->
+<section class="alerts-config-section glass">
+  <div class="section-head">
+    <div>
+      <h3><app-icon name="bell" [size]="20" /> Central de Alertas Proativos de Oportunidade (Telegram / Slack / Webhook)</h3>
+      <p>Configure canais de notificação automática para receber alertas imediatos quando produtos romperem metas de crescimento.</p>
+    </div>
+    <div class="head-actions">
+      <button type="button" class="btn-scan" (click)="scanNow()"><app-icon name="zap" [size]="14" /> Executar Varredura Agora</button>
+    </div>
+  </div>
+
+  <div class="config-grid">
+    <div class="form-group">
+      <label>Canal de Destino</label>
+      <select [ngModel]="webhookChannel()" (ngModelChange)="webhookChannel.set($event)">
+        <option value="slack">Slack (Incoming Webhook)</option>
+        <option value="telegram">Telegram (Bot API)</option>
+        <option value="generic">Webhook HTTP Genérico (JSON)</option>
+      </select>
+    </div>
+
+    <div class="form-group flex-2">
+      <label>URL do Webhook</label>
+      <input
+        type="text"
+        placeholder="https://hooks.slack.com/services/... ou https://api.telegram.org/bot<TOKEN>/sendMessage"
+        [ngModel]="webhookUrl()"
+        (ngModelChange)="webhookUrl.set($event)"
+      />
+    </div>
+
+    @if (webhookChannel() === 'telegram') {
+      <div class="form-group">
+        <label>Telegram Chat ID</label>
+        <input type="text" placeholder="@meucanal ou -100123456" [ngModel]="telegramChatId()" (ngModelChange)="telegramChatId.set($event)" />
+      </div>
+    }
+
+    <div class="form-group">
+      <label>Gatilho: Trend Score Mínimo</label>
+      <input type="number" min="50" max="100" [ngModel]="minTrendScore()" (ngModelChange)="minTrendScore.set($event)" />
+    </div>
+
+    <div class="form-group">
+      <label>Gatilho: Crescimento Mínimo (%)</label>
+      <input type="number" min="10" max="500" [ngModel]="minGrowthPct()" (ngModelChange)="minGrowthPct.set($event)" />
+    </div>
+  </div>
+
+  <div class="config-actions">
+    <div class="status-msg">
+      @if (testStatus()) {
+        <span>{{ testStatus() }}</span>
+      }
+      @if (scanStatus()) {
+        <span>{{ scanStatus() }}</span>
+      }
+    </div>
+    <div class="btn-group">
+      <button type="button" class="btn-test" (click)="testWebhook()"><app-icon name="flask" [size]="14" /> Testar Disparo</button>
+      <button type="button" class="btn-save" [disabled]="isSaving()" (click)="saveRules()">
+        {{ isSaving() ? 'Salvando...' : 'Salvar Regras' }}
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- Feed de Alertas Disparados Recentemente -->
+@if (alertsHistory().length) {
+  <section class="alerts-history-section glass">
+    <h4><app-icon name="scroll" [size]="16" /> Histórico de Alertas de Oportunidade Disparados</h4>
+    <div class="alerts-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Produto</th>
+            <th>Severidade</th>
+            <th>Mensagem</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (alert of alertsHistory(); track alert.id) {
+            <tr>
+              <td>{{ alert.createdAt | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td><strong>{{ alert.cluster?.canonicalName || 'Produto' }}</strong></td>
+              <td><span class="sev-tag" [class.high]="alert.severity === 'HIGH'">{{ alert.severity }}</span></td>
+              <td>{{ alert.message }}</td>
+              <td><span class="status-tag">{{ alert.status }}</span></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+}
+
+<div class="split-view">
+  <section class="feed-section">
+    <h2>Sinais em tempo real</h2>
+    @switch (feed().status) {
+      @case ('ready') {
+        @if ($any(feed()).data.items.length === 0) {
+          <div class="empty">Nenhum sinal no período selecionado.</div>
+        } @else {
+          <div class="feed-list">
+            @for (item of $any(feed()).data.items; track item.id) {
+              <article class="feed-item glass">
+                <div class="item-head">
+                  <span class="source-tag">{{ item.source }}</span>
+                  <span class="channel-tag">{{ item.channel }}</span>
+                  <time>{{ item.capturedAt | date: 'short' }}</time>
+                </div>
+                <h3>{{ item.topic }}</h3>
+                <p class="snippet">{{ item.snippet }}</p>
+                <div class="item-foot">
+                  <app-risk-badge [level]="item.impact" of="de impacto" />
+                  <span class="momentum">
+                    Aceleração: <strong>+{{ item.velocity }}%</strong>
+                  </span>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      }
+      @default {
+        <app-state-panel [state]="feed()" emptyMessage="Nenhum sinal encontrado." />
+      }
+    }
+  </section>
+
+  <aside class="sources-sidebar">
+    <h2>Fontes ativas</h2>
+    @switch (sources().status) {
+      @case ('ready') {
+        <div class="sources-list">
+          @for (source of $any(sources()).data; track source.id) {
+            <div class="source-card glass">
+              <div class="source-head">
+                <strong>{{ source.name }}</strong>
+                <span class="dot" [class.online]="source.status === 'active'"></span>
+              </div>
+              <p>{{ source.description }}</p>
+              <div class="source-foot">
+                <small>Última varredura: {{ source.lastSync | date: 'shortTime' }}</small>
+                <small>{{ source.signalsCount }} sinais</small>
+              </div>
+            </div>
+          }
+        </div>
+      }
+      @default {
+        <app-state-panel [state]="sources()" emptyMessage="Nenhuma fonte configurada." />
+      }
+    }
+  </aside>
+</div>

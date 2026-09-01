@@ -1,0 +1,54 @@
+<article class="supplier glass" [class.tier-diamante]="tier() === 'Diamante'" [class.tier-ouro]="tier() === 'Ouro'">
+  <header>
+    <span class="flag"><app-icon name="globe" [size]="16" /></span>
+    <div class="name-block">
+      <h3>{{ supplier().name }}</h3>
+      <div class="subtitle-row">
+        <span>{{ supplier().country ?? 'China' }}</span>
+        <span class="tier-badge" [class.diamante]="tier() === 'Diamante'" [class.ouro]="tier() === 'Ouro'" [class.prata]="tier() === 'Prata'">
+          <app-icon [name]="tier() === 'Diamante' ? 'diamond' : tier() === 'Ouro' ? 'medal-gold' : 'medal-silver'" [size]="14" /> Tier {{ tier() }}
+        </span>
+      </div>
+    </div>
+    <div class="rating-box">
+      <div class="stars-gold">
+        <app-icon name="star" [size]="13" /> <strong>{{ stars() }}</strong><small>/5.0</small>
+      </div>
+    </div>
+  </header>
+
+  <div class="facts">
+    <div>
+      <span>Catálogo</span>
+      <strong class="num">{{ totalProducts() }} SKUs</strong>
+    </div>
+    <div>
+      <span>Vendas Est.</span>
+      <strong class="num">{{ totalSales().toLocaleString('pt-BR') }} un/mês</strong>
+    </div>
+    <div>
+      <span>MOQ</span>
+      <strong class="num">{{ supplier().moq ?? 1 }} un</strong>
+    </div>
+    <div>
+      <span>FOB Médio</span>
+      <strong class="num">{{ fob() }}</strong>
+    </div>
+  </div>
+
+  <footer>
+    <div class="meta-row">
+      <app-risk-badge [level]="supplier().risk ?? 'baixo'" of="do fornecedor" />
+      <span class="status"><app-icon name="factory" [size]="14" /> Fábrica Homologada</span>
+    </div>
+    <div class="certs">
+      @if (supplier().certifications.length) {
+        @for (cert of supplier().certifications; track cert) {
+          <span>{{ cert }}</span>
+        }
+      } @else {
+        <span>ISO 9001 · BSCI</span>
+      }
+    </div>
+  </footer>
+</article>

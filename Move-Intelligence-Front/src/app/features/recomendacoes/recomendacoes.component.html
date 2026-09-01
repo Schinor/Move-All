@@ -1,0 +1,26 @@
+<app-page-header
+  title="Recomendações"
+  subtitle="Ações sugeridas: comprar, monitorar, negociar, ajustar ou bloquear."
+/>
+
+@switch (data().status) {
+  @case ('ready') {
+    <ul class="rec-list">
+      @for (r of $any(data()).data.items; track r.id) {
+        <li class="rec glass">
+          <div class="r-head">
+            <span class="r-title">{{ r.title }}</span>
+            <span class="action" [attr.data-action]="r.action">{{ r.action }}</span>
+          </div>
+          @if (r.rationale) {
+            <p class="rationale">{{ r.rationale }}</p>
+          }
+          <app-kpi-card label="Oportunidade" [indicator]="r.opportunityScore" />
+        </li>
+      }
+    </ul>
+  }
+  @default {
+    <app-state-panel [state]="data()" emptyMessage="Sem recomendações geradas ainda." />
+  }
+}

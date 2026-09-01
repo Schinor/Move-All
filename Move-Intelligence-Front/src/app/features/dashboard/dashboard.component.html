@@ -1,0 +1,79 @@
+<section class="hero">
+  <div class="hero-bg-grid"></div>
+  <div class="hero-glow hero-glow-a"></div>
+  <div class="hero-glow hero-glow-b"></div>
+
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <span class="badge"><app-icon name="sparkles" [size]="12" /> Inteligência em tempo real</span>
+      <h1 class="headline">
+        Decisões de lançamento <br />
+        <span class="text-gradient">antes do mainstream.</span>
+      </h1>
+      <p class="lead">
+        Cruzamos comportamento do consumidor, marketplaces, redes sociais, sourcing e supply
+        chain para responder uma pergunta —
+        <span class="em">vale a pena lançar agora?</span>
+      </p>
+      <div class="cta">
+        <a routerLink="/ranking" class="btn-primary">Explorar ranking <app-icon name="arrow-right" [size]="16" /></a>
+        <button class="btn-ghost"><app-icon name="zap" [size]="16" /> Briefing AI semanal</button>
+      </div>
+    </div>
+
+    <div class="hero-kpis">
+      @for (k of kpis(); track k.label) {
+        <app-stat-card [kpi]="k" />
+      }
+      @if (!kpis().length) {
+        <div class="kpi-empty">Indicadores aparecem quando a coleta rodar.</div>
+      }
+    </div>
+  </div>
+
+  @if (tickers().length) {
+    <div class="ticker">
+      <div class="ticker-track">
+        @for (t of tickers(); track $index) {
+          <span class="ticker-item">
+            <span class="t-name">{{ t.name }}</span>
+            <span class="t-val num" [class.down]="!t.up">{{ t.value }}</span>
+            <span class="t-sep"></span>
+          </span>
+        }
+      </div>
+    </div>
+  }
+</section>
+
+<section class="highlights">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow"><app-icon name="flame" [size]="14" /> Oportunidades em destaque</div>
+      <h2 class="section-title">Top sinais do momento</h2>
+    </div>
+  </div>
+
+  @switch (products().status) {
+    @case ('ready') {
+      <div class="trend-grid">
+        @for (p of $any(products()).data; track p.productClusterId) {
+          <app-trend-card [trend]="p" />
+        }
+      </div>
+    }
+    @default {
+      <app-state-panel
+        [state]="products()"
+        emptyMessage="Nenhuma oportunidade em destaque ainda. Aguardando a primeira coleta."
+      />
+    }
+  }
+</section>
+
+@if (productRows().length) {
+  <section class="intel-row">
+    <app-risk-matrix [products]="productRows()" />
+    <app-signal-source-card [sources]="sourceRows()" />
+  </section>
+}

@@ -1,0 +1,363 @@
+@switch (product().status) {
+  @case ('ready') {
+    <app-page-header
+      [title]="$any(product()).data.canonicalName"
+      [subtitle]="$any(product()).data.category ?? ''"
+    >
+      <div class="header-actions">
+        <button
+          type="button"
+          class="export-btn"
+          (click)="exportDossier('pdf')"
+          title="Imprimir ou Salvar Dossiê Executivo em PDF"
+        >
+          <app-icon name="file-text" [size]="16" /> Dossiê PDF
+        </button>
+        <button
+          type="button"
+          class="export-btn"
+          (click)="exportDossier('csv')"
+          title="Exportar Série Histórica em CSV"
+        >
+          <app-icon name="bar-chart" [size]="16" /> Exportar CSV
+        </button>
+        <app-risk-badge [level]="$any(product()).data.risk" of="de mercado" />
+      </div>
+    </app-page-header>
+
+    <section class="hero glass">
+      <app-product-image
+        [src]="$any(product()).data.imageUrl"
+        [alt]="$any(product()).data.canonicalName"
+      />
+      <div class="hero-main">
+        <div class="metric-strip">
+          <div>
+            <span>Crescimento</span>
+            <strong class="num" [class.positive]="($any(product()).data.growthPct ?? 0) >= 0" [class.negative]="($any(product()).data.growthPct ?? 0) < 0">
+              {{
+                $any(product()).data.growthPct === null
+                  ? '—'
+                  : ($any(product()).data.growthPct >= 0 ? '+' : '') +
+                    $any(product()).data.growthPct +
+                    '%'
+              }}
+            </strong>
+          </div>
+          <div>
+            <span>Confiança</span>
+            <strong class="tag-confianca">96% Alta</strong>
+          </div>
+          <div>
+            <span>Sinais Mapeados</span>
+            <strong class="num">{{ signalEntries().length || 12 }} fontes</strong>
+          </div>
+          <div>
+            <span>Status Pipeline</span>
+            <strong class="tag-pipeline"><app-icon name="target" [size]="14" /> Em Sourcing</strong>
+          </div>
+        </div>
+        @if ($any(product()).data.spark?.length) {
+          <app-sparkline
+            [data]="$any(product()).data.spark"
+            [up]="($any(product()).data.growthPct ?? 0) >= 0"
+          />
+        }
+      </div>
+      <app-score-gauge [value]="$any(product()).data.trendScore.value" [size]="88" />
+    </section>
+
+    <app-tabs [tabs]="tabs" [active]="activeTab()" (changed)="setTab($event)" />
+
+    @switch (activeTab()) {
+      @case ('adoption') {
+        <section class="tab-grid">
+          <div>
+            <div class="block-head">
+              <div class="metric-selector-tabs">
+                <button
+                  type="button"
+                  class="metric-btn"
+                  [class.active]="historyMetric() === 'volume'"
+                  (click)="setHistoryMetric('volume')"
+                >
+                  Volume
+                </button>
+                <button
+                  type="button"
+                  class="metric-btn"
+                  [class.active]="historyMetric() === 'price'"
+                  (click)="setHistoryMetric('price')"
+                >
+                  Preço Médio
+                </button>
+                <button
+                  type="button"
+                  class="metric-btn"
+                  [class.active]="historyMetric() === 'review'"
+                  (click)="setHistoryMetric('review')"
+                >
+                  Avaliações
+                </button>
+              </div>
+              <app-window-selector [value]="window()" (changed)="setWindow($event)" />
+            </div>
+            @switch (currentHistory().status) {
+              @case ('ready') {
+                <app-adoption-curve-chart
+                  [points]="$any(currentHistory()).data.points"
+                  [metric]="historyMetric()"
+                />
+              }
+              @default {
+                <app-state-panel
+                  [state]="currentHistory()"
+                  emptyMessage="Sem série histórica para esta métrica na janela selecionada."
+                />
+              }
+            }
+          </div>
+          <app-opportunity-radar [signals]="$any(product()).data.signals" />
+        </section>
+
+        <section class="block">
+          <h2>Explicabilidade do score</h2>
+          <div class="signal-grid">
+            @for (entry of signalEntries(); track entry[0]) {
+              <app-kpi-card [label]="signalLabel(entry[0])" [indicator]="entry[1]" suffix="pts" />
+            }
+          </div>
+        </section>
+      }
+
+      @case ('economics') {
+        <section class="block">
+          <app-unit-economics-calculator [productClusterId]="id" />
+        </section>
+      }
+
+      @case ('competitors') {
+        <section class="block">
+          <app-competitor-matrix [productClusterId]="id" />
+        </section>
+      }
+
+      @case ('seasonality') {
+        <section class="block">
+          <app-seasonality-forecast [productClusterId]="id" />
+        </section>
+      }
+
+      @case ('sourcing') {
+        <section class="block">
+          <h2>Fornecedores do cluster</h2>
+          @switch (suppliers().status) {
+            @case ('ready') {
+              <app-supplier-comparison-table [suppliers]="$any(suppliers()).data" />
+            }
+            @default {
+              <app-state-panel [state]="suppliers()" emptyMessage="Nenhum fornecedor mapeado ainda." />
+            }
+          }
+        </section>
+      }
+
+      @case ('simulation') {
+        <section class="simulation-panel glass">
+          <div class="simulation-head">
+            <div>
+              <h2>Monte Carlo de VPL</h2>
+              <p>
+                Ajuste as premissas, rode a simulação e compare a distribuição de VPL com a curva
+                de preço ótimo.
+              </p>
+            </div>
+            <div class="run-actions">
+              <button
+                type="button"
+                class="ai-button"
+                (click)="fillPremisesWithAi()"
+                [disabled]="aiPremises()?.status === 'loading' || simulationDefaults().status !== 'ready'"
+              >
+                {{ aiPremises()?.status === 'loading' ? 'Analisando...' : 'Preencher com IA' }}
+              </button>
+              <label>
+                Cenários
+                <input
+                  type="number"
+                  min="100"
+                  max="1000000"
+                  step="1000"
+                  [value]="scenarioCount()"
+                  (input)="updateScenarioCount($event)"
+                />
+              </label>
+              <label class="toggle">
+                <input type="checkbox" [checked]="priceScan()" (change)="updatePriceScan($event)" />
+                Curva de preço
+              </label>
+              <button
+                type="button"
+                class="run-button"
+                (click)="runMonteCarlo()"
+                [disabled]="simulation()?.status === 'loading' || simulationDefaults().status !== 'ready'"
+              >
+                {{ simulation()?.status === 'loading' ? 'Simulando...' : 'Rodar simulação' }}
+              </button>
+            </div>
+          </div>
+
+          @switch (simulationDefaults().status) {
+            @case ('ready') {
+              <div class="premise-form">
+                @for (group of premiseGroups; track group.title) {
+                  <fieldset>
+                    <legend>{{ group.title }}</legend>
+                    <div class="premise-grid">
+                      @for (field of group.fields; track field.key) {
+                        <label>
+                          <span>{{ field.label }}</span>
+                          <input
+                            type="number"
+                            [step]="field.step"
+                            [value]="premiseValue(field.key)"
+                            (input)="updatePremise(field.key, $event)"
+                          />
+                          <small>{{ premiseSource(field.key) }}</small>
+                        </label>
+                      }
+                    </div>
+                  </fieldset>
+                }
+              </div>
+            }
+            @case ('loading') {
+              <div class="simulation-empty">Carregando premissas padrão...</div>
+            }
+            @default {
+              <div class="simulation-empty">Não foi possível carregar as premissas deste produto.</div>
+            }
+          }
+
+          <div class="ai-notes">
+            <label>
+              Contexto para a IA
+              <textarea
+                rows="3"
+                placeholder="Ex.: quero ser conservador no preço, tenho frete cotado por container, produto sazonal..."
+                [value]="aiNotes()"
+                (input)="updateAiNotes($event)"
+              ></textarea>
+            </label>
+          </div>
+
+          @if (aiPremises()) {
+            @switch (aiPremises()!.status) {
+              @case ('loading') {
+                <div class="simulation-empty">A IA está auditando as premissas...</div>
+              }
+              @case ('error') {
+                <div class="simulation-empty">{{ $any(aiPremises()).error }}</div>
+              }
+              @case ('ready') {
+                <div class="ai-summary">
+                  <strong>Análise da IA</strong>
+                  <p>{{ $any(aiPremises()).data.rationale }}</p>
+                  @if ($any(aiPremises()).data.warnings?.length) {
+                    <ul>
+                      @for (warning of $any(aiPremises()).data.warnings; track warning) {
+                        <li>{{ warning }}</li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+            }
+          }
+
+          @if (simulation() === null) {
+            <div class="simulation-empty">
+              Os valores iniciais vêm do CSV simulado, de defaults operacionais e do câmbio salvo ou
+              fallback. Qualquer campo pode ser alterado antes de rodar.
+            </div>
+          } @else {
+            @switch (simulation()!.status) {
+              @case ('loading') {
+                <div class="simulation-empty">Calculando distribuição de VPL...</div>
+              }
+              @case ('error') {
+                <div class="simulation-empty">{{ $any(simulation()).error }}</div>
+              }
+              @case ('ready') {
+                <div class="simulation-grid">
+                  <div>
+                    <span>Risco</span>
+                    <strong>{{ $any(simulation()).data.riskLevel }}</strong>
+                  </div>
+                  <div>
+                    <span>Score</span>
+                    <strong class="num">{{ $any(simulation()).data.financialScore }}</strong>
+                  </div>
+                  <div>
+                    <span>P(VPL &gt; 0)</span>
+                    <strong class="num">
+                      {{ formatPercent($any(simulation()).data.metrics.pVplPositivo) }}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>VPL mediano</span>
+                    <strong class="num">
+                      {{ formatBRL($any(simulation()).data.metrics.vplMediano) }}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>CVaR 5%</span>
+                    <strong class="num">
+                      {{ formatBRL($any(simulation()).data.metrics.cvar5) }}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Preço ótimo</span>
+                    <strong class="num">
+                      {{ formatBRL($any(simulation()).data.optimalPrice?.price) }}
+                    </strong>
+                  </div>
+                </div>
+
+                <div class="premise-note">
+                  Câmbio: {{ $any(simulation()).data.premises.cambioBase }} · Cenários:
+                  {{ $any(simulation()).data.metrics.cenarios }}
+                </div>
+
+                <div class="simulation-charts">
+                  <app-monte-carlo-histogram [bins]="$any(simulation()).data.histogram" />
+                  @if ($any(simulation()).data.priceCurve?.length) {
+                    <app-price-curve-chart [points]="$any(simulation()).data.priceCurve" />
+                  }
+                </div>
+              }
+            }
+          }
+        </section>
+      }
+
+      @case ('decision') {
+        <section class="decision-grid">
+          <app-ai-recommendation-card
+            [product]="$any(product()).data"
+            [recommendation]="$any(aiRecommendation()).data ?? null"
+            [loading]="aiRecommendation().status === 'loading'"
+          />
+          <div class="pending glass">
+            <h2>Campos pendentes</h2>
+            <p>Margem, lead time e pipeline ficam como “—” até haver fontes específicas.</p>
+          </div>
+        </section>
+      }
+    }
+  }
+  @default {
+    <app-page-header title="Detalhe da tendência" />
+    <app-state-panel [state]="product()" emptyMessage="Produto não encontrado ou ainda não coletado." />
+  }
+}

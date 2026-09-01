@@ -1,0 +1,39 @@
+# Configurações de Fontes de Dados e APIs
+
+database:
+  connection_string: "sqlite:///data/processed/database.db"
+  pool_size: 5
+  max_overflow: 10
+
+apis:
+  mercado_livre:
+    base_url: "https://api.mercadolibre.com"
+    timeout: 10
+    rate_limit_per_minute: 60
+    # As credenciais devem ser definidas via variáveis de ambiente:
+    # MLA_CLIENT_ID e MLA_CLIENT_SECRET
+  
+  google_trends:
+    # A biblioteca pytrends ou requisições customizadas
+    interest_over_time_endpoint: "https://trends.google.com/trends/api/explore"
+    timeout: 15
+    rate_limit_per_minute: 30
+
+  exchange_rate:
+    base_url: "https://v6.exchangerate-api.com/v6"
+    timeout: 8
+    # Chave de API na env: EXCHANGE_RATE_API_KEY
+
+scrapers:
+  marketplace:
+    target_domains:
+      - "mercadolivre.com.br"
+    request_delay_seconds: 2.0
+    timeout: 15
+    user_agents:
+      - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+      - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Safari/605.1.15"
+
+  supplier:
+    request_delay_seconds: 3.0
+    timeout: 20

@@ -1,0 +1,39 @@
+<div class="kpi glass">
+  <div class="head">
+    <span class="label">{{ label() }}</span>
+    <button
+      type="button"
+      class="why"
+      (click)="toggle()"
+      [attr.aria-expanded]="showExplanation()"
+      aria-label="Por que este valor?"
+      title="Por quê?"
+    >
+      ?
+    </button>
+  </div>
+
+  <div class="value num">
+    {{ displayValue() }}
+    @if (indicator()?.window) {
+      <span class="window">· {{ indicator()!.window }}</span>
+    }
+  </div>
+
+  @if (showExplanation()) {
+    <div class="explain">
+      @if (indicator()?.explanation) {
+        <p class="text">{{ indicator()!.explanation }}</p>
+        @if (inputEntries().length) {
+          <ul class="inputs">
+            @for (entry of inputEntries(); track entry[0]) {
+              <li><span>{{ entry[0] }}</span><b class="num">{{ entry[1] }}</b></li>
+            }
+          </ul>
+        }
+      } @else {
+        <p class="unavailable">Explicação indisponível — cálculo ainda não fornecido pelo backend.</p>
+      }
+    </div>
+  }
+</div>

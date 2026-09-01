@@ -1,0 +1,76 @@
+<div class="competitors-container">
+  <div class="header-banner">
+    <div>
+      <h3><app-icon name="target" [size]="20" /> Radar de Concorrência & Matriz de Vendedores (Marketplaces)</h3>
+      <p>Mapeamento dos Top 5 players dominantes no Mercado Livre, Amazon e Shopee.</p>
+    </div>
+    @if (data()) {
+      <div class="summary-badge">
+        Identificados: <strong>{{ data().totalCompetitorsIdentified }} vendedores ativos</strong>
+      </div>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="loading-state glass">Carregando matriz de concorrentes...</div>
+  } @else if (data() && data().topCompetitors?.length) {
+    <div class="competitors-grid">
+      <div class="table-card glass">
+        <table>
+          <thead>
+            <tr>
+              <th>Vendedor / Loja</th>
+              <th>Marketplace</th>
+              <th>Reputação / Medalha</th>
+              <th>Logística</th>
+              <th>Preço Médio</th>
+              <th>Vendas Est.</th>
+              <th>Share de Mercado</th>
+              <th>Avaliação</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (c of data().topCompetitors; track c.id) {
+              <tr [class.buybox]="c.buyboxWinner">
+                <td>
+                  <div class="seller-info">
+                    <strong>{{ c.sellerName }}</strong>
+                    @if (c.buyboxWinner) {
+                      <span class="badge-buybox"><app-icon name="crown" [size]="12" /> BuyBox Winner</span>
+                    }
+                  </div>
+                </td>
+                <td>
+                  <span class="mkt-tag">{{ c.marketplace }}</span>
+                </td>
+                <td>
+                  <span class="reputation-badge" [class.platinum]="c.reputation.includes('Platinum')" [class.gold]="c.reputation.includes('Gold')">
+                    <app-icon name="star" [size]="12" /> {{ c.reputation }}
+                  </span>
+                </td>
+                <td>
+                  <span class="fulfillment-badge" [class.full]="c.fulfillment.includes('Full') || c.fulfillment.includes('FBA')">
+                    <app-icon name="zap" [size]="12" /> {{ c.fulfillment }}
+                  </span>
+                </td>
+                <td><strong>{{ formatCurrency(c.avgPrice) }}</strong></td>
+                <td>{{ formatNumber(c.monthlySalesEst) }} un/mês</td>
+                <td>
+                  <div class="share-cell">
+                    <div class="share-bar-bg">
+                      <div class="share-bar-fill" [style.width.%]="c.marketSharePct"></div>
+                    </div>
+                    <span>{{ c.marketSharePct }}%</span>
+                  </div>
+                </td>
+                <td><app-icon name="star" [size]="12" /> {{ c.rating }} <small>({{ formatNumber(c.reviewCount) }})</small></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  } @else {
+    <div class="loading-state glass">Nenhum concorrente identificado nos snapshots recentes deste produto.</div>
+  }
+</div>

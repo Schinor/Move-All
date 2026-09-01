@@ -1,0 +1,515 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CollectionStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  DISMISSED
+}
+
+enum ImportSourceType {
+  COMEX_ANUAL
+  COMEX_MENSAL
+  TRADE_ATLAS
+  TIKTOK_SHOP
+  SHEIN
+  GOOGLE_SHOPPING
+  AMAZON_PRODUCTS
+  AMAZON_SELLERS
+  ALIBABA
+  AUTO
+}
+
+enum ImportStatus {
+  RECEIVED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+model RawApiResponse {
+  id            String   @id @default(uuid()) @db.Uuid
+  source        String
+  endpoint      String
+  queryTerm     String?  @map("query_term")
+  requestParams Json     @map("request_params")
+  responseBody  Json     @map("response_body")
+  statusCode    Int      @map("status_code")
+  collectedAt   DateTime @default(now()) @map("collected_at")
+
+  @@index([source, collectedAt])
+  @@map("raw_api_responses")
+}
+
+model ProductListingSnapshot {
+  id                String               @id @default(uuid()) @db.Uuid
+  marketplace       String
+  externalProductId String               @map("external_product_id")
+  productClusterId  String?              @map("product_cluster_id") @db.Uuid
+  title             String
+  priceMin          Decimal?             @map("price_min") @db.Decimal(14, 4)
+  priceMax          Decimal?             @map("price_max") @db.Decimal(14, 4)
+  currency          String?
+  moq               Int?
+  stock             Int?
+  rating            Decimal?             @db.Decimal(5, 2)
+  reviewCount       Int?                 @map("review_count")
+  salesSignalRaw    Decimal?             @map("sales_signal_raw") @db.Decimal(14, 4)
+  salesSignalType   String?              @map("sales_signal_type")
+  sellerId          String?              @map("seller_id")
+  sellerName        String?              @map("seller_name")
+  imageCount        Int?                 @map("image_count")
+  collectedAt       DateTime             @default(now()) @map("collected_at")
+  // Origem do snapshot quando veio de uma importação de CSV (Bright Data).
+  importJobId       String?              @map("import_job_id") @db.Uuid
+  rawProductId      String?              @map("raw_product_id") @db.Uuid
+  imageUrl          String?              @map("image_url")
+  productUrl        String?              @map("product_url")
+  cluster           ProductCluster?      @relation(fields: [productClusterId], references: [id])
+  importJob         ImportJob?           @relation(fields: [importJobId], references: [id])
+  rawProduct        IntelligenceProduct? @relation(fields: [rawProductId], references: [id])
+
+  @@index([marketplace, externalProductId, collectedAt])
+  @@index([productClusterId, collectedAt])
+  @@index([collectedAt])
+  @@index([importJobId])
+  @@index([rawProductId])
+  @@map("product_listing_snapshots")
+}
+
+/// Snapshot normalizado produzido pelo ETL v2. É a fonte canônica para novas
+/// coletas Bright Data e mantém os campos nativos em source_specific.
+model IntelligenceProduct {
+  id                  String                          @id @db.Uuid
+  source              String
+  recordId            String                          @map("record_id")
+  capturedAt          DateTime                        @map("captured_at") @db.Date
+  title               String
+  canonicalTitle      String?                         @map("canonical_title")
+  gtin                String?                         @db.VarChar(14)
+  brand               String?
+  attrs               Json                            @default("{}")
+  cluster             String?
+  priceValue          Decimal?                        @map("price_value") @db.Decimal
+  priceCurrency       String?                         @map("price_currency")
+  rating              Decimal?                        @db.Decimal
+  reviewsCount        Int?                            @map("reviews_count")
+  monthlySales        Int?                            @map("monthly_sales")
+  moq                 Int?
+  supplier            String?
+  dataQuality         String                          @map("data_quality")
+  sourceSpecific      Json                            @default("{}") @map("source_specific")
+  demandLinks         IntelligenceProductDemandLink[]
+  analyticalSnapshots ProductListingSnapshot[]
+
+  @@unique([source, recordId, capturedAt])
+  @@index([source, cluster])
+  @@index([capturedAt])
+  @@index([gtin])
+  @@index([canonicalTitle(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_products_canonical_trgm")
+  @@map("products")
+}
+
+/// Observação de demanda normalizada pelo ETL v2.
+model IntelligenceDemandSignal {
+  id           String                          @id @db.Uuid
+  keyword      String
+  geo          String
+  source       String
+  weekStart    DateTime                        @map("week_start") @db.Date
+  trendIndex   Decimal                         @map("trend_index") @db.Decimal
+  rawValue     Decimal?                        @map("raw_value") @db.Decimal
+  capturedAt   DateTime                        @map("captured_at") @db.Date
+  productLinks IntelligenceProductDemandLink[]
+
+  @@unique([keyword, geo, source, weekStart])
+  @@index([keyword, geo, source])
+  @@index([weekStart])
+  @@map("demand_signals")
+}
+
+/// Vínculo auditável cluster/keyword produzido pelo ETL v2.
+model IntelligenceProductDemandLink {
+  id             String                   @id @db.Uuid
+  productId      String                   @map("product_id") @db.Uuid
+  demandSignalId String                   @map("demand_signal_id") @db.Uuid
+  keyword        String
+  matchMethod    String                   @map("match_method")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  product        IntelligenceProduct      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  demandSignal   IntelligenceDemandSignal @relation(fields: [demandSignalId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, demandSignalId, keyword])
+  @@index([productId])
+  @@index([demandSignalId])
+  @@map("product_demand_link")
+}
+
+/// Vendedor de marketplace (ex.: Amazon Sellers Info), importado via CSV.
+model MarketplaceSeller {
+  id               String     @id @default(uuid()) @db.Uuid
+  marketplace      String
+  externalSellerId String     @map("external_seller_id")
+  name             String?
+  businessName     String?    @map("business_name")
+  country          String?
+  rating           Decimal?   @db.Decimal(5, 2)
+  ratingCount      Int?       @map("rating_count")
+  positivePct      Decimal?   @map("positive_pct") @db.Decimal(5, 2)
+  productsCount    Int?       @map("products_count")
+  sellerUrl        String?    @map("seller_url")
+  importJobId      String?    @map("import_job_id") @db.Uuid
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @updatedAt @map("updated_at")
+  importJob        ImportJob? @relation(fields: [importJobId], references: [id])
+
+  @@unique([marketplace, externalSellerId])
+  @@index([importJobId])
+  @@map("marketplace_sellers")
+}
+
+model ExchangeRate {
+  id            String   @id @default(uuid()) @db.Uuid
+  baseCurrency  String   @map("base_currency")
+  quoteCurrency String   @map("quote_currency")
+  rate          Decimal  @db.Decimal(18, 8)
+  capturedAt    DateTime @default(now()) @map("captured_at")
+
+  @@unique([baseCurrency, quoteCurrency, capturedAt])
+  @@index([baseCurrency, quoteCurrency])
+  @@map("exchange_rates")
+}
+
+model LogisticsCostParam {
+  id                           String    @id @default(uuid()) @db.Uuid
+  productCategory              String    @map("product_category")
+  route                        String
+  domesticFreightEstimate      Decimal?  @map("domestic_freight_estimate") @db.Decimal(14, 4)
+  internationalFreightEstimate Decimal?  @map("international_freight_estimate") @db.Decimal(14, 4)
+  importTaxRate                Decimal?  @map("import_tax_rate") @db.Decimal(8, 6)
+  operationalFeeRate           Decimal?  @map("operational_fee_rate") @db.Decimal(8, 6)
+  validFrom                    DateTime  @default(now()) @map("valid_from")
+  validTo                      DateTime? @map("valid_to")
+
+  @@index([productCategory, route])
+  @@map("logistics_cost_params")
+}
+
+model ProductCluster {
+  id              String                   @id @default(uuid()) @db.Uuid
+  canonicalName   String                   @map("canonical_name")
+  category        String?
+  confidenceScore Decimal?                 @map("confidence_score") @db.Decimal(5, 4)
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  // Resultado da última simulação Monte Carlo (usado como risco oficial no ranking).
+  riskLevel       String?                  @map("risk_level")
+  financialScore  Int?                     @map("financial_score")
+  simulatedAt     DateTime?                @map("simulated_at")
+  items           ProductClusterItem[]
+  snapshots       ProductListingSnapshot[]
+  alerts          Alert[]
+  matchReviews    ProductMatchReview[]
+  aiRecommendations AiRecommendation[]
+
+  @@index([createdAt])
+  @@map("product_clusters")
+}
+
+model ProductClusterItem {
+  id                String         @id @default(uuid()) @db.Uuid
+  clusterId         String         @map("cluster_id") @db.Uuid
+  marketplace       String
+  externalProductId String         @map("external_product_id")
+  similarityScore   Decimal        @map("similarity_score") @db.Decimal(5, 4)
+  matchedBy         String         @default("text") @map("matched_by")
+  matchedAt         DateTime       @default(now()) @map("matched_at")
+  cluster           ProductCluster @relation(fields: [clusterId], references: [id])
+
+  @@unique([marketplace, externalProductId])
+  @@index([clusterId])
+  @@map("product_cluster_items")
+}
+
+model ProductMatchReview {
+  id                 String         @id @default(uuid()) @db.Uuid
+  sourceProductId    String         @map("source_product_id") @db.Uuid
+  candidateProductId String         @map("candidate_product_id") @db.Uuid
+  candidateClusterId String         @map("candidate_cluster_id") @db.Uuid
+  similarityScore    Decimal        @map("similarity_score") @db.Decimal(5, 4)
+  reason             String
+  status             String         @default("PENDING")
+  matchedBy          String?        @map("matched_by")
+  decisionReason     String?        @map("decision_reason")
+  reviewedAt         DateTime?      @map("reviewed_at")
+  createdAt          DateTime       @default(now()) @map("created_at")
+  candidateCluster   ProductCluster @relation(fields: [candidateClusterId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceProductId, candidateProductId])
+  @@index([status, createdAt])
+  @@index([candidateClusterId])
+  @@map("product_match_reviews")
+}
+
+model Alert {
+  id               String          @id @default(uuid()) @db.Uuid
+  productClusterId String?         @map("product_cluster_id") @db.Uuid
+  alertType        String          @map("alert_type")
+  severity         AlertSeverity
+  message          String
+  evidence         Json
+  createdAt        DateTime        @default(now()) @map("created_at")
+  status           AlertStatus     @default(OPEN)
+  cluster          ProductCluster? @relation(fields: [productClusterId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([productClusterId])
+  @@map("alerts")
+}
+
+model BusinessRuleConfig {
+  id        String    @id @default(uuid()) @db.Uuid
+  key       String
+  scope     String?
+  value     Json
+  active    Boolean   @default(true)
+  validFrom DateTime  @default(now()) @map("valid_from")
+  validTo   DateTime? @map("valid_to")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([key, scope, active])
+  @@map("business_rule_configs")
+}
+
+model KeywordTerm {
+  id        String   @id @default(uuid()) @db.Uuid
+  term      String
+  language  String
+  category  String?
+  priority  Int      @default(100)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([term, language, category])
+  @@index([active, priority])
+  @@map("keyword_terms")
+}
+
+model CollectionJob {
+  id           String           @id @default(uuid()) @db.Uuid
+  source       String?
+  queryTerm    String           @map("query_term")
+  category     String?
+  status       CollectionStatus @default(QUEUED)
+  requestedBy  String?          @map("requested_by")
+  startedAt    DateTime?        @map("started_at")
+  finishedAt   DateTime?        @map("finished_at")
+  errorMessage String?          @map("error_message")
+  stats        Json?
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  @@index([status, createdAt])
+  @@map("collection_jobs")
+}
+
+model User {
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique
+  passwordHash  String         @map("password_hash")
+  name          String
+  company       String?
+  role          String         @default("USER")
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model WatchlistItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  productClusterId String   @map("product_cluster_id") @db.Uuid
+  note             String?
+  createdBy        String?  @map("created_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([productClusterId])
+  @@map("watchlist_items")
+}
+
+model ImportJob {
+  id           String                   @id @default(uuid()) @db.Uuid
+  filename     String
+  originalName String                   @map("original_name")
+  mimeType     String                   @map("mime_type")
+  sizeBytes    Int                      @map("size_bytes")
+  sourceType   ImportSourceType         @default(AUTO) @map("source_type")
+  detectedType ImportSourceType?        @map("detected_type")
+  status       ImportStatus             @default(RECEIVED)
+  rowsTotal    Int                      @default(0) @map("rows_total")
+  rowsImported Int                      @default(0) @map("rows_imported")
+  rowsRejected Int                      @default(0) @map("rows_rejected")
+  errorSummary Json?                    @map("error_summary")
+  storagePath  String                   @map("storage_path")
+  createdAt    DateTime                 @default(now()) @map("created_at")
+  startedAt    DateTime?                @map("started_at")
+  finishedAt   DateTime?                @map("finished_at")
+  tradeExports TradeExport[]
+  shipments    Shipment[]
+  listings     ProductListingSnapshot[]
+  sellers      MarketplaceSeller[]
+
+  @@index([status, createdAt])
+  @@map("import_jobs")
+}
+
+model TradeExport {
+  id             String    @id @default(uuid()) @db.Uuid
+  naturalKey     String    @unique @map("natural_key")
+  ncmCode        String    @map("ncm_code")
+  ncmDescription String?   @map("ncm_description")
+  year           Int
+  month          Int?
+  country        String
+  state          String?
+  fobUsd         Decimal   @map("fob_usd") @db.Decimal(18, 2)
+  netKg          Decimal   @map("net_kg") @db.Decimal(18, 2)
+  importJobId    String    @map("import_job_id") @db.Uuid
+  importJob      ImportJob @relation(fields: [importJobId], references: [id])
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([ncmCode, year])
+  @@index([country])
+  @@index([month, country])
+  @@map("trade_exports")
+}
+
+model Shipment {
+  id                String    @id @default(uuid()) @db.Uuid
+  naturalKey        String    @unique @map("natural_key")
+  arrivalDate       DateTime? @map("arrival_date")
+  importerName      String?   @map("importer_name")
+  importerCountry   String?   @map("importer_country")
+  exporterName      String?   @map("exporter_name")
+  exporterCountry   String?   @map("exporter_country")
+  originCountry     String?   @map("origin_country")
+  hsCode            String?   @map("hs_code")
+  productDetails    String?   @map("product_details")
+  fobUsd            Decimal?  @map("fob_usd") @db.Decimal(18, 2)
+  cifUsd            Decimal?  @map("cif_usd") @db.Decimal(18, 2)
+  grossWeightKg     Decimal?  @map("gross_weight_kg") @db.Decimal(18, 2)
+  netWeightKg       Decimal?  @map("net_weight_kg") @db.Decimal(18, 2)
+  quantity          Decimal?  @db.Decimal(18, 2)
+  quantityUnit      String?   @map("quantity_unit")
+  portOfArrival     String?   @map("port_of_arrival")
+  portOfDeparture   String?   @map("port_of_departure")
+  declarationNumber String?   @map("declaration_number")
+  itemNo            Int?      @map("item_no")
+  importJobId       String    @map("import_job_id") @db.Uuid
+  importJob         ImportJob @relation(fields: [importJobId], references: [id])
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([hsCode])
+  @@index([importerCountry])
+  @@index([declarationNumber])
+  @@index([arrivalDate, createdAt])
+  @@index([exporterName])
+  @@map("shipments")
+}
+
+model AiRecommendation {
+  id               String         @id @default(uuid()) @db.Uuid
+  productClusterId String         @map("product_cluster_id") @db.Uuid
+  action           String?
+  decision         String?
+  rationale        String?
+  generatedText    String         @map("generated_text")
+  modelVersion     String         @map("model_version")
+  promptVersion    String         @map("prompt_version")
+  scoreSnapshotId  String?        @map("score_snapshot_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  cluster          ProductCluster @relation(fields: [productClusterId], references: [id], onDelete: Cascade)
+
+  @@index([productClusterId, createdAt])
+  @@map("ai_recommendations")
+}
+
+model AiConversation {
+  id        String      @id @default(uuid()) @db.Uuid
+  userId    String?     @map("user_id") @db.Uuid
+  title     String?
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  messages  AiMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String         @id @default(uuid()) @db.Uuid
+  conversationId String         @map("conversation_id") @db.Uuid
+  role           String
+  content        String
+  toolCalls      Json?          @map("tool_calls")
+  toolCallId     String?        @map("tool_call_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
+}
+
+model AiCallLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  endpoint         String
+  model            String
+  promptTokens     Int?     @map("prompt_tokens")
+  completionTokens Int?     @map("completion_tokens")
+  totalTokens      Int?     @map("total_tokens")
+  latencyMs        Int      @map("latency_ms")
+  status           String
+  error            String?
+  metadata         Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([endpoint, status, createdAt])
+  @@map("ai_call_logs")
+}

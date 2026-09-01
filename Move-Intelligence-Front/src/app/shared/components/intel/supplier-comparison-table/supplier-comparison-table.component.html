@@ -1,0 +1,51 @@
+<div class="table-wrap glass">
+  <table>
+    <thead>
+      <tr>
+        <th><button type="button" (click)="sort('name')">Fornecedor / Fábrica</button></th>
+        <th><button type="button" (click)="sort('country')">País</button></th>
+        <th>Qualificação</th>
+        <th>Catálogo</th>
+        <th>Vendas Est.</th>
+        <th><button type="button" (click)="sort('moq')">MOQ</button></th>
+        <th><button type="button" (click)="sort('fob')">FOB Médio</button></th>
+        <th>Lead Time</th>
+        <th><button type="button" (click)="sort('score')">Score</button></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (supplier of rows(); track supplier.id) {
+        <tr>
+          <td>
+            <div class="name-cell">
+              <strong>{{ supplier.name }}</strong>
+              <span class="category-tag">{{ supplier.category ?? 'Equipamento fitness' }}</span>
+            </div>
+          </td>
+          <td><app-icon name="globe" [size]="14" /> {{ supplier.country ?? 'China' }}</td>
+          <td>
+            <div class="stars-cell">
+              <span class="stars-gold"><app-icon name="star" [size]="12" /> {{ getStars(supplier) }}</span>
+              <span class="tier-tag" [class.diamante]="getTier(supplier) === 'Diamante'" [class.ouro]="getTier(supplier) === 'Ouro'">
+                {{ getTier(supplier) }}
+              </span>
+            </div>
+          </td>
+          <td class="num">{{ getTotalProducts(supplier) }} SKUs</td>
+          <td class="num">{{ getTotalSales(supplier).toLocaleString('pt-BR') }} un/mês</td>
+          <td class="num">{{ supplier.moq ?? 1 }} un</td>
+          <td class="num"><strong>{{ formatUsd(supplier.fob) }}</strong></td>
+          <td>45 dias</td>
+          <td>
+            <div class="score-cell">
+              <div class="score-bar-bg">
+                <span class="score-bar-fill" [style.width.%]="supplier.score.value ?? 85"></span>
+              </div>
+              <span class="num">{{ supplier.score.value ?? 85 }}</span>
+            </div>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

@@ -1,0 +1,619 @@
+/* =====================================================
+   Auth — Cadastro page
+   Layout: split fullscreen, formulário à esquerda
+   ===================================================== */
+
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+/* -------- Layout base -------- */
+.auth-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* -------- Background -------- */
+.auth-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(oklch(1 0 0 / 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(1 0 0 / 0.025) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.bg-glow {
+  position: absolute;
+  width: 36rem;
+  height: 36rem;
+  border-radius: 50%;
+  filter: blur(96px);
+}
+.bg-glow-a {
+  top: -8rem;
+  right: -6rem;
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+}
+.bg-glow-b {
+  bottom: -10rem;
+  left: -6rem;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
+  opacity: 0.35;
+}
+.bg-orb-1 {
+  width: 18rem;
+  height: 18rem;
+  top: 50%;
+  left: 45%;
+  background: color-mix(in oklab, var(--primary) 7%, transparent);
+  animation: float 10s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-18px); }
+}
+
+/* -------- Coluna do formulário -------- */
+.auth-form-col {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  border-right: 1px solid var(--border);
+}
+.form-card {
+  width: 100%;
+  max-width: 440px;
+  border-radius: var(--radius-2xl);
+  padding: 2rem 2.25rem;
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Brand no topo do form */
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--gradient-primary);
+  color: var(--primary-foreground);
+  font-weight: 800;
+  font-size: 0.85rem;
+  box-shadow: var(--shadow-glow);
+}
+.logo-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* Cabeçalho do form */
+.form-header {
+  margin-bottom: 1.5rem;
+}
+.form-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.form-subtitle {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--muted-foreground);
+}
+
+/* -------- Stepper -------- */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 1.75rem;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.step-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--input);
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  transition: all 0.25s ease;
+}
+.step-circle svg {
+  width: 13px;
+  height: 13px;
+}
+.step-item.active .step-circle {
+  border-color: var(--primary);
+  background: color-mix(in oklab, var(--primary) 15%, transparent);
+  color: var(--primary);
+}
+.step-item.done .step-circle {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.step-label {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition: color 0.2s;
+}
+.step-item.active .step-label,
+.step-item.done .step-label {
+  color: var(--foreground);
+}
+.step-track {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 0.75rem;
+  border-radius: 2px;
+  transition: background 0.3s;
+}
+.step-track.done {
+  background: var(--primary);
+}
+
+/* -------- Campos -------- */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.field-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-icon {
+  position: absolute;
+  left: 0.75rem;
+  display: flex;
+  align-items: center;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+.input-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.input {
+  width: 100%;
+  padding: 0.65rem 0.9rem 0.65rem 2.4rem;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.input::placeholder {
+  color: var(--muted-foreground);
+}
+.input:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 20%, transparent);
+}
+.input.input-password {
+  padding-right: 2.75rem;
+}
+.input.input-error {
+  border-color: var(--destructive);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 15%, transparent);
+}
+.input.input-ok {
+  border-color: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--success) 15%, transparent);
+}
+.field-error {
+  font-size: 0.72rem;
+  color: var(--destructive);
+}
+
+/* Toggle password */
+.toggle-password {
+  position: absolute;
+  right: 0.75rem;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s;
+}
+.toggle-password:hover {
+  color: var(--foreground);
+}
+.toggle-password svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* -------- Password strength -------- */
+.strength-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+.strength-track {
+  flex: 1;
+  height: 4px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.strength-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.strength-fill[data-strength="0"] { width: 0%; background: var(--destructive); }
+.strength-fill[data-strength="1"] { width: 33%; background: var(--danger); }
+.strength-fill[data-strength="2"] { width: 66%; background: var(--warning); }
+.strength-fill[data-strength="3"] { width: 100%; background: var(--success); }
+.strength-label {
+  font-size: 0.68rem;
+  font-weight: 500;
+  width: 4rem;
+  text-align: right;
+}
+.strength-label[data-strength="0"] { color: var(--muted-foreground); }
+.strength-label[data-strength="1"] { color: var(--danger); }
+.strength-label[data-strength="2"] { color: var(--warning); }
+.strength-label[data-strength="3"] { color: var(--success); }
+
+/* -------- Termos -------- */
+.terms-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+  margin-top: 0.25rem;
+}
+.checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--input);
+  cursor: pointer;
+  position: relative;
+  margin-top: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.checkbox:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  width: 8px;
+  height: 5px;
+  border-left: 2px solid var(--primary-foreground);
+  border-bottom: 2px solid var(--primary-foreground);
+  transform: rotate(-45deg);
+}
+.checkbox:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.terms-text {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+.form-link {
+  color: var(--primary);
+  font-weight: 500;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.form-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* -------- Ações do form -------- */
+.form-actions {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 0.25rem;
+}
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 1rem;
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.btn-back:hover {
+  background: var(--surface-elevated);
+  border-color: var(--border-strong);
+}
+.btn-submit {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.5rem;
+  background: var(--gradient-primary);
+  color: var(--primary-foreground);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s;
+  box-shadow: 0 4px 14px -4px color-mix(in oklab, var(--primary) 50%, transparent);
+}
+.btn-submit:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px -4px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+.btn-submit:active:not(:disabled) {
+  transform: translateY(0);
+}
+.btn-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Passo 1: botão full-width */
+.form > .btn-submit:last-child {
+  margin-top: 0.25rem;
+}
+
+/* Spinner */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid color-mix(in oklab, var(--primary-foreground) 30%, transparent);
+  border-top-color: var(--primary-foreground);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Rodapé */
+.form-footer {
+  margin: 1.25rem 0 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
+/* -------- Coluna lateral de features -------- */
+.auth-features {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2.5rem;
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--surface) 50%, transparent),
+    color-mix(in oklab, var(--background) 75%, transparent)
+  );
+}
+.features-content {
+  max-width: 440px;
+  width: 100%;
+}
+.features-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
+  background: color-mix(in oklab, var(--primary) 10%, transparent);
+  color: var(--primary);
+  padding: 0.3rem 0.875rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  margin-bottom: 1.5rem;
+}
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 0 var(--primary);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 50%, transparent); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.features-headline {
+  margin: 0 0 0.875rem;
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.features-lead {
+  margin: 0 0 2rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+
+/* Feature list */
+.feature-list {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+.feature-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  border: 1px solid color-mix(in oklab, var(--primary) 20%, transparent);
+  color: var(--primary);
+}
+.feature-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.feature-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 0.2rem;
+}
+.feature-desc {
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+
+/* Depoimento */
+.testimonial {
+  border-radius: var(--radius-xl);
+  padding: 1.25rem;
+}
+.testimonial-text {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.author-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--gradient-primary);
+  color: var(--primary-foreground);
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+.author-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.author-role {
+  font-size: 0.68rem;
+  color: var(--muted-foreground);
+}
+
+/* -------- Responsivo -------- */
+@media (max-width: 1024px) {
+  .auth-page {
+    grid-template-columns: 1fr;
+  }
+  .auth-form-col {
+    border-right: none;
+    order: 1;
+  }
+  .auth-features {
+    order: 2;
+    padding: 2rem;
+    border-top: 1px solid var(--border);
+  }
+  .features-headline {
+    font-size: 1.6rem;
+  }
+}
+@media (max-width: 480px) {
+  .auth-form-col {
+    padding: 1.25rem;
+  }
+  .form-card {
+    padding: 1.5rem 1.25rem;
+  }
+}

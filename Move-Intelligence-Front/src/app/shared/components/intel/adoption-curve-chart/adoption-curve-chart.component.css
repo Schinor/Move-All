@@ -1,0 +1,54 @@
+.chart-card {
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+.chart-title {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.chart-subtitle {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.header-metrics {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.growth-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+.growth-tag.positive {
+  background: rgba(102, 217, 165, 0.15);
+  color: #66d9a5;
+  border: 1px solid rgba(102, 217, 165, 0.3);
+}
+.growth-tag.negative {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+.points-badge {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}

@@ -1,0 +1,18 @@
+<div class="stat">
+  <div class="topline"></div>
+  <div class="body">
+    <div class="head">
+      <span class="label">{{ kpi().label }}</span>
+      <span class="delta num" [class.down]="!up()">
+        <app-icon [name]="up() ? 'arrow-up-right' : 'arrow-down-right'" [size]="12" />
+        {{ up() ? '+' : '' }}{{ kpi().delta.toFixed(1) }}%
+      </span>
+    </div>
+    <div class="value num text-gradient">{{ kpi().value }}</div>
+    @if (kpi().spark?.length) {
+      <div class="spark">
+        <app-sparkline [data]="kpi().spark!" [up]="up()" />
+      </div>
+    }
+  </div>
+</div>

@@ -1,0 +1,35 @@
+<article class="decision glass">
+  <div class="decision-header">
+    <span class="eyebrow">Move AI · Parecer Executivo</span>
+    @if (recommendation()?.modelVersion) {
+      <span class="model-badge">{{ recommendation()?.modelVersion }}</span>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="ai-loading">Gerando parecer com grounding da IA...</div>
+  } @else {
+    <div class="decision-content">
+      <h3 [class.positive]="decision() === 'Lançar'" [class.warning]="decision() === 'Monitorar' || decision() === 'Negociar'" [class.danger]="decision() === 'Evitar' || decision() === 'Bloquear'">
+        {{ decision() }}
+      </h3>
+      <p class="rationale-text">{{ rationale() }}</p>
+
+      <div class="drivers-section">
+        <span class="section-label">Direcionadores Analíticos:</span>
+        <ul class="drivers-list">
+          @for (driver of drivers(); track driver) {
+            <li>{{ driver }}</li>
+          }
+        </ul>
+      </div>
+
+      @if (nextStep()) {
+        <div class="next-step-box">
+          <span class="next-step-label">Próximo Passo Recomendado:</span>
+          <p class="next-step-text">{{ nextStep() }}</p>
+        </div>
+      }
+    </div>
+  }
+</article>

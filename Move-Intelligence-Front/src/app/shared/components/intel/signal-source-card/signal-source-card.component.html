@@ -1,0 +1,16 @@
+<article class="sources glass">
+  <header>
+    <span>Fontes de dados</span>
+    <strong>{{ sources().length }}</strong>
+  </header>
+
+  <ul>
+    @for (source of sources(); track source.source) {
+      <li>
+        <span class="dot" [class.on]="source.online"></span>
+        <span class="name">{{ source.source }}</span>
+        <span class="status">{{ source.online ? 'ativa' : 'offline' }}</span>
+      </li>
+    }
+  </ul>
+</article>

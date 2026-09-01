@@ -1,0 +1,44 @@
+{
+  "records": [
+    {
+      "keyword": "resistance bands",
+      "geo": "US",
+      "source": "google_trends",
+      "week_start": "2026-08-03",
+      "raw_value": 10,
+      "captured_at": "2026-08-15"
+    },
+    {
+      "keyword": "resistance bands",
+      "geo": "US",
+      "source": "google_trends",
+      "week_start": "2026-08-10",
+      "raw_value": 20,
+      "captured_at": "2026-08-15"
+    },
+    {
+      "keyword": "dumbbells",
+      "geo": "US",
+      "source": "google_trends",
+      "week_start": "2026-08-10",
+      "raw_value": 30,
+      "captured_at": "2026-08-15"
+    },
+    {
+      "keyword": "banda elástica fitness",
+      "geo": "BR",
+      "source": "google_trends",
+      "week_start": "2026-08-10",
+      "raw_value": 40,
+      "captured_at": "2026-08-15"
+    },
+    {
+      "keyword": "walking pad",
+      "geo": "US",
+      "source": "tiktok_search",
+      "week_start": "2026-08-10",
+      "raw_value": 1200000,
+      "captured_at": "2026-08-15"
+    }
+  ]
+}

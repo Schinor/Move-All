@@ -1,0 +1,78 @@
+<div class="seasonality-container">
+  <div class="header-banner">
+    <div>
+      <h3><app-icon name="calendar" [size]="20" /> Módulo de Sazonalidade Preditiva & Janela de Compra Internacional</h3>
+      <p>Projeção de demanda para os próximos 6 meses com cálculo de lead time aduaneiro (China → Brasil).</p>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-state glass">Calculando projeções sazonais...</div>
+  } @else if (data()) {
+    <!-- Card de Ação Estratégica de Importação -->
+    <div class="window-card glass" [class.urgent]="data().optimalSourcingWindow.status === 'JANELA_URGENTE'">
+      <div class="window-head">
+        <div class="status-indicator">
+          @if (data().optimalSourcingWindow.status === 'JANELA_URGENTE') {
+            <span class="badge-status urgent"><app-icon name="alert-triangle" [size]="14" /> Janela de Compra Crítica (Urgente)</span>
+          } @else {
+            <span class="badge-status active"><app-icon name="package" [size]="14" /> Janela de Planejamento Ativo</span>
+          }
+        </div>
+        <div class="days-remaining">
+          Restam <strong>{{ data().optimalSourcingWindow.daysRemainingToOrder }} dias</strong> para emissão do pedido FOB
+        </div>
+      </div>
+
+      <div class="window-body">
+        <h4>{{ data().optimalSourcingWindow.recommendation }}</h4>
+        
+        <div class="lead-time-timeline">
+          <div class="step">
+            <span class="step-icon"><app-icon name="factory" [size]="18" /></span>
+            <strong>Produção Fábrica</strong>
+            <small>{{ data().optimalSourcingWindow.leadTimeBreakdown.productionDays }} dias</small>
+          </div>
+          <div class="arrow"><app-icon name="arrow-right" [size]="16" /></div>
+          <div class="step">
+            <span class="step-icon"><app-icon name="ship" [size]="18" /></span>
+            <strong>Frete Marítimo</strong>
+            <small>{{ data().optimalSourcingWindow.leadTimeBreakdown.oceanFreightDays }} dias</small>
+          </div>
+          <div class="arrow"><app-icon name="arrow-right" [size]="16" /></div>
+          <div class="step">
+            <span class="step-icon"><app-icon name="customs" [size]="18" /></span>
+            <strong>Alfândega / Desembaraço</strong>
+            <small>{{ data().optimalSourcingWindow.leadTimeBreakdown.customsClearanceDays }} dias</small>
+          </div>
+          <div class="arrow"><app-icon name="arrow-right" [size]="16" /></div>
+          <div class="step peak">
+            <span class="step-icon"><app-icon name="fire" [size]="18" /></span>
+            <strong>Pico de Vendas ({{ data().optimalSourcingWindow.targetPeakMonth }})</strong>
+            <small>{{ formatNumber(data().optimalSourcingWindow.targetPeakVolume) }} un projetadas</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela e Barras de Projeção Mensal -->
+    <div class="forecast-grid glass">
+      <h5><app-icon name="bar-chart" [size]="16" /> Projeção de Demanda Mensal (Próximos 6 Meses)</h5>
+      
+      <div class="bars-container">
+        @for (m of data().forecastNext6Months; track m.monthName) {
+          <div class="month-col">
+            <div class="bar-wrapper">
+              <div class="bar-fill" [style.height.%]="(m.projectedVolume / (data().optimalSourcingWindow.targetPeakVolume || 1)) * 100" [class.peak-bar]="m.seasonalFactor >= 1.2">
+                <span class="bar-val">{{ formatNumber(m.projectedVolume) }}</span>
+              </div>
+            </div>
+            <div class="month-label">{{ m.monthName }}</div>
+            <div class="factor-tag">x{{ m.seasonalFactor }}</div>
+            <div class="month-notes">{{ m.notes }}</div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

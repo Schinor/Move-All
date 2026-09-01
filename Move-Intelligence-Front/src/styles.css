@@ -1,0 +1,152 @@
+/* ============================================================
+   Move Intelligence — tema global (portado do mockup)
+   Dark-first premium executive theme. Tokens em oklch.
+   ============================================================ */
+
+:root {
+  --radius: 0.75rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Dark premium (default) */
+  --background: oklch(0.16 0.012 200);
+  --foreground: oklch(0.97 0.01 180);
+  --surface: oklch(0.2 0.014 200);
+  --surface-elevated: oklch(0.235 0.016 200);
+  --card: oklch(0.205 0.014 200);
+  --card-foreground: oklch(0.97 0.01 180);
+  --popover: oklch(0.22 0.014 200);
+  --popover-foreground: oklch(0.97 0.01 180);
+  --primary: oklch(0.78 0.18 158);
+  --primary-foreground: oklch(0.14 0.02 180);
+  --primary-glow: oklch(0.82 0.22 156);
+  --secondary: oklch(0.27 0.018 200);
+  --secondary-foreground: oklch(0.95 0.01 180);
+  --muted: oklch(0.25 0.014 200);
+  --muted-foreground: oklch(0.65 0.018 200);
+  --accent: oklch(0.72 0.16 230);
+  --accent-foreground: oklch(0.14 0.02 180);
+  --destructive: oklch(0.66 0.22 22);
+  --destructive-foreground: oklch(0.98 0.01 0);
+  --success: oklch(0.78 0.18 158);
+  --warning: oklch(0.82 0.17 75);
+  --danger: oklch(0.68 0.22 18);
+  --info: oklch(0.72 0.16 230);
+  --border: oklch(0.3 0.014 200 / 0.6);
+  --border-strong: oklch(0.4 0.018 200 / 0.8);
+  --input: oklch(0.28 0.014 200);
+  --ring: oklch(0.78 0.18 158);
+  --chart-1: oklch(0.78 0.18 158);
+  --chart-2: oklch(0.72 0.16 230);
+  --chart-3: oklch(0.82 0.17 75);
+  --chart-4: oklch(0.68 0.22 18);
+  --chart-5: oklch(0.7 0.14 290);
+  --sidebar: oklch(0.155 0.012 200);
+  --sidebar-foreground: oklch(0.85 0.012 200);
+  --sidebar-primary: oklch(0.78 0.18 158);
+  --sidebar-primary-foreground: oklch(0.14 0.02 180);
+  --sidebar-accent: oklch(0.23 0.014 200);
+  --sidebar-accent-foreground: oklch(0.95 0.01 180);
+  --sidebar-border: oklch(0.28 0.014 200 / 0.5);
+  --sidebar-ring: oklch(0.78 0.18 158);
+
+  --gradient-primary: linear-gradient(135deg, oklch(0.78 0.18 158), oklch(0.72 0.16 200));
+  --gradient-surface: linear-gradient(180deg, oklch(0.22 0.014 200), oklch(0.18 0.012 200));
+  --shadow-elevated: 0 10px 40px -10px oklch(0 0 0 / 0.5), 0 0 0 1px oklch(1 0 0 / 0.04);
+  --shadow-glow: 0 0 40px -8px oklch(0.78 0.18 158 / 0.35);
+}
+
+/* Tema claro — o toggle estampa data-theme="light" no <html>.
+   Aproximação: inverte superfícies mantendo o verde primário. */
+:root[data-theme='light'] {
+  --background: oklch(0.98 0.005 200);
+  --foreground: oklch(0.2 0.02 200);
+  --surface: oklch(0.96 0.006 200);
+  --surface-elevated: oklch(0.99 0.004 200);
+  --card: oklch(0.99 0.004 200);
+  --card-foreground: oklch(0.2 0.02 200);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.02 200);
+  --secondary: oklch(0.92 0.008 200);
+  --secondary-foreground: oklch(0.2 0.02 200);
+  --muted: oklch(0.93 0.006 200);
+  --muted-foreground: oklch(0.45 0.02 200);
+  --border: oklch(0.5 0.01 200 / 0.2);
+  --border-strong: oklch(0.4 0.02 200 / 0.35);
+  --input: oklch(0.9 0.008 200);
+  --sidebar: oklch(0.97 0.005 200);
+  --sidebar-foreground: oklch(0.25 0.02 200);
+  --sidebar-accent: oklch(0.92 0.008 200);
+  --sidebar-accent-foreground: oklch(0.2 0.02 200);
+  --sidebar-border: oklch(0.5 0.01 200 / 0.2);
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-image:
+    radial-gradient(60% 50% at 50% 0%, oklch(0.78 0.18 158 / 0.06), transparent 70%),
+    radial-gradient(40% 40% at 100% 100%, oklch(0.72 0.16 230 / 0.05), transparent 70%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: oklch(0.78 0.18 158 / 0.3);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0.014 200 / 0.6);
+  border-radius: 8px;
+}
+
+/* Utilitários reutilizados pelos componentes */
+.glass {
+  background: color-mix(in oklab, var(--surface) 70%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--border);
+}
+.glass-strong {
+  background: color-mix(in oklab, var(--surface-elevated) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-strong);
+}
+.text-gradient {
+  background: linear-gradient(135deg, oklch(0.97 0.01 180), oklch(0.78 0.18 158));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}

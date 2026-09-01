@@ -1,0 +1,145 @@
+<app-page-header
+  title="Comparador de Produtos Lado a Lado"
+  subtitle="Selecione de 2 a 4 produtos para contrastar curvas de adoção, unit economics, margens e volumes no mesmo gráfico"
+/>
+
+<!-- Barra de Seleção de Produtos -->
+<section class="selection-bar glass">
+  <div class="selection-head">
+    <h4>Selecione os produtos para comparação (máx. 4):</h4>
+    <span class="selection-count">{{ selectedIds().length }}/4 selecionados</span>
+  </div>
+
+  <div class="product-chips">
+    @for (p of allProducts(); track p.productClusterId) {
+      <button
+        type="button"
+        class="chip-btn"
+        [class.selected]="selectedIds().includes(p.productClusterId)"
+        (click)="toggleProduct(p.productClusterId)"
+      >
+        <span class="chip-dot" [class.active]="selectedIds().includes(p.productClusterId)"></span>
+        {{ p.canonicalName }}
+      </button>
+    }
+  </div>
+</section>
+
+@if (loading()) {
+  <div class="loading-state glass">Carregando métricas comparativas...</div>
+} @else if (comparisonData().length >= 2) {
+  <!-- Tabela Comparativa Lado a Lado -->
+  <section class="comparison-table-section glass">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="metric-col">Métrica / Atributo</th>
+            @for (p of comparisonData(); track p.id; let idx = $index) {
+              <th class="product-col" [style.border-top-color]="colors[idx]">
+                <div class="product-header-cell">
+                  <div class="color-badge" [style.background-color]="colors[idx]"></div>
+                  <strong>{{ p.canonicalName }}</strong>
+                  <span class="cat-tag">{{ p.category || 'Geral' }}</span>
+                </div>
+              </th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="metric-name">Nível de Risco</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <app-risk-badge [level]="p.riskLevel" of="de mercado" />
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Score Financeiro</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <strong class="kpi-num">{{ p.financialScore }}/100</strong>
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Crescimento (2 Anos)</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <strong class="kpi-num" [class.positive]="p.growthPct >= 0">
+                  {{ p.growthPct >= 0 ? '+' : '' }}{{ p.growthPct }}%
+                </strong>
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Volume Mensal Atual</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <strong>{{ formatNumber(p.currentVolume) }} un/mês</strong>
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Preço Médio Praticado</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>{{ formatCurrency(p.avgPrice) }}</td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Margem de Contribuição (%)</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <strong class="kpi-num" [class.positive]="p.margemPct >= 20" [class.negative]="p.margemPct < 15">
+                  {{ p.margemPct }}%
+                </strong>
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Lucro Mensal Estimado</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <strong [class.positive]="p.lucroMensalEst > 0">
+                  {{ formatCurrency(p.lucroMensalEst) }}
+                </strong>
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">ROI Projetado sobre Estoque</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>{{ p.roiPct }}%</td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Principal Fornecedor</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>{{ p.topSupplier }}</td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Ação</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <a [routerLink]="['/tendencia', p.id]" class="btn-detail">Ver Dossiê Completo <app-icon name="arrow-right" [size]="14" /></a>
+              </td>
+            }
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+} @else {
+  <div class="loading-state glass">Selecione pelo menos 2 produtos acima para visualizar o comparativo lado a lado.</div>
+}

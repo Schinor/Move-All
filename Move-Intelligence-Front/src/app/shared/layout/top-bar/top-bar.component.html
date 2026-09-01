@@ -1,0 +1,38 @@
+<header class="topbar">
+  <div class="left">
+    <span class="market-pill">
+      <span class="dot"></span>
+      Mercado Aberto
+    </span>
+    <span class="quote num">BRL · Atualizado há 2min · 14h32 BRT</span>
+  </div>
+
+  <div class="search-wrap">
+    <div class="search">
+      <span class="search-icon"><app-icon name="search" [size]="16" /></span>
+      <input type="search" placeholder="Buscar tendências, categorias, fornecedores…" aria-label="Buscar" />
+      <kbd class="kbd"><app-icon name="command" [size]="12" /> K</kbd>
+    </div>
+  </div>
+
+  <div class="right">
+    <button type="button" class="ask">
+      <app-icon name="sparkles" [size]="14" />
+      Ask Move AI
+    </button>
+    <button type="button" class="icon-btn" (click)="toggleTheme()" aria-label="Alternar tema">
+      <app-icon [name]="theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
+    </button>
+    <button type="button" class="icon-btn bell" aria-label="Notificações">
+      <app-icon name="bell" [size]="16" />
+      <span class="badge"></span>
+    </button>
+    <div class="user">
+      <div class="avatar">RB</div>
+      <div class="user-text">
+        <span class="user-name">Rafael Brudden</span>
+        <span class="user-role">Diretor de Produto</span>
+      </div>
+    </div>
+  </div>
+</header>

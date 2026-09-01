@@ -1,0 +1,19 @@
+@if (data().length) {
+  <svg viewBox="0 0 100 36" preserveAspectRatio="none" class="spark">
+    <defs>
+      <linearGradient [attr.id]="gradId" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" [attr.stop-color]="stroke()" stop-opacity="0.35" />
+        <stop offset="100%" [attr.stop-color]="stroke()" stop-opacity="0" />
+      </linearGradient>
+    </defs>
+    <path [attr.d]="areaPath()" [attr.fill]="'url(#' + gradId + ')'" />
+    <path
+      [attr.d]="linePath()"
+      fill="none"
+      [attr.stroke]="stroke()"
+      stroke-width="1.5"
+      stroke-linejoin="round"
+      stroke-linecap="round"
+    />
+  </svg>
+}

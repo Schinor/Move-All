@@ -1,0 +1,123 @@
+# Keywords canônicas usadas para ligar snapshots de produtos a sinais de demanda.
+# O cluster é a chave estável; os textos podem variar por fonte, mas o vínculo
+# analítico passa sempre por este mapa.
+clusters:
+  resistance_bands:
+    keywords:
+      BR: ["banda elástica fitness", "faixa elástica academia", "resistance band treino"]
+      US: ["resistance bands", "elastic workout bands", "pull up assist bands"]
+      GLOBAL: ["resistance bands", "elastic fitness bands"]
+
+  dumbbells:
+    keywords:
+      BR: ["haltere ajustável", "halteres para casa", "kit halteres"]
+      US: ["adjustable dumbbells", "home gym dumbbells", "dumbbell set"]
+      GLOBAL: ["adjustable dumbbells", "home gym weights"]
+
+  vibration_plate:
+    keywords:
+      BR: ["plataforma vibratória", "placa vibratória treino"]
+      US: ["vibration plate", "whole body vibration machine"]
+      GLOBAL: ["vibration plate", "body vibration platform"]
+
+  compact_cardio:
+    keywords:
+      BR: ["esteira dobrável", "esteira ergométrica", "walking pad"]
+      US: ["walking pad", "under desk treadmill", "folding treadmill"]
+      GLOBAL: ["walking pad treadmill", "compact cardio machine"]
+
+  spinning_bike:
+    keywords:
+      BR: ["bicicleta spinning", "bike indoor spinning", "bicicleta ergométrica profissional"]
+      US: ["spinning bike", "indoor cycling bike", "commercial spin bike"]
+      GLOBAL: ["spin bike", "indoor cycle bike"]
+
+  elliptical_trainer:
+    keywords:
+      BR: ["elíptico ergométrico", "transport elíptico", "aparelho elíptico"]
+      US: ["elliptical trainer", "elliptical machine", "cross trainer"]
+      GLOBAL: ["elliptical trainer", "cross trainer"]
+
+  kettlebells:
+    keywords:
+      BR: ["kettlebell", "peso kettlebell", "kettlebell para casa"]
+      US: ["kettlebell", "adjustable kettlebell", "home kettlebell"]
+      GLOBAL: ["kettlebell", "adjustable kettlebell"]
+
+  ab_wheel:
+    keywords:
+      BR: ["roda abdominal", "ab wheel", "roda para abdominal"]
+      US: ["ab wheel", "ab roller", "abdominal wheel"]
+      GLOBAL: ["ab wheel", "ab roller"]
+
+  rowing_machine:
+    keywords:
+      BR: ["remo indoor", "máquina de remo", "simulador de remo"]
+      US: ["rowing machine", "indoor rower", "home rowing machine"]
+      GLOBAL: ["rowing machine", "indoor rower"]
+
+  pull_up_equipment:
+    keywords:
+      BR: ["barra fixa", "barra de porta", "equipamento barra fixa"]
+      US: ["pull up bar", "doorway pull up bar", "pull up equipment"]
+      GLOBAL: ["pull up bar", "home pull up equipment"]
+
+  recovery_massage:
+    keywords:
+      BR: ["pistola massageadora", "massageador muscular", "recuperação muscular"]
+      US: ["massage gun", "muscle recovery", "percussion massager"]
+      GLOBAL: ["massage gun", "muscle recovery tools"]
+
+  yoga_pilates:
+    keywords:
+      BR: ["tapete de yoga", "pilates em casa", "acessórios de yoga"]
+      US: ["yoga mat", "home pilates", "yoga accessories"]
+      GLOBAL: ["yoga mat", "pilates equipment"]
+
+  yoga_mat:
+    keywords:
+      BR: ["tapete yoga", "tapete de exercício", "colchonete fitness"]
+      US: ["yoga mat", "exercise mat", "fitness mat"]
+      GLOBAL: ["yoga mat", "exercise mat"]
+
+  weight_bench:
+    keywords:
+      BR: ["banco de musculação", "banco ajustável", "banco de academia"]
+      US: ["weight bench", "adjustable workout bench", "home gym bench"]
+      GLOBAL: ["weight bench", "adjustable gym bench"]
+
+  push_up_equipment:
+    keywords:
+      BR: ["suporte para flexão", "barras para flexão", "push up treino"]
+      US: ["push up bars", "push up board", "push up equipment"]
+      GLOBAL: ["push up bars", "push up board"]
+
+  jump_rope:
+    keywords:
+      BR: ["corda de pular", "corda crossfit", "corda com contador"]
+      US: ["jump rope", "speed rope", "weighted jump rope"]
+      GLOBAL: ["jump rope", "speed rope"]
+
+  home_gym_station:
+    keywords:
+      BR: ["estação de musculação", "multiestação academia", "academia residencial"]
+      US: ["home gym station", "multi gym machine", "home gym equipment"]
+      GLOBAL: ["home gym station", "home gym machine"]
+
+  commercial_gym_equipment:
+    keywords:
+      BR: ["leg press profissional", "smith machine academia", "gaiola agachamento power rack", "aparelho musculação profissional"]
+      US: ["commercial gym machine", "leg press machine", "power rack cage", "smith machine commercial"]
+      GLOBAL: ["commercial gym equipment", "power rack machine"]
+
+  functional_training:
+    keywords:
+      BR: ["fita de suspensão trx", "slam ball crossfit", "caixa pliométrica salto", "super band crossfit"]
+      US: ["suspension trainer", "slam ball", "plyo box jump", "crossfit equipment"]
+      GLOBAL: ["functional training equipment", "suspension trainer"]
+
+  home_fitness_equipment:
+    keywords:
+      BR: ["equipamentos fitness para casa", "academia em casa", "acessórios fitness"]
+      US: ["home fitness equipment", "home workout equipment", "fitness equipment"]
+      GLOBAL: ["home fitness equipment", "home workout equipment"]

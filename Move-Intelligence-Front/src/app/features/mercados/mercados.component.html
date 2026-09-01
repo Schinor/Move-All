@@ -1,0 +1,27 @@
+<app-page-header
+  title="Mercados"
+  subtitle="Saturação e aderência por mercado (motor por-mercado em desenvolvimento)."
+/>
+
+@switch (data().status) {
+  @case ('ready') {
+    <div class="grid">
+      @for (m of $any(data()).data.items; track m.id) {
+        <div class="market glass">
+          <div class="m-head">
+            <span class="country">{{ m.country }}</span>
+            <app-risk-badge [level]="m.risk" of="de mercado" />
+          </div>
+          <app-kpi-card label="Score" [indicator]="m.score" />
+          <app-kpi-card label="Aderência ao Brasil" [indicator]="m.brazilFit" />
+        </div>
+      }
+    </div>
+  }
+  @default {
+    <app-state-panel
+      [state]="data()"
+      emptyMessage="Breakdown por mercado ainda não disponível — motor em desenvolvimento."
+    />
+  }
+}

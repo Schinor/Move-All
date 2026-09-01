@@ -1,0 +1,48 @@
+:host {
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+.gauge {
+  position: relative;
+  flex: 0 0 auto;
+}
+svg {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+circle {
+  fill: none;
+  stroke-width: 6;
+}
+.track {
+  stroke: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
+}
+.value {
+  stroke-linecap: round;
+}
+.score {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform: translateY(-0.05rem);
+  font-size: 1rem;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.label {
+  position: absolute;
+  left: 50%;
+  bottom: 0.35rem;
+  transform: translateX(-50%);
+  font-size: 0.46rem;
+  line-height: 1;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}

@@ -1,0 +1,86 @@
+<app-page-header
+  title="Ranking de Tendências"
+  subtitle="Produtos priorizados por score de tendência, crescimento e risco."
+/>
+
+@switch (products().status) {
+  @case ('ready') {
+    <section class="toolbar glass">
+      <label class="search">
+        <span>Busca</span>
+        <input
+          type="search"
+          placeholder="Nome, categoria ou origem"
+          [value]="query()"
+          (input)="setQuery($event)"
+        />
+      </label>
+      <div class="segments" aria-label="Filtro por estágio">
+        @for (filter of filters; track filter.id) {
+          <button
+            type="button"
+            [class.active]="stage() === filter.id"
+            (click)="setStage(filter.id)"
+          >
+            {{ filter.label }}
+          </button>
+        }
+      </div>
+      <strong class="count num">{{ rows().length }} itens</strong>
+    </section>
+
+    <div class="table-wrap glass">
+      <table>
+        <thead>
+          <tr>
+            <th><button type="button" (click)="sort('score')">Rank</button></th>
+            <th><button type="button" (click)="sort('name')">Produto</button></th>
+            <th><button type="button" (click)="sort('score')">Score</button></th>
+            <th><button type="button" (click)="sort('growth')">Crescimento</button></th>
+            <th>Spark</th>
+            <th><button type="button" (click)="sort('risk')">Risco</button></th>
+            <th>Margem</th>
+            <th>Lead</th>
+            <th>Pipeline</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of rows(); track p.productClusterId; let i = $index) {
+            <tr>
+              <td class="rank num">{{ i + 1 }}</td>
+              <td class="product">
+                <strong>{{ p.canonicalName }}</strong>
+                <span>{{ p.category ?? '—' }} · {{ origin(p) }} · {{ stageLabel(p.stage) }}</span>
+              </td>
+              <td><app-score-gauge [value]="p.trendScore.value" [size]="58" /></td>
+              <td class="growth num" [class.down]="(p.growthPct ?? 0) < 0">
+                {{ p.growthPct === null ? '—' : (p.growthPct >= 0 ? '+' : '') + p.growthPct + '%' }}
+              </td>
+              <td class="spark">
+                @if (p.spark?.length) {
+                  <app-sparkline [data]="p.spark ?? []" [up]="(p.growthPct ?? 0) >= 0" />
+                } @else {
+                  —
+                }
+              </td>
+              <td><app-risk-badge [level]="p.risk" of="de mercado" /></td>
+              <td>—</td>
+              <td>—</td>
+              <td>—</td>
+              <td>
+                <a [routerLink]="['/tendencia', p.productClusterId]" class="go">Ver</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+  @default {
+    <app-state-panel
+      [state]="products()"
+      emptyMessage="Ranking vazio — aguardando produtos coletados e pontuados."
+    />
+  }
+}

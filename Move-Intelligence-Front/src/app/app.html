@@ -1,0 +1,13 @@
+@if (isAuthRoute()) {
+  <router-outlet />
+} @else {
+  <div class="app-shell">
+    <app-sidebar />
+    <div class="app-main">
+      <app-top-bar />
+      <main class="app-content">
+        <router-outlet />
+      </main>
+    </div>
+  </div>
+}

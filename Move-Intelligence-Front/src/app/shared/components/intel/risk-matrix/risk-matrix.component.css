@@ -1,0 +1,80 @@
+:host {
+  display: block;
+}
+.matrix {
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+header strong {
+  color: var(--foreground);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.cell {
+  min-height: 100px;
+  padding: 0.7rem;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 55%, transparent);
+}
+.cell:nth-child(3n) {
+  border-right: 0;
+}
+.cell:nth-last-child(-n + 3) {
+  border-bottom: 0;
+}
+.axis {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 0.65rem;
+  margin-bottom: 0.55rem;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+  color: var(--foreground);
+  padding: 0.25rem 0.45rem;
+  text-decoration: none;
+  font-size: 0.68rem;
+}
+.empty {
+  color: var(--muted-foreground);
+}
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .cell,
+  .cell:nth-child(3n),
+  .cell:nth-last-child(-n + 3) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}

@@ -1,0 +1,116 @@
+<app-page-header
+  title="Sourcing & Fornecedores Homologados"
+  subtitle="Fábricas asiáticas e distribuidoras qualificadas com score de 0 a 5 estrelas por vendas, catálogo e reputação"
+/>
+
+<section class="hero glass">
+  <app-confidence-indicator [value]="confidence()" label="Confiança média" />
+  <div class="summary">
+    @if (summary().status === 'ready') {
+      <div>
+        <span>Total Fornecedores</span>
+        <strong class="num">{{ $any(summary()).data.totalSuppliers }}</strong>
+      </div>
+      <div>
+        <span>FOB Médio</span>
+        <strong class="num">{{ formatUsd($any(summary()).data.avgFob) }}</strong>
+      </div>
+      <div>
+        <span>Países de Origem</span>
+        <strong class="num">{{ $any(summary()).data.countries }}</strong>
+      </div>
+      <div>
+        <span>Top Hub Fabricação</span>
+        <strong><app-icon name="globe" [size]="16" /> {{ $any(summary()).data.topOrigin ?? 'China' }}</strong>
+      </div>
+    }
+  </div>
+</section>
+
+<!-- Barra de Filtros e Busca de Fornecedores -->
+<section class="filter-bar glass">
+  <div class="search-box">
+    <input
+      type="search"
+      placeholder="Buscar por nome da fábrica, país ou categoria…"
+      [ngModel]="searchQuery()"
+      (ngModelChange)="searchQuery.set($event)"
+    />
+  </div>
+
+  <div class="tier-pills">
+    <button
+      type="button"
+      class="pill-btn"
+      [class.active]="selectedTier() === 'ALL'"
+      (click)="selectedTier.set('ALL')"
+    >
+      Todos ({{ rawRows().length }})
+    </button>
+    <button
+      type="button"
+      class="pill-btn diamante"
+      [class.active]="selectedTier() === 'Diamante'"
+      (click)="selectedTier.set('Diamante')"
+    >
+      <app-icon name="diamond" [size]="14" /> Tier Diamante (4.5★+)
+    </button>
+    <button
+      type="button"
+      class="pill-btn ouro"
+      [class.active]="selectedTier() === 'Ouro'"
+      (click)="selectedTier.set('Ouro')"
+    >
+      <app-icon name="medal-gold" [size]="14" /> Tier Ouro (3.8★ - 4.4★)
+    </button>
+    <button
+      type="button"
+      class="pill-btn prata"
+      [class.active]="selectedTier() === 'Prata'"
+      (click)="selectedTier.set('Prata')"
+    >
+      <app-icon name="medal-silver" [size]="14" /> Tier Prata (3.0★ - 3.7★)
+    </button>
+  </div>
+</section>
+
+@switch (suppliers().status) {
+  @case ('ready') {
+    <section class="main-grid">
+      <div>
+        <div class="section-head">
+          <h2>Fábricas em Destaque</h2>
+          <span class="num">{{ topSuppliers().length }} exibidas</span>
+        </div>
+        <div class="cards">
+          @for (supplier of topSuppliers(); track supplier.id) {
+            <app-supplier-card [supplier]="supplier" />
+          }
+        </div>
+      </div>
+
+      <aside class="copilot glass">
+        <div class="copilot-head">
+          <span><app-icon name="robot" [size]="16" /> Move Sourcing Copilot</span>
+        </div>
+        <p>{{ insight() }}</p>
+        <ul>
+          <li><strong>Score de 0 a 5★</strong>: Combina avaliações dos anúncios (35%), volume de vendas (30%), amplitude de catálogo (20%) e histórico de entrega (15%).</li>
+          <li><strong>Tier Diamante</strong>: Fábricas com capacidade para escala imediata e certificações ISO/BSCI.</li>
+          <li><strong>FOB & MOQ</strong>: Prazos de produção médios de 35 a 45 dias com desembaraço aduaneiro.</li>
+        </ul>
+      </aside>
+    </section>
+
+    <section class="block">
+      <div class="section-head">
+        <h2>Matriz Comparativa de Fornecedores</h2>
+        <span class="num">{{ filteredRows().length }} fornecedores</span>
+      </div>
+      <app-supplier-comparison-table [suppliers]="filteredRows()" />
+    </section>
+  }
+  @default {
+    <app-state-panel [state]="suppliers()" emptyMessage="Nenhum fornecedor encontrado." />
+  }
+}

@@ -1,0 +1,51 @@
+.rec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.rec {
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.r-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.r-title {
+  font-weight: 600;
+}
+.rationale {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+}
+.action {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.action[data-action='comprar'] {
+  color: var(--success);
+  border-color: var(--success);
+}
+.action[data-action='bloquear'] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.action[data-action='monitorar'] {
+  color: var(--info);
+  border-color: var(--info);
+}

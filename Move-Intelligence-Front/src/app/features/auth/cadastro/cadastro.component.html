@@ -1,0 +1,357 @@
+<div class="auth-page">
+  <!-- Background decorativo (mesmo padrão do login) -->
+  <div class="auth-bg">
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-a"></div>
+    <div class="bg-glow bg-glow-b"></div>
+    <div class="bg-orb bg-orb-1"></div>
+  </div>
+
+  <!-- Coluna do formulário — à esquerda no cadastro -->
+  <div class="auth-form-col">
+    <div class="form-card glass-strong">
+
+      <!-- Cabeçalho -->
+      <div class="form-header">
+        <div class="brand-logo">
+          <div class="logo-mark">M</div>
+          <span class="logo-name">Move Intelligence</span>
+        </div>
+        <h2 class="form-title">Criar sua conta</h2>
+        <p class="form-subtitle">Configure seu acesso à plataforma em poucos minutos.</p>
+      </div>
+
+      <!-- Stepper -->
+      <div class="stepper" aria-label="Progresso do cadastro">
+        <div class="step-item" [class.active]="step() >= 1" [class.done]="step() > 1">
+          <div class="step-circle">
+            @if (step() > 1) {
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            } @else {
+              <span>1</span>
+            }
+          </div>
+          <span class="step-label">Perfil</span>
+        </div>
+        <div class="step-track" [class.done]="step() > 1"></div>
+        <div class="step-item" [class.active]="step() >= 2">
+          <div class="step-circle"><span>2</span></div>
+          <span class="step-label">Segurança</span>
+        </div>
+      </div>
+
+      <!-- PASSO 1 — Perfil -->
+      @if (step() === 1) {
+        <form class="form" (ngSubmit)="nextStep()" novalidate>
+          <div class="field">
+            <label for="nome" class="field-label">Nome completo</label>
+            <div class="input-wrap">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+                </svg>
+              </span>
+              <input
+                id="nome"
+                type="text"
+                class="input"
+                placeholder="João Silva"
+                autocomplete="name"
+                required
+                [ngModel]="nome()"
+                (ngModelChange)="nome.set($event)"
+                name="nome"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="empresa" class="field-label">Empresa</label>
+            <div class="input-wrap">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="7" width="20" height="14" rx="2" />
+                  <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+                  <line x1="12" y1="12" x2="12" y2="16" />
+                  <line x1="10" y1="14" x2="14" y2="14" />
+                </svg>
+              </span>
+              <input
+                id="empresa"
+                type="text"
+                class="input"
+                placeholder="Nome da empresa"
+                autocomplete="organization"
+                required
+                [ngModel]="empresa()"
+                (ngModelChange)="empresa.set($event)"
+                name="empresa"
+              />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="email-cad" class="field-label">E-mail corporativo</label>
+            <div class="input-wrap">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect width="20" height="16" x="2" y="4" rx="2" />
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                </svg>
+              </span>
+              <input
+                id="email-cad"
+                type="email"
+                class="input"
+                placeholder="joao@empresa.com"
+                autocomplete="email"
+                required
+                [ngModel]="email()"
+                (ngModelChange)="email.set($event)"
+                name="email"
+              />
+            </div>
+          </div>
+
+          <button id="btn-next-step" type="submit" class="btn-submit">
+            Continuar
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16">
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+          </button>
+        </form>
+      }
+
+      <!-- PASSO 2 — Segurança -->
+      @if (step() === 2) {
+        <form class="form" (ngSubmit)="onSubmit()" novalidate>
+          <div class="field">
+            <label for="password-cad" class="field-label">Senha</label>
+            <div class="input-wrap">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </span>
+              <input
+                id="password-cad"
+                [type]="showPassword() ? 'text' : 'password'"
+                class="input input-password"
+                placeholder="Mínimo 8 caracteres"
+                autocomplete="new-password"
+                required
+                [ngModel]="password()"
+                (ngModelChange)="onPasswordInput($event)"
+                name="password"
+              />
+              <button
+                type="button"
+                class="toggle-password"
+                (click)="togglePassword()"
+                [attr.aria-label]="showPassword() ? 'Ocultar senha' : 'Mostrar senha'"
+              >
+                @if (showPassword()) {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                } @else {
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                }
+              </button>
+            </div>
+
+            <!-- Password strength -->
+            @if (password().length > 0) {
+              <div class="strength-bar" aria-label="Força da senha">
+                <div class="strength-track">
+                  <div class="strength-fill" [attr.data-strength]="passwordStrength()"></div>
+                </div>
+                <span class="strength-label" [attr.data-strength]="passwordStrength()">
+                  @switch (passwordStrength()) {
+                    @case (0) { Muito fraca }
+                    @case (1) { Fraca }
+                    @case (2) { Boa }
+                    @case (3) { Forte }
+                  }
+                </span>
+              </div>
+            }
+          </div>
+
+          <div class="field">
+            <label for="confirm-password" class="field-label">Confirmar senha</label>
+            <div class="input-wrap">
+              <span class="input-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
+              <input
+                id="confirm-password"
+                type="password"
+                class="input"
+                [class.input-error]="confirmPassword().length > 0 && password() !== confirmPassword()"
+                [class.input-ok]="confirmPassword().length > 0 && password() === confirmPassword()"
+                placeholder="Repita a senha"
+                autocomplete="new-password"
+                required
+                [ngModel]="confirmPassword()"
+                (ngModelChange)="confirmPassword.set($event)"
+                name="confirmPassword"
+              />
+            </div>
+            @if (confirmPassword().length > 0 && password() !== confirmPassword()) {
+              <span class="field-error">As senhas não coincidem.</span>
+            }
+          </div>
+
+          <!-- Termos -->
+          <label class="terms-row" for="terms">
+            <input
+              id="terms"
+              type="checkbox"
+              class="checkbox"
+              [ngModel]="acceptTerms()"
+              (ngModelChange)="acceptTerms.set($event)"
+              name="terms"
+            />
+            <span class="terms-text">
+              Li e aceito os
+              <a href="#" class="form-link">Termos de Uso</a>
+              e a
+              <a href="#" class="form-link">Política de Privacidade</a>.
+            </span>
+          </label>
+
+          <div class="form-actions">
+            <button id="btn-prev-step" type="button" class="btn-back" (click)="prevStep()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="15" height="15">
+                <path d="M19 12H5" />
+                <path d="m12 19-7-7 7-7" />
+              </svg>
+              Voltar
+            </button>
+            <button
+              id="btn-cadastrar"
+              type="submit"
+              class="btn-submit"
+              [class.loading]="loading()"
+              [disabled]="loading() || !acceptTerms() || password() !== confirmPassword()"
+            >
+              @if (loading()) {
+                <span class="spinner"></span>
+                Criando conta...
+              } @else {
+                Criar conta
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" width="16" height="16">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              }
+            </button>
+          </div>
+        </form>
+      }
+
+      <!-- Rodapé -->
+      <p class="form-footer">
+        Já tem uma conta?
+        <a routerLink="/login" class="form-link">Entrar</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Coluna lateral de features -->
+  <div class="auth-features">
+    <div class="features-content">
+      <div class="features-badge">
+        <span class="pulse"></span>
+        <span>Sinais ao vivo</span>
+      </div>
+
+      <h2 class="features-headline">
+        Inteligência que<br />
+        <span class="text-gradient">antecipa o mercado.</span>
+      </h2>
+
+      <p class="features-lead">
+        Tudo que você precisa para tomar decisões de lançamento com confiança e velocidade.
+      </p>
+
+      <ul class="feature-list">
+        <li class="feature-item">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 3v18h18" />
+              <path d="m19 9-5 5-4-4-3 3" />
+            </svg>
+          </div>
+          <div>
+            <div class="feature-title">Ranking de tendências</div>
+            <div class="feature-desc">Score de oportunidade atualizado em tempo real.</div>
+          </div>
+        </li>
+        <li class="feature-item">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </div>
+          <div>
+            <div class="feature-title">Sourcing inteligente</div>
+            <div class="feature-desc">Encontre fornecedores antes da concorrência.</div>
+          </div>
+        </li>
+        <li class="feature-item">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l1.9 5.9H20l-4.9 3.6 1.9 5.9L12 15l-5 3.4 1.9-5.9L4 9h6.1z" />
+            </svg>
+          </div>
+          <div>
+            <div class="feature-title">Copilot com IA</div>
+            <div class="feature-desc">Briefings automáticos e insights acionáveis.</div>
+          </div>
+        </li>
+        <li class="feature-item">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8" />
+              <path d="M12 17v4" />
+            </svg>
+          </div>
+          <div>
+            <div class="feature-title">Dashboard executivo</div>
+            <div class="feature-desc">KPIs e sinais consolidados em um só lugar.</div>
+          </div>
+        </li>
+      </ul>
+
+      <!-- Depoimento -->
+      <div class="testimonial glass">
+        <p class="testimonial-text">
+          "Com a Move antecipamos 3 lançamentos que foram hit no mercado antes dos concorrentes perceberem a tendência."
+        </p>
+        <div class="testimonial-author">
+          <div class="author-avatar">AR</div>
+          <div>
+            <div class="author-name">Ana Rodrigues</div>
+            <div class="author-role">Head de Produto · Marca X</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

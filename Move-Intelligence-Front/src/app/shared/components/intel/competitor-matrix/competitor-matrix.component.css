@@ -1,0 +1,152 @@
+.competitors-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.header-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+
+.header-banner h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--foreground);
+  margin: 0 0 0.25rem 0;
+}
+
+.header-banner p {
+  font-size: 0.82rem;
+  color: var(--muted-foreground);
+  margin: 0;
+}
+
+.summary-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+}
+
+.summary-badge strong {
+  color: var(--primary);
+}
+
+.table-card {
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-foreground);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+tr.buybox {
+  background: rgba(234, 179, 8, 0.04);
+}
+
+.seller-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.badge-buybox {
+  background: #ca8a04;
+  color: #fef08a;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+.mkt-tag {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.reputation-badge {
+  background: #1e293b;
+  color: #94a3b8;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.reputation-badge.platinum {
+  background: #0f766e;
+  color: #99f6e4;
+}
+
+.reputation-badge.gold {
+  background: #854d0e;
+  color: #fef08a;
+}
+
+.fulfillment-badge {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted-foreground);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+}
+
+.fulfillment-badge.full {
+  background: #1e3a8a;
+  color: #bfdbfe;
+  font-weight: 600;
+}
+
+.share-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.share-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  max-width: 80px;
+}
+
+.share-bar-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 9999px;
+}
+
+.loading-state {
+  padding: 2.5rem;
+  text-align: center;
+  color: var(--muted-foreground);
+  border-radius: var(--radius-lg);
+}

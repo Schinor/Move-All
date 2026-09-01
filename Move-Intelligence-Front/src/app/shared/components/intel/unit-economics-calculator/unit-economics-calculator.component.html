@@ -1,0 +1,163 @@
+<div class="economics-container">
+  <div class="header-banner">
+    <div>
+      <h3><app-icon name="calculator" [size]="20" /> Simulador Interativo de Unit Economics & Elasticidade de Preço</h3>
+      <p>Simule variações de preço, câmbio e custos de importação para avaliar margem líquida, ROI e volume projetado.</p>
+    </div>
+    <button type="button" class="reset-btn" (click)="loadDefaults()">Restaurar Padrões</button>
+  </div>
+
+  <div class="calculator-grid">
+    <!-- Painel de Entradas / Sliders -->
+    <div class="input-panel glass">
+      <h4>Parâmetros de Custo e Comercialização</h4>
+
+      <div class="form-group">
+        <label>
+          <span>Preço de Venda Final (BRL)</span>
+          <strong>{{ formatCurrency(precoVendaBrl()) }}</strong>
+        </label>
+        <input type="range" min="50" max="3000" step="10" [ngModel]="precoVendaBrl()" (ngModelChange)="precoVendaBrl.set($event); recalculate()" />
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Custo FOB (USD)</label>
+          <input type="number" step="0.5" [ngModel]="fobUsd()" (ngModelChange)="fobUsd.set($event); recalculate()" />
+        </div>
+        <div class="form-group">
+          <label>Câmbio USD/BRL</label>
+          <input type="number" step="0.05" [ngModel]="cambioUsd()" (ngModelChange)="cambioUsd.set($event); recalculate()" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Frete Unitário (USD)</label>
+          <input type="number" step="0.5" [ngModel]="freteUnitarioUsd()" (ngModelChange)="freteUnitarioUsd.set($event); recalculate()" />
+        </div>
+        <div class="form-group">
+          <label>Imposto Importação (%)</label>
+          <input type="number" step="1" [ngModel]="impostoImportacaoPct()" (ngModelChange)="impostoImportacaoPct.set($event); recalculate()" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>ICMS Saída (%)</label>
+          <input type="number" step="1" [ngModel]="icmsPct()" (ngModelChange)="icmsPct.set($event); recalculate()" />
+        </div>
+        <div class="form-group">
+          <label>Comissão Marketplace (%)</label>
+          <input type="number" step="1" [ngModel]="comissaoMarketplacePct()" (ngModelChange)="comissaoMarketplacePct.set($event); recalculate()" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Custo Fulfillment / Envio (R$)</label>
+          <input type="number" step="1" [ngModel]="custoFulfillmentBrl()" (ngModelChange)="custoFulfillmentBrl.set($event); recalculate()" />
+        </div>
+        <div class="form-group">
+          <label>Custo Fixo Alocado (R$/mês)</label>
+          <input type="number" step="500" [ngModel]="custoFixoMensalBrl()" (ngModelChange)="custoFixoMensalBrl.set($event); recalculate()" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Elasticidade-Preço Demanda (Ed)</label>
+          <input type="number" step="0.1" min="-4" max="0" [ngModel]="elasticidadePreco()" (ngModelChange)="elasticidadePreco.set($event); recalculate()" />
+        </div>
+        <div class="form-group">
+          <label>Volume Base Mercado (un/mês)</label>
+          <input type="number" step="10" [ngModel]="volumeBaseMensal()" (ngModelChange)="volumeBaseMensal.set($event); recalculate()" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Painel de Resultados -->
+    @if (result()) {
+      <div class="results-panel">
+        <div class="kpi-banner">
+          <div class="kpi-box highlight">
+            <span>Margem de Contribuição</span>
+            <div class="val" [class.negative]="result().metrics.margemContribuicaoPct < 15">
+              {{ result().metrics.margemContribuicaoPct }}%
+            </div>
+            <small>{{ formatCurrency(result().metrics.margemContribuicaoBrl) }} por unidade</small>
+          </div>
+
+          <div class="kpi-box">
+            <span>Lucro Líquido Projetado</span>
+            <div class="val" [class.negative]="result().metrics.lucroLiquidoMensal < 0">
+              {{ formatCurrency(result().metrics.lucroLiquidoMensal) }}
+            </div>
+            <small>por mês</small>
+          </div>
+
+          <div class="kpi-box">
+            <span>Volume Projetado</span>
+            <div class="val">{{ formatNumber(result().metrics.volumeProjetado) }} un</div>
+            <small>ajustado por elasticidade</small>
+          </div>
+
+          <div class="kpi-box">
+            <span>Ponto de Equilíbrio (Break-Even)</span>
+            <div class="val">{{ formatNumber(result().metrics.breakEvenUnits) }} un</div>
+            <small>mínimo p/ cobrir custos</small>
+          </div>
+
+          <div class="kpi-box">
+            <span>ROI sobre Estoque</span>
+            <div class="val">{{ result().metrics.roiPct }}%</div>
+            <small>retorno sobre capital</small>
+          </div>
+
+          <div class="kpi-box">
+            <span>Custo Landed (Nacionalizado)</span>
+            <div class="val">{{ formatCurrency(result().breakdown.custoLandedBrl) }}</div>
+            <small>FOB + Frete + Impostos</small>
+          </div>
+        </div>
+
+        <!-- Tabela de Sensibilidade de Preço -->
+        <div class="sensitivity-table-card glass">
+          <h5><app-icon name="bar-chart" [size]="16" /> Curva de Sensibilidade de Preço & Lucro Esperado</h5>
+          <table>
+            <thead>
+              <tr>
+                <th>Cenário de Preço</th>
+                <th>Volume Projetado</th>
+                <th>Margem (%)</th>
+                <th>Lucro Líquido Mensal</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (point of result().curvaSensibilidade; track point.preco) {
+                <tr [class.selected]="point.preco === precoVendaBrl()">
+                  <td><strong>{{ formatCurrency(point.preco) }}</strong></td>
+                  <td>{{ formatNumber(point.volume) }} un</td>
+                  <td>{{ point.margemPct }}%</td>
+                  <td [class.positive]="point.lucroMensal > 0" [class.negative]="point.lucroMensal <= 0">
+                    <strong>{{ formatCurrency(point.lucroMensal) }}</strong>
+                  </td>
+                  <td>
+                    @if (point.lucroMensal > 0 && point.margemPct >= 20) {
+                      <span class="tag-optimo"><app-icon name="star" [size]="12" /> Alta Eficiência</span>
+                    } @else if (point.lucroMensal > 0) {
+                      <span class="tag-estavel">● Viável</span>
+                    } @else {
+                      <span class="tag-risco"><app-icon name="x" [size]="12" /> Prejuízo</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  </div>
+</div>

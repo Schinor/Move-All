@@ -1,0 +1,57 @@
+.stat {
+  position: relative;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--card);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+.stat:hover {
+  border-color: color-mix(in oklab, var(--primary) 30%, transparent);
+}
+.topline {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--primary) 40%, transparent), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.stat:hover .topline {
+  opacity: 1;
+}
+.body {
+  padding: 1.1rem 1.25rem;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.label {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted-foreground);
+}
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--success);
+}
+.delta.down {
+  color: var(--danger);
+}
+.value {
+  margin-top: 0.6rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.spark {
+  margin-top: 0.6rem;
+  height: 40px;
+}
