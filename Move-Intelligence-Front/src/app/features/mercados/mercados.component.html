@@ -1,27 +1,15 @@
 <app-page-header
   title="Mercados"
-  subtitle="Saturação e aderência por mercado (motor por-mercado em desenvolvimento)."
+  subtitle="Compare saturação e aderência por país quando o motor de mercados estiver disponível."
 />
 
-@switch (data().status) {
-  @case ('ready') {
-    <div class="grid">
-      @for (m of $any(data()).data.items; track m.id) {
-        <div class="market glass">
-          <div class="m-head">
-            <span class="country">{{ m.country }}</span>
-            <app-risk-badge [level]="m.risk" of="de mercado" />
-          </div>
-          <app-kpi-card label="Score" [indicator]="m.score" />
-          <app-kpi-card label="Aderência ao Brasil" [indicator]="m.brazilFit" />
-        </div>
-      }
-    </div>
-  }
-  @default {
-    <app-state-panel
-      [state]="data()"
-      emptyMessage="Breakdown por mercado ainda não disponível — motor em desenvolvimento."
-    />
-  }
-}
+<section class="development-panel" aria-labelledby="markets-development-title">
+  <span class="development-icon"><app-icon name="globe" [size]="22" /></span>
+  <span class="status-label">Em desenvolvimento</span>
+  <h2 id="markets-development-title">O módulo de mercados ainda não está conectado</h2>
+  <p>
+    Esta área vai organizar saturação, aderência ao Brasil e risco por mercado. Os indicadores só
+    serão exibidos quando houver contrato de dados disponível.
+  </p>
+  <a routerLink="/ranking" class="interim-link">Enquanto isso, veja o ranking <app-icon name="arrow-right" [size]="15" /></a>
+</section>

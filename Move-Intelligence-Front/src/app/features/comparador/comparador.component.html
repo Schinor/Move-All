@@ -4,7 +4,7 @@
 />
 
 <!-- Barra de Seleção de Produtos -->
-<section class="selection-bar glass">
+<section class="selection-bar surface-panel">
   <div class="selection-head">
     <h4>Selecione os produtos para comparação (máx. 4):</h4>
     <span class="selection-count">{{ selectedIds().length }}/4 selecionados</span>
@@ -26,10 +26,10 @@
 </section>
 
 @if (loading()) {
-  <div class="loading-state glass">Carregando métricas comparativas...</div>
+  <div class="loading-state surface-panel">Carregando métricas comparativas...</div>
 } @else if (comparisonData().length >= 2) {
   <!-- Tabela Comparativa Lado a Lado -->
-  <section class="comparison-table-section glass">
+  <section class="comparison-table-section surface-panel">
     <div class="table-wrap">
       <table>
         <thead>
@@ -60,7 +60,7 @@
             <td class="metric-name">Score Financeiro</td>
             @for (p of comparisonData(); track p.id) {
               <td>
-                <strong class="kpi-num">{{ p.financialScore }}/100</strong>
+                <strong class="kpi-num">{{ p.financialScore ?? '—' }}{{ p.financialScore !== null && p.financialScore !== undefined ? '/100' : '' }}</strong>
               </td>
             }
           </tr>
@@ -70,7 +70,7 @@
             @for (p of comparisonData(); track p.id) {
               <td>
                 <strong class="kpi-num" [class.positive]="p.growthPct >= 0">
-                  {{ p.growthPct >= 0 ? '+' : '' }}{{ p.growthPct }}%
+                  {{ p.growthPct === null || p.growthPct === undefined ? '—' : (p.growthPct >= 0 ? '+' : '') + p.growthPct + '%' }}
                 </strong>
               </td>
             }
@@ -80,7 +80,7 @@
             <td class="metric-name">Volume Mensal Atual</td>
             @for (p of comparisonData(); track p.id) {
               <td>
-                <strong>{{ formatNumber(p.currentVolume) }} un/mês</strong>
+                <strong>{{ formatNumber(p.currentVolume) }}{{ p.currentVolume !== null && p.currentVolume !== undefined ? ' un/mês' : '' }}</strong>
               </td>
             }
           </tr>
@@ -97,7 +97,7 @@
             @for (p of comparisonData(); track p.id) {
               <td>
                 <strong class="kpi-num" [class.positive]="p.margemPct >= 20" [class.negative]="p.margemPct < 15">
-                  {{ p.margemPct }}%
+                  {{ p.margemPct === null || p.margemPct === undefined ? '—' : p.margemPct + '%' }}
                 </strong>
               </td>
             }
@@ -117,14 +117,14 @@
           <tr>
             <td class="metric-name">ROI Projetado sobre Estoque</td>
             @for (p of comparisonData(); track p.id) {
-              <td>{{ p.roiPct }}%</td>
+              <td>{{ p.roiPct === null || p.roiPct === undefined ? '—' : p.roiPct + '%' }}</td>
             }
           </tr>
 
           <tr>
             <td class="metric-name">Principal Fornecedor</td>
             @for (p of comparisonData(); track p.id) {
-              <td>{{ p.topSupplier }}</td>
+              <td>{{ p.topSupplier ?? '—' }}</td>
             }
           </tr>
 
@@ -141,5 +141,5 @@
     </div>
   </section>
 } @else {
-  <div class="loading-state glass">Selecione pelo menos 2 produtos acima para visualizar o comparativo lado a lado.</div>
+  <div class="loading-state surface-panel">Selecione pelo menos 2 produtos acima para visualizar o comparativo lado a lado.</div>
 }

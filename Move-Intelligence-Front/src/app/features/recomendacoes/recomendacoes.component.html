@@ -1,26 +1,15 @@
 <app-page-header
   title="Recomendações"
-  subtitle="Ações sugeridas: comprar, monitorar, negociar, ajustar ou bloquear."
+  subtitle="Converta sinais em ações de comprar, monitorar, negociar ou bloquear quando o motor estiver pronto."
 />
 
-@switch (data().status) {
-  @case ('ready') {
-    <ul class="rec-list">
-      @for (r of $any(data()).data.items; track r.id) {
-        <li class="rec glass">
-          <div class="r-head">
-            <span class="r-title">{{ r.title }}</span>
-            <span class="action" [attr.data-action]="r.action">{{ r.action }}</span>
-          </div>
-          @if (r.rationale) {
-            <p class="rationale">{{ r.rationale }}</p>
-          }
-          <app-kpi-card label="Oportunidade" [indicator]="r.opportunityScore" />
-        </li>
-      }
-    </ul>
-  }
-  @default {
-    <app-state-panel [state]="data()" emptyMessage="Sem recomendações geradas ainda." />
-  }
-}
+<section class="development-panel" aria-labelledby="recommendations-development-title">
+  <span class="development-icon"><app-icon name="lightbulb" [size]="22" /></span>
+  <span class="status-label">Em desenvolvimento</span>
+  <h2 id="recommendations-development-title">As recomendações ainda não estão conectadas</h2>
+  <p>
+    O módulo vai apresentar ações explicáveis a partir dos dados reais do catálogo. Nenhuma ação é
+    sugerida enquanto esse motor não estiver disponível.
+  </p>
+  <a routerLink="/sinais" class="interim-link">Acompanhar sinais e alertas <app-icon name="arrow-right" [size]="15" /></a>
+</section>

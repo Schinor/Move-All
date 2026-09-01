@@ -3,7 +3,7 @@
   subtitle="Fábricas asiáticas e distribuidoras qualificadas com score de 0 a 5 estrelas por vendas, catálogo e reputação"
 />
 
-<section class="hero glass">
+<section class="hero surface-panel">
   <app-confidence-indicator [value]="confidence()" label="Confiança média" />
   <div class="summary">
     @if (summary().status === 'ready') {
@@ -21,14 +21,14 @@
       </div>
       <div>
         <span>Top Hub Fabricação</span>
-        <strong><app-icon name="globe" [size]="16" /> {{ $any(summary()).data.topOrigin ?? 'China' }}</strong>
+        <strong><app-icon name="globe" [size]="16" /> {{ $any(summary()).data.topOrigin ?? 'Origem não informada' }}</strong>
       </div>
     }
   </div>
 </section>
 
 <!-- Barra de Filtros e Busca de Fornecedores -->
-<section class="filter-bar glass">
+<section class="filter-bar surface-panel">
   <div class="search-box">
     <input
       type="search"
@@ -53,7 +53,7 @@
       [class.active]="selectedTier() === 'Diamante'"
       (click)="selectedTier.set('Diamante')"
     >
-      <app-icon name="diamond" [size]="14" /> Tier Diamante (4.5★+)
+      <app-icon name="diamond" [size]="14" /> Tier Diamante
     </button>
     <button
       type="button"
@@ -61,7 +61,7 @@
       [class.active]="selectedTier() === 'Ouro'"
       (click)="selectedTier.set('Ouro')"
     >
-      <app-icon name="medal-gold" [size]="14" /> Tier Ouro (3.8★ - 4.4★)
+      <app-icon name="medal-gold" [size]="14" /> Tier Ouro
     </button>
     <button
       type="button"
@@ -69,7 +69,7 @@
       [class.active]="selectedTier() === 'Prata'"
       (click)="selectedTier.set('Prata')"
     >
-      <app-icon name="medal-silver" [size]="14" /> Tier Prata (3.0★ - 3.7★)
+      <app-icon name="medal-silver" [size]="14" /> Tier Prata
     </button>
   </div>
 </section>
@@ -89,15 +89,15 @@
         </div>
       </div>
 
-      <aside class="copilot glass">
+      <aside class="copilot surface-panel">
         <div class="copilot-head">
           <span><app-icon name="robot" [size]="16" /> Move Sourcing Copilot</span>
         </div>
         <p>{{ insight() }}</p>
         <ul>
-          <li><strong>Score de 0 a 5★</strong>: Combina avaliações dos anúncios (35%), volume de vendas (30%), amplitude de catálogo (20%) e histórico de entrega (15%).</li>
-          <li><strong>Tier Diamante</strong>: Fábricas com capacidade para escala imediata e certificações ISO/BSCI.</li>
-          <li><strong>FOB & MOQ</strong>: Prazos de produção médios de 35 a 45 dias com desembaraço aduaneiro.</li>
+          <li><strong>Score</strong>: valor de qualificação recebido da API; a explicação detalhada aparece quando o backend a fornecer.</li>
+          <li><strong>Tier</strong>: classificação recebida junto ao fornecedor, sem inferência local quando ausente.</li>
+          <li><strong>FOB, MOQ e lead time</strong>: exibidos somente quando estiverem informados no catálogo.</li>
         </ul>
       </aside>
     </section>

@@ -25,7 +25,7 @@
       </div>
     </app-page-header>
 
-    <section class="hero glass">
+    <section class="hero surface-panel">
       <app-product-image
         [src]="$any(product()).data.imageUrl"
         [alt]="$any(product()).data.canonicalName"
@@ -45,16 +45,16 @@
             </strong>
           </div>
           <div>
-            <span>Confiança</span>
-            <strong class="tag-confianca">96% Alta</strong>
+            <span>Opportunity Score</span>
+            <strong class="num">{{ $any(product()).data.opportunityScore.value ?? '—' }}</strong>
           </div>
           <div>
             <span>Sinais Mapeados</span>
-            <strong class="num">{{ signalEntries().length || 12 }} fontes</strong>
+            <strong class="num">{{ signalEntries().length }} indicadores</strong>
           </div>
           <div>
-            <span>Status Pipeline</span>
-            <strong class="tag-pipeline"><app-icon name="target" [size]="14" /> Em Sourcing</strong>
+            <span>Fontes principais</span>
+            <strong class="num">{{ $any(product()).data.mainSources?.length ?? '—' }}</strong>
           </div>
         </div>
         @if ($any(product()).data.spark?.length) {
@@ -163,7 +163,7 @@
       }
 
       @case ('simulation') {
-        <section class="simulation-panel glass">
+        <section class="simulation-panel surface-panel">
           <div class="simulation-head">
             <div>
               <h2>Monte Carlo de VPL</h2>
@@ -348,7 +348,7 @@
             [recommendation]="$any(aiRecommendation()).data ?? null"
             [loading]="aiRecommendation().status === 'loading'"
           />
-          <div class="pending glass">
+          <div class="pending surface-panel">
             <h2>Campos pendentes</h2>
             <p>Margem, lead time e pipeline ficam como “—” até haver fontes específicas.</p>
           </div>

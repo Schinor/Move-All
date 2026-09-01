@@ -1,79 +1,156 @@
-<section class="hero">
-  <div class="hero-bg-grid"></div>
-  <div class="hero-glow hero-glow-a"></div>
-  <div class="hero-glow hero-glow-b"></div>
+<div class="dashboard-page">
+  <app-page-header
+    title="Executivo"
+    subtitle="Priorize o que investigar e transforme sinais em decisões de lançamento."
+  >
+    <div class="header-context">
+      <span class="context-label">Janela</span>
+      <app-window-selector [value]="window()" (changed)="setWindow($event)" />
+    </div>
+  </app-page-header>
 
-  <div class="hero-grid">
-    <div class="hero-copy">
-      <span class="badge"><app-icon name="sparkles" [size]="12" /> Inteligência em tempo real</span>
-      <h1 class="headline">
-        Decisões de lançamento <br />
-        <span class="text-gradient">antes do mainstream.</span>
-      </h1>
-      <p class="lead">
-        Cruzamos comportamento do consumidor, marketplaces, redes sociais, sourcing e supply
-        chain para responder uma pergunta —
-        <span class="em">vale a pena lançar agora?</span>
-      </p>
-      <div class="cta">
-        <a routerLink="/ranking" class="btn-primary">Explorar ranking <app-icon name="arrow-right" [size]="16" /></a>
-        <button class="btn-ghost"><app-icon name="zap" [size]="16" /> Briefing AI semanal</button>
+  <section class="decision-panel" aria-labelledby="decision-title">
+    <header class="panel-heading decision-heading">
+      <div>
+        <span class="eyebrow"><app-icon name="target" [size]="14" /> Decidir agora</span>
+        <h2 id="decision-title">Produtos que merecem atenção</h2>
+        <p>Itens com Opportunity Score igual ou superior a 35 na coleta disponível.</p>
       </div>
-    </div>
-
-    <div class="hero-kpis">
-      @for (k of kpis(); track k.label) {
-        <app-stat-card [kpi]="k" />
-      }
-      @if (!kpis().length) {
-        <div class="kpi-empty">Indicadores aparecem quando a coleta rodar.</div>
-      }
-    </div>
-  </div>
-
-  @if (tickers().length) {
-    <div class="ticker">
-      <div class="ticker-track">
-        @for (t of tickers(); track $index) {
-          <span class="ticker-item">
-            <span class="t-name">{{ t.name }}</span>
-            <span class="t-val num" [class.down]="!t.up">{{ t.value }}</span>
-            <span class="t-sep"></span>
-          </span>
-        }
-      </div>
-    </div>
-  }
-</section>
-
-<section class="highlights">
-  <div class="section-head">
-    <div>
-      <div class="eyebrow"><app-icon name="flame" [size]="14" /> Oportunidades em destaque</div>
-      <h2 class="section-title">Top sinais do momento</h2>
-    </div>
-  </div>
-
-  @switch (products().status) {
-    @case ('ready') {
-      <div class="trend-grid">
-        @for (p of $any(products()).data; track p.productClusterId) {
-          <app-trend-card [trend]="p" />
-        }
-      </div>
-    }
-    @default {
-      <app-state-panel
-        [state]="products()"
-        emptyMessage="Nenhuma oportunidade em destaque ainda. Aguardando a primeira coleta."
+      <app-explain
+        label="Opportunity Score"
+        explanation="Indicador fornecido pelo backend para priorizar oportunidades. O limiar desta lista é 35."
+        id="dashboard-opportunity-explain"
       />
-    }
-  }
-</section>
+    </header>
 
-@if (productRows().length) {
-  <section class="intel-row">
-    <app-risk-matrix [products]="productRows()" />
-    <app-signal-source-card [sources]="sourceRows()" />
+    @switch (products().status) {
+      @case ('loading') {
+        <div class="decision-list loading-list" role="status" aria-label="Carregando decisões">
+          @for (item of [1, 2, 3]; track item) {
+            <div class="decision-row"><app-skeleton [width]="'32%'" /><app-skeleton [width]="'18%'" /><app-skeleton [width]="'15%'" /></div>
+          }
+        </div>
+      }
+      @case ('error') {
+        <app-state-panel [state]="products()" emptyMessage="Não foi possível carregar as decisões." />
+      }
+      @case ('empty') {
+        <app-empty-state
+          [compact]="true"
+          icon="target"
+          title="Nenhuma decisão calculada"
+          description="A lista aparece quando a coleta fornecer scores de oportunidade."
+        />
+      }
+      @case ('ready') {
+        @if (decisionProducts().length) {
+          <div class="decision-list">
+            @for (product of decisionProducts(); track product.productClusterId) {
+              <article class="decision-row">
+                <div class="decision-product">
+                  <strong>{{ product.canonicalName }}</strong>
+                  <span>{{ product.category ?? 'Categoria não informada' }}</span>
+                </div>
+                <div class="decision-metric">
+                  <span>Oportunidade</span>
+                  <strong class="num">{{ formatScore(product) }}</strong>
+                </div>
+                <div class="decision-metric">
+                  <span>Crescimento</span>
+                  <strong class="num" [class.negative]="(product.growthPct ?? 0) < 0">{{ formatGrowth(product) }}</strong>
+                </div>
+                <div class="decision-reason">{{ decisionReason(product) }}</div>
+                <a class="decision-link" [routerLink]="['/tendencia', product.productClusterId]">
+                  Ver dossiê <app-icon name="arrow-up-right" [size]="15" />
+                </a>
+              </article>
+            }
+          </div>
+        } @else {
+          <app-empty-state
+            [compact]="true"
+            icon="target"
+            title="Sem produtos acima do limiar"
+            description="Nenhum produto disponível atingiu Opportunity Score 35 nesta coleta."
+          />
+        }
+      }
+    }
   </section>
-}
+
+  <section class="kpi-section" aria-labelledby="kpi-title">
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow"><app-icon name="bar-chart" [size]="14" /> Medir</span>
+        <h2 id="kpi-title">Indicadores da coleta</h2>
+      </div>
+      <span class="window-note">Janela selecionada: {{ window() }}</span>
+    </div>
+    @if (summary().status === 'ready' && kpis().length) {
+      <div class="kpi-grid">
+        @for (kpi of kpis(); track kpi.label) {
+          <app-stat-card [kpi]="kpi" />
+        }
+      </div>
+    } @else if (summary().status === 'ready') {
+      <app-empty-state
+        [compact]="true"
+        icon="bar-chart"
+        title="Resumo indisponível"
+        description="A coleta respondeu sem indicadores agregados para exibição."
+      />
+    } @else {
+      <app-state-panel [state]="summary()" emptyMessage="Indicadores aparecem quando o resumo estiver disponível." />
+    }
+  </section>
+
+  <section class="insight-grid" aria-label="Sinais e contexto operacional">
+    <article class="surface-panel signals-panel">
+      <header class="panel-heading">
+        <div>
+          <span class="eyebrow"><app-icon name="flame" [size]="14" /> Investigar</span>
+          <h2>Top sinais da coleta</h2>
+        </div>
+        <a class="text-link" routerLink="/ranking">Abrir ranking <app-icon name="arrow-right" [size]="14" /></a>
+      </header>
+      @if (topSignals().length) {
+        <ul class="signal-list">
+          @for (product of topSignals(); track product.productClusterId) {
+            <li>
+              <a [routerLink]="['/tendencia', product.productClusterId]">
+                <span class="signal-name"><strong>{{ product.canonicalName }}</strong><small>{{ product.category ?? 'Categoria não informada' }}</small></span>
+                <span class="signal-score num">{{ product.trendScore.value ?? '—' }} <small>trend</small></span>
+                <app-icon name="arrow-up-right" [size]="15" />
+              </a>
+            </li>
+          }
+        </ul>
+      } @else {
+        <app-empty-state [compact]="true" icon="flame" title="Sem sinais ainda" description="A lista será preenchida pela próxima coleta." />
+      }
+    </article>
+
+    @if (productRows().length) {
+      <app-risk-matrix [products]="productRows()" />
+    } @else {
+      <app-empty-state [compact]="true" icon="compass" title="Matriz indisponível" description="A matriz aparece quando houver produtos pontuados." />
+    }
+  </section>
+
+  <section class="sources-section" aria-labelledby="sources-title">
+    <div class="section-heading">
+      <div>
+        <span class="eyebrow"><app-icon name="compass" [size]="14" /> Operar</span>
+        <h2 id="sources-title">Fontes de dados</h2>
+      </div>
+      @if (sources().status === 'ready') {
+        <span class="window-note">{{ sourceRows().length }} fonte(s) reportada(s)</span>
+      }
+    </div>
+    @if (sources().status === 'ready' && sourceRows().length) {
+      <app-signal-source-card [sources]="sourceRows()" />
+    } @else {
+      <app-state-panel [state]="sources()" emptyMessage="Status das fontes ainda não foi informado." />
+    }
+  </section>
+</div>

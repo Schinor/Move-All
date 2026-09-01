@@ -6,7 +6,7 @@
     @if (!isConversationSidebarOpen()) {
       <button
         type="button"
-        class="btn-sidebar glass history-reopen"
+        class="btn-sidebar surface-panel history-reopen"
         (click)="toggleConversationSidebar()"
         [attr.aria-expanded]="isConversationSidebarOpen()"
         aria-controls="copilot-conversation-sidebar"
@@ -20,7 +20,7 @@
     @if (messages().length > 0) {
       <button
         type="button"
-        class="btn-clear glass"
+        class="btn-clear surface-panel"
         (click)="clearConversation()"
         aria-label="Nova conversa"
         title="Nova conversa"
@@ -35,7 +35,7 @@
 <div class="copilot-layout" [class.conversation-sidebar-collapsed]="!isConversationSidebarOpen()">
   <aside
     id="copilot-conversation-sidebar"
-    class="conversation-sidebar glass"
+    class="conversation-sidebar surface-panel"
     [class.is-hidden]="!isConversationSidebarOpen()"
     [attr.aria-hidden]="!isConversationSidebarOpen()"
     aria-label="Conversas salvas"
@@ -169,7 +169,7 @@
     }
   </aside>
 
-  <div class="chat glass">
+  <div class="chat surface-panel">
     <div class="messages" #messagesContainer>
       @if (messages().length === 0) {
         <div class="welcome-screen">
@@ -183,7 +183,7 @@
 
           <div class="suggestions-grid">
             @for (sug of suggestions; track sug.label) {
-              <button type="button" class="suggestion-card glass" (click)="useSuggestion(sug)">
+              <button type="button" class="suggestion-card surface-panel" (click)="useSuggestion(sug)">
                 <span class="suggestion-label">{{ sug.label }}</span>
                 <span class="suggestion-query">{{ sug.query }}</span>
                 <span class="suggestion-arrow"><app-icon name="arrow-up-right" [size]="14" /></span>
@@ -195,7 +195,7 @@
         <div class="thread">
           @for (msg of messages(); track $index) {
             <div class="message-row" [class.user]="msg.role === 'user'" [class.assistant]="msg.role === 'assistant'">
-              <div class="message-bubble glass" [class.bubble-user]="msg.role === 'user'" [class.bubble-assistant]="msg.role === 'assistant'">
+              <div class="message-bubble surface-panel" [class.bubble-user]="msg.role === 'user'" [class.bubble-assistant]="msg.role === 'assistant'">
                 <div class="message-header">
                   <span class="sender-name">
                     @if (msg.role === 'user') {
@@ -231,7 +231,7 @@
 
           @if (isThinking()) {
             <div class="message-row assistant">
-              <div class="message-bubble glass bubble-assistant thinking-bubble">
+              <div class="message-bubble surface-panel bubble-assistant thinking-bubble">
                 <span class="ai-badge"><app-icon name="sparkles" [size]="12" /> Move AI</span>
                 <div class="typing-indicator">
                   <span></span>
@@ -244,7 +244,7 @@
           }
 
           @if (errorMessage()) {
-            <div class="error-banner glass">
+            <div class="error-banner surface-panel">
               <p class="error-text">{{ errorMessage() }}</p>
             </div>
           }

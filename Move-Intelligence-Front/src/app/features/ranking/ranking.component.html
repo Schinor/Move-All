@@ -1,86 +1,138 @@
 <app-page-header
-  title="Ranking de Tendências"
-  subtitle="Produtos priorizados por score de tendência, crescimento e risco."
-/>
+  title="Ranking de tendências"
+  subtitle="Produtos priorizados por sinais de tendência, oportunidade, crescimento e risco."
+>
+  <span class="data-note">Dados fornecidos pela API</span>
+</app-page-header>
 
 @switch (products().status) {
+  @case ('loading') {
+    <section class="loading-table" role="status" aria-label="Carregando ranking">
+      @for (row of [1, 2, 3, 4, 5]; track row) {
+        <div class="loading-row">
+          <app-skeleton [width]="'7%'" />
+          <app-skeleton [width]="'34%'" />
+          <app-skeleton [width]="'12%'" />
+          <app-skeleton [width]="'14%'" />
+          <app-skeleton [width]="'12%'" />
+        </div>
+      }
+    </section>
+  }
+  @case ('error') {
+    <app-state-panel [state]="products()" emptyMessage="Não foi possível carregar o ranking." />
+  }
+  @case ('empty') {
+    <app-empty-state
+      icon="bar-chart"
+      title="Ranking sem dados"
+      description="A tabela será preenchida quando houver produtos coletados e pontuados."
+    />
+  }
   @case ('ready') {
-    <section class="toolbar glass">
-      <label class="search">
-        <span>Busca</span>
-        <input
-          type="search"
-          placeholder="Nome, categoria ou origem"
-          [value]="query()"
-          (input)="setQuery($event)"
-        />
+    <section class="toolbar surface-panel" aria-label="Filtros do ranking">
+      <label class="search-field">
+        <span>Buscar produto</span>
+        <span class="input-wrap">
+          <app-icon name="search" [size]="16" />
+          <input
+            type="search"
+            placeholder="Nome, categoria ou origem"
+            [value]="query()"
+            (input)="setQuery($event)"
+          />
+        </span>
       </label>
-      <div class="segments" aria-label="Filtro por estágio">
+      <div class="segments" role="group" aria-label="Filtro por estágio">
         @for (filter of filters; track filter.id) {
           <button
             type="button"
             [class.active]="stage() === filter.id"
+            [attr.aria-pressed]="stage() === filter.id"
             (click)="setStage(filter.id)"
           >
             {{ filter.label }}
           </button>
         }
       </div>
-      <strong class="count num">{{ rows().length }} itens</strong>
+      <strong class="count num">{{ rows().length }} {{ rows().length === 1 ? 'item' : 'itens' }}</strong>
     </section>
 
-    <div class="table-wrap glass">
-      <table>
-        <thead>
-          <tr>
-            <th><button type="button" (click)="sort('score')">Rank</button></th>
-            <th><button type="button" (click)="sort('name')">Produto</button></th>
-            <th><button type="button" (click)="sort('score')">Score</button></th>
-            <th><button type="button" (click)="sort('growth')">Crescimento</button></th>
-            <th>Spark</th>
-            <th><button type="button" (click)="sort('risk')">Risco</button></th>
-            <th>Margem</th>
-            <th>Lead</th>
-            <th>Pipeline</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (p of rows(); track p.productClusterId; let i = $index) {
+    @if (rows().length) {
+      <app-data-table label="Ranking de tendências">
+        <table>
+          <caption class="sr-only">Produtos classificados por Trend Score e indicadores relacionados</caption>
+          <thead>
             <tr>
-              <td class="rank num">{{ i + 1 }}</td>
-              <td class="product">
-                <strong>{{ p.canonicalName }}</strong>
-                <span>{{ p.category ?? '—' }} · {{ origin(p) }} · {{ stageLabel(p.stage) }}</span>
-              </td>
-              <td><app-score-gauge [value]="p.trendScore.value" [size]="58" /></td>
-              <td class="growth num" [class.down]="(p.growthPct ?? 0) < 0">
-                {{ p.growthPct === null ? '—' : (p.growthPct >= 0 ? '+' : '') + p.growthPct + '%' }}
-              </td>
-              <td class="spark">
-                @if (p.spark?.length) {
-                  <app-sparkline [data]="p.spark ?? []" [up]="(p.growthPct ?? 0) >= 0" />
-                } @else {
-                  —
-                }
-              </td>
-              <td><app-risk-badge [level]="p.risk" of="de mercado" /></td>
-              <td>—</td>
-              <td>—</td>
-              <td>—</td>
-              <td>
-                <a [routerLink]="['/tendencia', p.productClusterId]" class="go">Ver</a>
-              </td>
+              <th scope="col" [attr.aria-sort]="sortDirection('rank')">
+                <button type="button" (click)="sort('rank')">Rank <app-icon [name]="sortIcon('rank')" [size]="13" /></button>
+              </th>
+              <th scope="col" class="product-heading" [attr.aria-sort]="sortDirection('name')">
+                <button type="button" (click)="sort('name')">Produto <app-icon [name]="sortIcon('name')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('score')">
+                <button type="button" (click)="sort('score')">Trend Score <app-icon [name]="sortIcon('score')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('opportunity')">
+                <button type="button" (click)="sort('opportunity')">Oportunidade <app-icon [name]="sortIcon('opportunity')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('growth')">
+                <button type="button" (click)="sort('growth')">Crescimento <app-icon [name]="sortIcon('growth')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('risk')">
+                <button type="button" (click)="sort('risk')">Risco <app-icon [name]="sortIcon('risk')" [size]="13" /></button>
+              </th>
+              <th scope="col"><span class="sr-only">Ação</span></th>
             </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  }
-  @default {
-    <app-state-panel
-      [state]="products()"
-      emptyMessage="Ranking vazio — aguardando produtos coletados e pontuados."
-    />
+          </thead>
+          <tbody>
+            @for (product of rows(); track product.productClusterId) {
+              <tr>
+                <td class="rank num">{{ rank(product) }}</td>
+                <td class="product">
+                  <strong>{{ product.canonicalName }}</strong>
+                  <span>{{ product.category ?? 'Categoria não informada' }} · {{ stageLabel(product.stage) }}</span>
+                </td>
+                <td class="score-cell"><app-score-gauge [value]="product.trendScore.value" [size]="54" /></td>
+                <td class="num opportunity">{{ product.opportunityScore.value ?? '—' }}</td>
+                <td class="growth num" [class.down]="(product.growthPct ?? 0) < 0">
+                  {{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}
+                </td>
+                <td><app-risk-badge [level]="product.risk" of="de mercado" /></td>
+                <td><a [routerLink]="['/tendencia', product.productClusterId]" class="go">Ver dossiê <app-icon name="arrow-up-right" [size]="14" /></a></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </app-data-table>
+
+      <div class="mobile-cards" aria-label="Ranking de tendências em cartões">
+        @for (product of rows(); track product.productClusterId) {
+          <article class="mobile-card surface-panel">
+            <div class="mobile-card-heading">
+              <span class="rank num">#{{ rank(product) }}</span>
+              <div class="product">
+                <strong>{{ product.canonicalName }}</strong>
+                <span>{{ product.category ?? 'Categoria não informada' }}</span>
+              </div>
+              <a [routerLink]="['/tendencia', product.productClusterId]" aria-label="Ver dossiê de {{ product.canonicalName }}"><app-icon name="arrow-up-right" [size]="16" /></a>
+            </div>
+            <dl class="mobile-metrics">
+              <div><dt>Trend Score</dt><dd class="num">{{ product.trendScore.value ?? '—' }}</dd></div>
+              <div><dt>Oportunidade</dt><dd class="num">{{ product.opportunityScore.value ?? '—' }}</dd></div>
+              <div><dt>Crescimento</dt><dd class="num" [class.down]="(product.growthPct ?? 0) < 0">{{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}</dd></div>
+              <div><dt>Risco</dt><dd><app-risk-badge [level]="product.risk" /></dd></div>
+            </dl>
+          </article>
+        }
+      </div>
+    } @else {
+      <app-empty-state
+        [compact]="true"
+        icon="search"
+        title="Nenhum resultado para estes filtros"
+        description="Ajuste a busca ou selecione outro estágio para continuar."
+      />
+    }
   }
 }

@@ -87,7 +87,7 @@ export class SourcingComponent {
       return 'Origem dos fornecedores mapeada no catálogo.';
     }
     const share = Math.round((count / rows.length) * 100);
-    return `${country} concentra ${share}% dos fornecedores homologados com nota média 4.6 ★.`;
+    return `${country} concentra ${share}% dos fornecedores com origem informada na lista atual.`;
   });
 
   formatUsd(value: number | null): string {

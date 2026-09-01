@@ -19,16 +19,18 @@
   margin: 0.5rem 0 0;
 }
 .sub {
-  color: var(--muted-foreground);
+  color: var(--text-2);
   font-size: 0.9rem;
   margin: 0;
 }
 .btn {
   margin-top: 1.25rem;
   padding: 0.6rem 1.1rem;
-  border-radius: var(--radius-md);
-  background: var(--primary);
-  color: var(--primary-foreground);
+  min-height: 44px;
+  padding: 0 var(--sp-4);
+  border-radius: var(--r-sm);
+  background: var(--brand);
+  color: var(--brand-ink);
   font-weight: 600;
   text-decoration: none;
 }

@@ -62,11 +62,11 @@ export class SinaisComponent implements OnInit {
     this.trends.getAlertRules().subscribe({
       next: (rules) => {
         if (rules) {
-          this.webhookUrl.set(rules.webhookUrl || '');
-          this.webhookChannel.set(rules.webhookChannel || 'slack');
-          this.telegramChatId.set(rules.telegramChatId || '');
-          this.minTrendScore.set(rules.minTrendScore || 80);
-          this.minGrowthPct.set(rules.minGrowthPct || 40);
+          this.webhookUrl.set(rules.webhookUrl ?? '');
+          this.webhookChannel.set(rules.webhookChannel ?? 'slack');
+          this.telegramChatId.set(rules.telegramChatId ?? '');
+          this.minTrendScore.set(rules.minTrendScore ?? 80);
+          this.minGrowthPct.set(rules.minGrowthPct ?? 40);
           this.alertsEnabled.set(rules.enabled !== false);
         }
       },

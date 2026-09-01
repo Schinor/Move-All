@@ -3,18 +3,22 @@
 </app-page-header>
 
 <!-- Painel de Configuração de Alertas Proativos (Telegram / Slack / Webhook) -->
-<section class="alerts-config-section glass">
+<section class="alerts-config-section surface-panel">
   <div class="section-head">
     <div>
-      <h3><app-icon name="bell" [size]="20" /> Central de Alertas Proativos de Oportunidade (Telegram / Slack / Webhook)</h3>
-      <p>Configure canais de notificação automática para receber alertas imediatos quando produtos romperem metas de crescimento.</p>
+      <h3><app-icon name="bell" [size]="20" /> Central de alertas</h3>
+      <p>Configure o canal e os limiares que serão usados pelo motor de alertas.</p>
     </div>
     <div class="head-actions">
       <button type="button" class="btn-scan" (click)="scanNow()"><app-icon name="zap" [size]="14" /> Executar Varredura Agora</button>
     </div>
   </div>
 
-  <div class="config-grid">
+    <div class="config-grid">
+    <label class="enabled-toggle">
+      <input type="checkbox" [ngModel]="alertsEnabled()" (ngModelChange)="alertsEnabled.set($event)" />
+      Alertas ativos
+    </label>
     <div class="form-group">
       <label>Canal de Destino</label>
       <select [ngModel]="webhookChannel()" (ngModelChange)="webhookChannel.set($event)">
@@ -72,7 +76,7 @@
 
 <!-- Feed de Alertas Disparados Recentemente -->
 @if (alertsHistory().length) {
-  <section class="alerts-history-section glass">
+  <section class="alerts-history-section surface-panel">
     <h4><app-icon name="scroll" [size]="16" /> Histórico de Alertas de Oportunidade Disparados</h4>
     <div class="alerts-table">
       <table>
@@ -89,7 +93,7 @@
           @for (alert of alertsHistory(); track alert.id) {
             <tr>
               <td>{{ alert.createdAt | date: 'dd/MM/yyyy HH:mm' }}</td>
-              <td><strong>{{ alert.cluster?.canonicalName || 'Produto' }}</strong></td>
+              <td><strong>{{ alert.cluster?.canonicalName ?? 'Produto não informado' }}</strong></td>
               <td><span class="sev-tag" [class.high]="alert.severity === 'HIGH'">{{ alert.severity }}</span></td>
               <td>{{ alert.message }}</td>
               <td><span class="status-tag">{{ alert.status }}</span></td>
@@ -111,18 +115,18 @@
         } @else {
           <div class="feed-list">
             @for (item of $any(feed()).data.items; track item.id) {
-              <article class="feed-item glass">
+              <article class="feed-item surface-panel">
                 <div class="item-head">
                   <span class="source-tag">{{ item.source }}</span>
-                  <span class="channel-tag">{{ item.channel }}</span>
-                  <time>{{ item.capturedAt | date: 'short' }}</time>
+                  @if (item.origin) { <span class="channel-tag">{{ item.origin }}</span> }
+                  <time>{{ item.time ? (item.time | date: 'short') : 'Horário não informado' }}</time>
                 </div>
-                <h3>{{ item.topic }}</h3>
-                <p class="snippet">{{ item.snippet }}</p>
+                <h3>{{ item.title }}</h3>
+                <p class="snippet">{{ item.body ?? 'Descrição não informada.' }}</p>
                 <div class="item-foot">
-                  <app-risk-badge [level]="item.impact" of="de impacto" />
+                  <app-risk-badge [level]="item.risk" of="de impacto" />
                   <span class="momentum">
-                    Aceleração: <strong>+{{ item.velocity }}%</strong>
+                    Crescimento: <strong>{{ item.growth === null ? '—' : (item.growth >= 0 ? '+' : '') + item.growth + '%' }}</strong>
                   </span>
                 </div>
               </article>
@@ -141,16 +145,16 @@
     @switch (sources().status) {
       @case ('ready') {
         <div class="sources-list">
-          @for (source of $any(sources()).data; track source.id) {
-            <div class="source-card glass">
+          @for (source of $any(sources()).data; track source.source) {
+            <div class="source-card surface-panel">
               <div class="source-head">
-                <strong>{{ source.name }}</strong>
-                <span class="dot" [class.online]="source.status === 'active'"></span>
+                <strong>{{ source.source }}</strong>
+                <span class="dot" [class.online]="source.activeSignals > 0"></span>
               </div>
-              <p>{{ source.description }}</p>
+              <p>{{ source.dominantCategory ?? 'Categoria dominante não informada.' }}</p>
               <div class="source-foot">
-                <small>Última varredura: {{ source.lastSync | date: 'shortTime' }}</small>
-                <small>{{ source.signalsCount }} sinais</small>
+                <small>{{ source.confidence.value === null ? 'Confiança não informada' : 'Confiança disponível' }}</small>
+                <small>{{ source.activeSignals }} sinais ativos</small>
               </div>
             </div>
           }

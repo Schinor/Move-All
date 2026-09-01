@@ -28,7 +28,7 @@ export class ComparadorComponent implements OnInit {
   readonly comparisonData = signal<any[]>([]);
   readonly loading = signal(false);
 
-  readonly colors = ['#0f766e', '#f59e0b', '#3b82f6', '#ec4899'];
+  readonly colors = ['#75f852', '#03eb88', '#83e1fa', '#8c7bff'];
 
   ngOnInit(): void {
     this.loadCatalog();
@@ -38,7 +38,7 @@ export class ComparadorComponent implements OnInit {
     this.trends.listProducts({ limit: 50 }).subscribe({
       next: (list) => {
         this.allProducts.set(list || []);
-        // Seleciona os 2 primeiros por padrão para demonstração imediata
+        // Usa os dois primeiros itens retornados como seleção inicial do comparador.
         if (list && list.length >= 2) {
           this.selectedIds.set([list[0].productClusterId, list[1].productClusterId]);
           this.compare();
@@ -79,12 +79,12 @@ export class ComparadorComponent implements OnInit {
   }
 
   formatCurrency(value: number | undefined): string {
-    if (!value) return 'R$ 0';
+    if (value === undefined || value === null) return '—';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
   }
 
   formatNumber(value: number | undefined): string {
-    if (!value) return '0';
+    if (value === undefined || value === null) return '—';
     return new Intl.NumberFormat('pt-BR').format(value);
   }
 }

@@ -1,21 +1,60 @@
-.grid {
+:host {
+  display: block;
+}
+
+.development-panel {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
+  justify-items: center;
+  gap: var(--sp-3);
+  min-height: 340px;
+  padding: var(--sp-8) var(--sp-5);
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
 }
-.market {
-  border-radius: var(--radius-lg);
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
+
+.development-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: var(--brand-text);
+  background: var(--brand-weak);
+  border-radius: var(--r-sm);
 }
-.m-head {
-  display: flex;
+
+.status-label {
+  color: var(--warning);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.development-panel h2,
+.development-panel p {
+  max-width: 56ch;
+  margin: 0;
+}
+
+.development-panel h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+}
+
+.development-panel p {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.interim-link {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-}
-.country {
-  font-weight: 600;
-  font-size: 0.95rem;
+  gap: var(--sp-1);
+  min-height: 44px;
+  color: var(--brand-text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-decoration: none;
 }

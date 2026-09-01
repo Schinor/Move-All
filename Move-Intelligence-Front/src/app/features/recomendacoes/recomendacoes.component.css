@@ -1,51 +1,60 @@
-.rec-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+:host {
+  display: block;
 }
-.rec {
-  border-radius: var(--radius-lg);
-  padding: 1rem 1.1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+
+.development-panel {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+  min-height: 340px;
+  padding: var(--sp-8) var(--sp-5);
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
 }
-.r-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+
+.development-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: var(--brand-text);
+  background: var(--brand-weak);
+  border-radius: var(--r-sm);
 }
-.r-title {
-  font-weight: 600;
-}
-.rationale {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--muted-foreground);
-}
-.action {
-  font-size: 0.7rem;
-  font-weight: 600;
+
+.status-label {
+  color: var(--warning);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted-foreground);
 }
-.action[data-action='comprar'] {
-  color: var(--success);
-  border-color: var(--success);
+
+.development-panel h2,
+.development-panel p {
+  max-width: 56ch;
+  margin: 0;
 }
-.action[data-action='bloquear'] {
-  color: var(--danger);
-  border-color: var(--danger);
+
+.development-panel h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
 }
-.action[data-action='monitorar'] {
-  color: var(--info);
-  border-color: var(--info);
+
+.development-panel p {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.interim-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 44px;
+  color: var(--brand-text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-decoration: none;
 }
