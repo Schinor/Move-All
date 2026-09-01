@@ -978,9 +978,11 @@ function computeTrajectory(
     }
     case 'mature':
     default: {
-      demandTrend = 55 + (Math.cos(progress * 3) * 5);
-      salesMultiplier = 0.9 + Math.sin(progress * 2) * 0.1;
-      reviewMultiplier = 0.6 + progress * 0.4;
+      // Produto maduro em desaceleração: começa conhecido e termina com demanda menor.
+      // A queda intencional exercita o estágio "Emergente" sem inventar um novo perfil.
+      demandTrend = 42 - progress * 24 + Math.cos(progress * 3) * 3; // ~45 -> 15
+      salesMultiplier = 1.05 - progress * 0.6; // 105% -> 45%
+      reviewMultiplier = 1 - progress * 0.35; // 100% -> 65%
       break;
     }
   }
@@ -1210,11 +1212,14 @@ async function main() {
         totalSnapshots++;
 
         // Demand Links
+        const signalGeo = mp.country === 'BR' ? 'BR' : 'US';
         const relevantSignals = await prisma.intelligenceDemandSignal.findMany({
           where: {
             weekStart: weekDate,
-            geo: mp.country === 'BR' ? 'BR' : 'US',
+            geo: signalGeo,
+            keyword: { in: clusterDef.keywords[signalGeo] },
           },
+          orderBy: { keyword: 'asc' },
           take: 2,
         });
 
