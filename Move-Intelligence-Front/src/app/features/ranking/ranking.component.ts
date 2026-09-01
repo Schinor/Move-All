@@ -14,7 +14,7 @@ import { DataTableComponent } from '../../shared/ui/data-table/data-table.compon
 import { STAGE_LABEL } from '../../shared/util/format';
 import { HumanizePipe } from '../../shared/util/humanize.pipe';
 
-type SortKey = 'rank' | 'name' | 'score' | 'opportunity' | 'growth' | 'risk';
+type SortKey = 'rank' | 'name' | 'score' | 'growth' | 'risk';
 type StageFilter = 'all' | TrendStage | 'launch';
 
 @Component({
@@ -132,7 +132,6 @@ export class RankingComponent {
   private sortValue(product: TrendProduct, key: SortKey): string | number {
     if (key === 'rank') return this.rank(product);
     if (key === 'name') return product.canonicalName;
-    if (key === 'opportunity') return this.opportunityValue(product);
     if (key === 'growth') return product.growthPct ?? -Infinity;
     if (key === 'risk') return product.risk ?? '';
     return this.scoreValue(product);

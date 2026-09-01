@@ -73,9 +73,6 @@
               <th scope="col" [attr.aria-sort]="sortDirection('score')">
                 <button type="button" (click)="sort('score')">Trend Score <app-icon [name]="sortIcon('score')" [size]="13" /></button>
               </th>
-              <th scope="col" [attr.aria-sort]="sortDirection('opportunity')">
-                <button type="button" (click)="sort('opportunity')">Oportunidade <app-icon [name]="sortIcon('opportunity')" [size]="13" /></button>
-              </th>
               <th scope="col" [attr.aria-sort]="sortDirection('growth')">
                 <button type="button" (click)="sort('growth')">Crescimento <app-icon [name]="sortIcon('growth')" [size]="13" /></button>
               </th>
@@ -94,7 +91,6 @@
                   <span>{{ (product.category | humanize) || 'Categoria não informada' }} · {{ stageLabel(product.stage) }}</span>
                 </td>
                 <td class="score-cell"><app-score-gauge [value]="product.trendScore.value" [size]="40" /></td>
-                <td class="num opportunity">{{ product.opportunityScore.value ?? '—' }}</td>
                 <td class="growth num" [class.down]="(product.growthPct ?? 0) < 0">
                   {{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}
                 </td>
@@ -119,7 +115,6 @@
             </div>
             <dl class="mobile-metrics">
               <div><dt>Trend Score</dt><dd class="num">{{ product.trendScore.value ?? '—' }}</dd></div>
-              <div><dt>Oportunidade</dt><dd class="num">{{ product.opportunityScore.value ?? '—' }}</dd></div>
               <div><dt>Crescimento</dt><dd class="num" [class.down]="(product.growthPct ?? 0) < 0">{{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}</dd></div>
               <div><dt>Risco</dt><dd><app-risk-badge [level]="product.risk" /></dd></div>
             </dl>
