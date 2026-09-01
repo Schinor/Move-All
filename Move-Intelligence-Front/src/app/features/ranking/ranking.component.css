@@ -139,7 +139,9 @@ app-data-table.active {
 }
 
 table {
+  width: 100%;
   min-width: 760px;
+  border-collapse: collapse;
 }
 
 th,
@@ -221,8 +223,13 @@ tbody tr:last-child td {
 
 td.product,
 th.product-heading {
-  min-width: 260px;
+  width: 42%;
+  min-width: 280px;
   text-align: left;
+}
+
+.action-heading {
+  text-align: right;
 }
 
 .product strong {
@@ -293,7 +300,8 @@ th.product-heading {
     display: none;
   }
 
-  app-data-table {
+  app-data-table,
+  app-data-table.active {
     display: none;
   }
 

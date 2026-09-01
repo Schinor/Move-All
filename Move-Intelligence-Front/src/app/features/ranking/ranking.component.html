@@ -1,6 +1,6 @@
 <app-page-header
   title="Ranking de tendências"
-  subtitle="Produtos priorizados por sinais de tendência, oportunidade, crescimento e risco."
+  subtitle="Produtos priorizados por sinais de tendência, crescimento e risco."
 >
   <span class="data-note">Dados fornecidos pela API</span>
   <div class="view-toggle">
@@ -111,7 +111,7 @@
               <th scope="col" [attr.aria-sort]="sortDirection('risk')">
                 <button type="button" (click)="sort('risk')">Risco <app-icon [name]="sortIcon('risk')" [size]="13" /></button>
               </th>
-              <th scope="col"><span class="sr-only">Ação</span></th>
+              <th scope="col" class="action-heading">Ação</th>
             </tr>
           </thead>
           <tbody>
