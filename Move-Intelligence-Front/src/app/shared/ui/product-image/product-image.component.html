@@ -1,7 +1,16 @@
-@if (src() && !failed()) {
-  <img class="img" [src]="src()" [alt]="alt()" (error)="onError()" loading="lazy" />
-} @else {
-  <div class="placeholder" [attr.aria-label]="alt()">
-    <span><app-icon name="package" [size]="32" /></span>
-  </div>
-}
+<div class="frame">
+  <span class="placeholder" [attr.aria-hidden]="loaded() ? 'true' : null">
+    <app-icon name="package" [size]="28" />
+  </span>
+  @if (src() && !failed()) {
+    <img
+      class="img"
+      [class.is-loaded]="loaded()"
+      [src]="src()"
+      [alt]="alt()"
+      (load)="onLoad()"
+      (error)="onError()"
+      loading="lazy"
+    />
+  }
+</div>

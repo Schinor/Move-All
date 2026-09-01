@@ -49,7 +49,7 @@
               <article class="decision-row">
                 <div class="decision-product">
                   <strong>{{ product.canonicalName }}</strong>
-                  <span>{{ product.category ?? 'Categoria não informada' }}</span>
+                  <span>{{ (product.category | humanize) || 'Categoria não informada' }}</span>
                 </div>
                 <div class="decision-metric">
                   <span>Oportunidade</span>
@@ -118,7 +118,7 @@
           @for (product of topSignals(); track product.productClusterId) {
             <li>
               <a [routerLink]="['/tendencia', product.productClusterId]">
-                <span class="signal-name"><strong>{{ product.canonicalName }}</strong><small>{{ product.category ?? 'Categoria não informada' }}</small></span>
+                <span class="signal-name"><strong>{{ product.canonicalName }}</strong><small>{{ (product.category | humanize) || 'Categoria não informada' }}</small></span>
                 <span class="signal-score num">{{ product.trendScore.value ?? '—' }} <small>trend</small></span>
                 <app-icon name="arrow-up-right" [size]="15" />
               </a>

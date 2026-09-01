@@ -91,14 +91,14 @@
                 <td class="rank num">{{ rank(product) }}</td>
                 <td class="product">
                   <strong>{{ product.canonicalName }}</strong>
-                  <span>{{ product.category ?? 'Categoria não informada' }} · {{ stageLabel(product.stage) }}</span>
+                  <span>{{ (product.category | humanize) || 'Categoria não informada' }} · {{ stageLabel(product.stage) }}</span>
                 </td>
-                <td class="score-cell"><app-score-gauge [value]="product.trendScore.value" [size]="54" /></td>
+                <td class="score-cell"><app-score-gauge [value]="product.trendScore.value" [size]="40" /></td>
                 <td class="num opportunity">{{ product.opportunityScore.value ?? '—' }}</td>
                 <td class="growth num" [class.down]="(product.growthPct ?? 0) < 0">
                   {{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}
                 </td>
-                <td><app-risk-badge [level]="product.risk" of="de mercado" /></td>
+                <td><app-risk-badge [level]="product.risk" /></td>
                 <td><a [routerLink]="['/tendencia', product.productClusterId]" class="go">Ver dossiê <app-icon name="arrow-up-right" [size]="14" /></a></td>
               </tr>
             }
@@ -113,7 +113,7 @@
               <span class="rank num">#{{ rank(product) }}</span>
               <div class="product">
                 <strong>{{ product.canonicalName }}</strong>
-                <span>{{ product.category ?? 'Categoria não informada' }}</span>
+                <span>{{ (product.category | humanize) || 'Categoria não informada' }}</span>
               </div>
               <a [routerLink]="['/tendencia', product.productClusterId]" aria-label="Ver dossiê de {{ product.canonicalName }}"><app-icon name="arrow-up-right" [size]="16" /></a>
             </div>

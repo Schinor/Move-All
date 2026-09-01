@@ -13,8 +13,14 @@ export class ProductImageComponent {
   readonly src = input<string | null>(null);
   readonly alt = input('Produto');
   readonly failed = signal(false);
+  readonly loaded = signal(false);
+
+  onLoad(): void {
+    this.loaded.set(true);
+  }
 
   onError(): void {
     this.failed.set(true);
+    this.loaded.set(false);
   }
 }

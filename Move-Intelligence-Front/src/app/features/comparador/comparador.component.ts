@@ -11,12 +11,14 @@ import { TrendsService } from '../../core/services/trends.service';
 import { PageHeaderComponent } from '../../shared/ui/page-header/page-header.component';
 import { RiskBadgeComponent } from '../../shared/ui/risk-badge/risk-badge.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { HumanizePipe } from '../../shared/util/humanize.pipe';
 
 @Component({
   selector: 'app-comparador',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, RouterLink, PageHeaderComponent, RiskBadgeComponent, IconComponent],
+  imports: [
+    HumanizePipe,FormsModule, RouterLink, PageHeaderComponent, RiskBadgeComponent, IconComponent],
   templateUrl: './comparador.component.html',
   styleUrl: './comparador.component.css',
 })

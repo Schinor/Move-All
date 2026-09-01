@@ -12,6 +12,7 @@ import { ScoreGaugeComponent } from '../../shared/components/intel/score-gauge/s
 import { StatePanelComponent } from '../../shared/ui/state-panel/state-panel.component';
 import { DataTableComponent } from '../../shared/ui/data-table/data-table.component';
 import { STAGE_LABEL } from '../../shared/util/format';
+import { HumanizePipe } from '../../shared/util/humanize.pipe';
 
 type SortKey = 'rank' | 'name' | 'score' | 'opportunity' | 'growth' | 'risk';
 type StageFilter = 'all' | TrendStage | 'launch';
@@ -20,6 +21,7 @@ type StageFilter = 'all' | TrendStage | 'launch';
   selector: 'app-ranking',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    HumanizePipe,
     RouterLink,
     PageHeaderComponent,
     StatePanelComponent,

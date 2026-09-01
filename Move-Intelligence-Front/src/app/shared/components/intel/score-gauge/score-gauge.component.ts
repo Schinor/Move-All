@@ -9,10 +9,13 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 export class ScoreGaugeComponent {
   readonly value = input<number | null>(null);
   readonly size = input(72);
-  readonly label = input('Score');
+  /** Legenda opcional. Vazio por padrão: o contexto ao redor já nomeia o número. */
+  readonly label = input('');
 
+  /** Anel proporcional: 6px a 72px pesava demais quando o gauge cai para 40px na tabela. */
+  readonly strokeWidth = computed(() => Math.max(3, Math.round(this.size() / 12)));
   readonly center = computed(() => this.size() / 2);
-  readonly radius = computed(() => this.size() / 2 - 7);
+  readonly radius = computed(() => this.size() / 2 - this.strokeWidth() / 2 - 2);
   readonly viewBox = computed(() => `0 0 ${this.size()} ${this.size()}`);
   readonly circumference = computed(() => 2 * Math.PI * this.radius());
   readonly normalized = computed(() => Math.max(0, Math.min(100, this.value() ?? 0)));

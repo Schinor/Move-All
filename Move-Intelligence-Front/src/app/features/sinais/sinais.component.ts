@@ -13,12 +13,14 @@ import { KpiCardComponent } from '../../shared/ui/kpi-card/kpi-card.component';
 import { RiskBadgeComponent } from '../../shared/ui/risk-badge/risk-badge.component';
 import { WindowSelectorComponent } from '../../shared/ui/window-selector/window-selector.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { SourceLabelPipe } from '../../shared/util/source-label.pipe';
 
 @Component({
   selector: 'app-sinais',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    SourceLabelPipe,
     DatePipe,
     FormsModule,
     PageHeaderComponent,

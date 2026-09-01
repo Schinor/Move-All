@@ -2,6 +2,10 @@
   display: block;
   width: 100%;
   height: 100%;
+  min-height: 28px;
+  /* Sem o teto, o SVG estica para a altura do flex container e o sparkline
+     vira uma faixa diagonal gigante (visto no hero do dossiê). */
+  max-height: 64px;
 }
 .spark {
   width: 100%;

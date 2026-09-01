@@ -39,8 +39,12 @@ export class ThemeService {
         : 'escuro';
   }
 
-  icon(): 'sun' | 'moon' | 'monitor' {
-    return this.theme() === 'light' ? 'moon' : this.theme() === 'dark' ? 'sun' : 'monitor';
+  /** O ícone mostra o tema ATUAL, igual ao texto de label(), e não o próximo. */
+  icon(): 'contrast' | 'moon' | 'monitor' {
+    const current = this.theme();
+    if (current === 'light') return 'contrast';
+    if (current === 'dark') return 'moon';
+    return 'monitor';
   }
 
   private apply(theme: Theme): void {

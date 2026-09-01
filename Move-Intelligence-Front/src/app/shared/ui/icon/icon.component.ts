@@ -7,7 +7,8 @@ import {
   faDiagramProject, faEnvelope, faEye, faEyeSlash, faFileCircleCheck, faFileLines, faFire,
   faFireFlameCurved, faFlask, faGem, faGlobe, faIndustry, faKey, faKeyboard, faLightbulb, faLock,
   faMagnifyingGlass, faMedal, faMoneyBillTrendUp, faMoon, faPen, faPenToSquare, faRightFromBracket,
-  faRobot, faRotateRight, faScroll, faShip, faSliders, faStamp, faStar, faSun, faTableColumns,
+  faCircleHalfStroke, faRobot, faRotateRight, faScroll, faShip, faSliders, faStamp, faStar,
+  faTableColumns,
   faThumbtack, faTriangleExclamation, faUser, faWandMagicSparkles, faXmark,
 } from '@fortawesome/free-solid-svg-icons';
 
@@ -34,6 +35,8 @@ const ICONS = {
   columns: faTableColumns,
   command: faKeyboard,
   compass: faCompass,
+  /* Meia-lua: o faSun do Font Awesome vira um ícone de engrenagem abaixo de ~20px. */
+  contrast: faCircleHalfStroke,
   crown: faCrown,
   customs: faStamp,
   diamond: faGem,
@@ -74,7 +77,6 @@ const ICONS = {
   sparkles: faWandMagicSparkles,
   'square-pen': faPenToSquare,
   star: faStar,
-  sun: faSun,
   target: faBullseye,
   'trending-down': faArrowTrendDown,
   'trending-up': faArrowTrendUp,

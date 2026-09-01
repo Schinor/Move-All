@@ -2,7 +2,7 @@
   @case ('ready') {
     <app-page-header
       [title]="$any(product()).data.canonicalName"
-      [subtitle]="$any(product()).data.category ?? ''"
+      [subtitle]="humanize($any(product()).data.category)"
     >
       <div class="header-actions">
         <button

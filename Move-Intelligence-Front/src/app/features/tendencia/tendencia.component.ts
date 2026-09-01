@@ -32,6 +32,7 @@ import { UnitEconomicsCalculatorComponent } from '../../shared/components/intel/
 import { CompetitorMatrixComponent } from '../../shared/components/intel/competitor-matrix/competitor-matrix.component';
 import { SeasonalityForecastComponent } from '../../shared/components/intel/seasonality-forecast/seasonality-forecast.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { categoryLabel, premiseSourceLabel } from '../../shared/util/format';
 
 type PremiseKey = keyof MonteCarloPremises;
 
@@ -243,13 +244,19 @@ export class TendenciaComponent {
     return this.currentPremises()[key] ?? null;
   }
 
+  humanize(value: string | null | undefined): string {
+    return categoryLabel(value);
+  }
+
   premiseSource(key: PremiseKey): string {
     const aiState = this.aiPremises();
     if (aiState?.status === 'ready' && aiState.data.premiseSources[key]) {
-      return aiState.data.premiseSources[key];
+      return premiseSourceLabel(aiState.data.premiseSources[key]);
     }
     const state = this.simulationDefaults();
-    return state.status === 'ready' ? (state.data.premiseSources[key] ?? 'default') : 'default';
+    return premiseSourceLabel(
+      state.status === 'ready' ? state.data.premiseSources[key] : undefined,
+    );
   }
 
   updatePremise(key: PremiseKey, event: Event): void {

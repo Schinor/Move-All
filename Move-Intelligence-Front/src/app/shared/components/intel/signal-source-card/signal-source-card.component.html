@@ -8,7 +8,7 @@
     @for (source of sources(); track source.source) {
       <li>
         <span class="dot" [class.on]="source.online"></span>
-        <span class="name">{{ source.source }}</span>
+        <span class="name">{{ source.source | sourceLabel }}</span>
         <span class="status">{{ source.online ? 'ativa' : 'offline' }}</span>
       </li>
     }

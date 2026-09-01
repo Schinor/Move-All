@@ -231,6 +231,15 @@ textarea {
   font: inherit;
 }
 
+/* Sem isto, checkbox e radio nativos herdam o azul padrão do navegador,
+   que não existe na paleta da Move. */
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'],
+progress {
+  accent-color: var(--brand-text);
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;

@@ -40,7 +40,7 @@
                 <div class="product-header-cell">
                   <div class="color-badge" [style.background-color]="colors[idx]"></div>
                   <strong>{{ p.canonicalName }}</strong>
-                  <span class="cat-tag">{{ p.category || 'Geral' }}</span>
+                  <span class="cat-tag">{{ (p.category | humanize) || 'Geral' }}</span>
                 </div>
               </th>
             }
@@ -51,7 +51,7 @@
             <td class="metric-name">Nível de Risco</td>
             @for (p of comparisonData(); track p.id) {
               <td>
-                <app-risk-badge [level]="p.riskLevel" of="de mercado" />
+                <app-risk-badge [level]="p.riskLevel" />
               </td>
             }
           </tr>

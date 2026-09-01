@@ -112,7 +112,7 @@ table {
 
 th,
 td {
-  padding: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-sm);
   vertical-align: middle;

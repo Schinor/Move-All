@@ -214,15 +214,15 @@
 }
 
 .run-button {
-  color: var(--brand-text);
-  background: var(--brand-weak);
+  color: var(--brand-ink);
+  background: var(--brand);
   border-color: var(--brand);
 }
 
-.ai-button {
-  color: var(--info);
-  background: var(--info-bg);
-  border-color: var(--info);
+.run-button:hover:not(:disabled) {
+  color: var(--brand-ink);
+  background: color-mix(in srgb, var(--brand) 85%, #000);
+  border-color: color-mix(in srgb, var(--brand) 85%, #000);
 }
 
 .run-button:disabled,

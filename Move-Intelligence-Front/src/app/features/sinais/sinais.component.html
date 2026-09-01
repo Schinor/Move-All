@@ -117,7 +117,7 @@
             @for (item of $any(feed()).data.items; track item.id) {
               <article class="feed-item surface-panel">
                 <div class="item-head">
-                  <span class="source-tag">{{ item.source }}</span>
+                  <span class="source-tag">{{ item.source | sourceLabel }}</span>
                   @if (item.origin) { <span class="channel-tag">{{ item.origin }}</span> }
                   <time>{{ item.time ? (item.time | date: 'short') : 'Horário não informado' }}</time>
                 </div>
@@ -148,7 +148,7 @@
           @for (source of $any(sources()).data; track source.source) {
             <div class="source-card surface-panel">
               <div class="source-head">
-                <strong>{{ source.source }}</strong>
+                <strong>{{ source.source | sourceLabel }}</strong>
                 <span class="dot" [class.online]="source.activeSignals > 0"></span>
               </div>
               <p>{{ source.dominantCategory ?? 'Categoria dominante não informada.' }}</p>

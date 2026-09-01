@@ -1,15 +1,30 @@
-<div class="gauge" [style.width.px]="size()" [style.height.px]="size()">
+<div
+  class="gauge"
+  [style.width.px]="size()"
+  [style.height.px]="size()"
+  role="img"
+  [attr.aria-label]="(label() || 'Score') + ': ' + (value() ?? 'indisponível') + ' de 100'"
+>
   <svg [attr.width]="size()" [attr.height]="size()" [attr.viewBox]="viewBox()" aria-hidden="true">
-    <circle class="track" [attr.cx]="center()" [attr.cy]="center()" [attr.r]="radius()" />
+    <circle
+      class="track"
+      [attr.cx]="center()"
+      [attr.cy]="center()"
+      [attr.r]="radius()"
+      [attr.stroke-width]="strokeWidth()"
+    />
     <circle
       class="value"
       [attr.cx]="center()"
       [attr.cy]="center()"
       [attr.r]="radius()"
       [attr.stroke]="color()"
+      [attr.stroke-width]="strokeWidth()"
       [attr.stroke-dasharray]="dash() + ' ' + circumference()"
     />
   </svg>
   <span class="score num">{{ value() ?? '—' }}</span>
-  <span class="label">{{ label() }}</span>
+  @if (label()) {
+    <span class="label">{{ label() }}</span>
+  }
 </div>

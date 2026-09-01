@@ -16,11 +16,13 @@ import { SkeletonComponent } from '../../shared/ui/skeleton/skeleton.component';
 import { StatePanelComponent } from '../../shared/ui/state-panel/state-panel.component';
 import { WindowSelectorComponent } from '../../shared/ui/window-selector/window-selector.component';
 import { formatBRL } from '../../shared/util/format';
+import { HumanizePipe } from '../../shared/util/humanize.pipe';
 
 @Component({
   selector: 'app-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    HumanizePipe,
     RouterLink,
     PageHeaderComponent,
     WindowSelectorComponent,

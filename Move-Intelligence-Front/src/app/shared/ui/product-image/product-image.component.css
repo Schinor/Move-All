@@ -3,21 +3,37 @@
   aspect-ratio: 1 / 1;
   width: 100%;
 }
+
+/* O placeholder fica sempre embaixo: enquanto a imagem carrega (ou nunca
+   carrega, como nas URLs de exemplo), a caixa nunca aparece vazia. */
+.frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+}
+
 .img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease);
 }
-.placeholder {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
-  border-radius: var(--r-md);
-  border: 1px dashed var(--border-strong);
-  background: var(--surface-2);
-  font-size: 1.5rem;
-  opacity: 0.6;
+
+.img.is-loaded {
+  opacity: 1;
 }

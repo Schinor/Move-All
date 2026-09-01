@@ -15,7 +15,6 @@ svg {
 }
 circle {
   fill: none;
-  stroke-width: 6;
 }
 .track {
   stroke: var(--border-strong);
