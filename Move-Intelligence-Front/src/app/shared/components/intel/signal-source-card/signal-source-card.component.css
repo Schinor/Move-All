@@ -2,26 +2,26 @@
   display: block;
 }
 .sources {
-  border-radius: var(--radius-lg);
-  padding: 1rem;
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
   min-height: 100%;
 }
 header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.8rem;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-caption);
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 header strong {
-  color: var(--foreground);
+  color: var(--text);
 }
 ul {
   list-style: none;
   display: grid;
-  gap: 0.55rem;
+  gap: var(--sp-2);
   padding: 0;
   margin: 0;
 }
@@ -29,29 +29,28 @@ li {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.55rem;
-  border-radius: var(--radius-sm);
-  background: color-mix(in oklab, var(--card) 55%, transparent);
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
 }
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--muted-foreground);
+  background: var(--text-3);
 }
 .dot.on {
-  background: var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 15%, transparent);
+  background: var(--success);
 }
 .name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
 }
 .status {
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
 }

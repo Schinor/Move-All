@@ -1,36 +1,37 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 500;
+  gap: var(--sp-2);
+  min-height: 28px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-full);
+  font-size: var(--fs-caption);
+  font-weight: 600;
   border: 1px solid var(--border);
 }
 .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--muted-foreground);
+  background: var(--text-3);
 }
 .badge[data-level='baixo'] {
   color: var(--success);
-  background: color-mix(in oklab, var(--success) 12%, transparent);
+  background: var(--success-bg);
 }
 .badge[data-level='baixo'] .dot {
   background: var(--success);
 }
 .badge[data-level='medio'] {
   color: var(--warning);
-  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  background: var(--warning-bg);
 }
 .badge[data-level='medio'] .dot {
   background: var(--warning);
 }
 .badge[data-level='alto'] {
   color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  background: var(--danger-bg);
 }
 .badge[data-level='alto'] .dot {
   background: var(--danger);

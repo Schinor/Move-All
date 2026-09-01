@@ -1,6 +1,7 @@
 @if (isAuthRoute()) {
   <router-outlet />
 } @else {
+  <a class="skip-link" href="#main-content">Pular para o conteúdo</a>
   <div class="app-shell">
     <app-sidebar [class.sidebar-collapsed]="!layout.sidebarOpen()" />
     @if (layout.sidebarOpen()) {
@@ -13,7 +14,7 @@
     }
     <div class="app-main">
       <app-top-bar />
-      <main class="app-content">
+      <main id="main-content" class="app-content">
         <router-outlet />
       </main>
     </div>

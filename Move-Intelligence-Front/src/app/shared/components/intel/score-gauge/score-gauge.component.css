@@ -18,7 +18,7 @@ circle {
   stroke-width: 6;
 }
 .track {
-  stroke: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
+  stroke: var(--border-strong);
 }
 .value {
   stroke-linecap: round;
@@ -32,16 +32,16 @@ circle {
   font-size: 1rem;
   line-height: 1;
   font-weight: 700;
-  color: var(--foreground);
+  color: var(--text);
 }
 .label {
   position: absolute;
   left: 50%;
   bottom: 0.35rem;
   transform: translateX(-50%);
-  font-size: 0.46rem;
+  font-size: var(--fs-label);
   line-height: 1;
-  color: var(--muted-foreground);
+  color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   pointer-events: none;

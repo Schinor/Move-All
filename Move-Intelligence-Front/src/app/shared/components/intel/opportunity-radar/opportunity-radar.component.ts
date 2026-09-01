@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { Indicator } from '../../../../core/models/contract.models';
 import { ChartComponent } from '../../../ui/chart/chart.component';
+import { ThemeService } from '../../../../core/services/theme.service';
+import { readEchartsTheme, withAlpha } from '../../../charts/echarts-theme';
 
 const SIGNAL_LABELS: Record<string, string> = {
   marketplaceGrowth: 'Marketplace',
@@ -20,9 +22,12 @@ const SIGNAL_LABELS: Record<string, string> = {
   styleUrl: './opportunity-radar.component.css',
 })
 export class OpportunityRadarComponent {
+  private readonly theme = inject(ThemeService);
   readonly signals = input<Record<string, Indicator>>({});
 
   readonly options = computed<EChartsCoreOption>(() => {
+    this.theme.theme();
+    const palette = readEchartsTheme();
     const keys = Object.keys(SIGNAL_LABELS);
     const values = keys.map((key) => this.toPercent(this.signals()[key]?.value ?? null));
     return {
@@ -31,18 +36,18 @@ export class OpportunityRadarComponent {
       radar: {
         indicator: keys.map((key) => ({ name: SIGNAL_LABELS[key], max: 100 })),
         radius: '68%',
-        splitLine: { lineStyle: { color: 'rgba(255,255,255,.09)' } },
-        splitArea: { areaStyle: { color: ['rgba(255,255,255,.02)', 'rgba(255,255,255,.04)'] } },
-        axisLine: { lineStyle: { color: 'rgba(255,255,255,.12)' } },
-        axisName: { color: '#9aa7a9', fontSize: 11 },
+        splitLine: { lineStyle: { color: palette.border } },
+        splitArea: { areaStyle: { color: [palette.surface, palette.border] } },
+        axisLine: { lineStyle: { color: palette.border } },
+        axisName: { color: palette.text2, fontSize: 12 },
       },
       series: [
         {
           type: 'radar',
           data: [{ value: values, name: 'Sub-sinais' }],
-          areaStyle: { color: 'rgba(77, 220, 155, .22)' },
-          lineStyle: { color: '#66d9a5', width: 2 },
-          itemStyle: { color: '#66d9a5' },
+          areaStyle: { color: withAlpha(palette.chart1, 0.18) },
+          lineStyle: { color: palette.chart1, width: 2 },
+          itemStyle: { color: palette.chart1 },
         },
       ],
     };

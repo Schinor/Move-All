@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { AsyncState } from '../../../core/api/async-state';
 import { IconComponent } from '../icon/icon.component';
+import { SkeletonComponent } from '../skeleton/skeleton.component';
 
 /**
  * Renderiza os estados não-prontos de um AsyncState (loading | empty | error).
@@ -9,7 +10,7 @@ import { IconComponent } from '../icon/icon.component';
 @Component({
   selector: 'app-state-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, SkeletonComponent],
   templateUrl: './state-panel.component.html',
   styleUrl: './state-panel.component.css',
 })

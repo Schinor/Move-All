@@ -125,3 +125,6 @@ temp/
 .cache/
 .parcel-cache/
 .eslintcache
+
+# Material temporário do brand book, fornecido para orientar o redesign.
+InovaSkills - Move iD_compressed.pdf

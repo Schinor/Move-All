@@ -2,4 +2,5 @@
   display: block;
   width: 100%;
   min-height: 260px;
+  outline: 0;
 }

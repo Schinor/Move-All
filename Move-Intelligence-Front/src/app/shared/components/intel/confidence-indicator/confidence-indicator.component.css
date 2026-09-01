@@ -18,17 +18,17 @@ circle {
   stroke-width: 5;
 }
 .track {
-  stroke: color-mix(in oklab, var(--muted-foreground) 20%, transparent);
+  stroke: var(--border-strong);
 }
 .value {
-  stroke: var(--accent);
+  stroke: var(--info);
   stroke-linecap: round;
 }
 .percent {
-  font-size: 0.72rem;
+  font-size: var(--fs-caption);
   font-weight: 700;
 }
 .label {
-  color: var(--muted-foreground);
-  font-size: 0.65rem;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
 }

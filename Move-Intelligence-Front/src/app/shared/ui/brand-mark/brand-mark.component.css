@@ -1,0 +1,11 @@
+:host {
+  display: inline-flex;
+  width: max-content;
+  color: currentColor;
+  line-height: 0;
+  flex: 0 0 auto;
+}
+
+svg {
+  display: block;
+}

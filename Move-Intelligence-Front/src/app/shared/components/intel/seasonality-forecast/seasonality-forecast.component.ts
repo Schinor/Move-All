@@ -42,8 +42,8 @@ export class SeasonalityForecastComponent implements OnInit {
     });
   }
 
-  formatNumber(value: number | undefined): string {
-    if (!value) return '0';
+  formatNumber(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
     return new Intl.NumberFormat('pt-BR').format(value);
   }
 }

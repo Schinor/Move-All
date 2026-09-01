@@ -1,152 +1,330 @@
 /* ============================================================
-   Move Intelligence — tema global (portado do mockup)
-   Dark-first premium executive theme. Tokens em oklch.
+   Move Intelligence — Design System
+   Base: identidade Move (preto / branco / Neon 802 C).
+   Breakpoints: sm 640 · md 768 · lg 1024 · xl 1280 · 2xl 1536
    ============================================================ */
 
 :root {
-  --radius: 0.75rem;
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  /* ---- Tipografia ---- */
+  --font-display: 'Archivo', 'Inter', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
-  --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --fs-display: 2.25rem;
+  --lh-display: 2.5rem;
+  --fs-h1: 1.75rem;
+  --lh-h1: 2.125rem;
+  --fs-h2: 1.25rem;
+  --lh-h2: 1.75rem;
+  --fs-h3: 1rem;
+  --lh-h3: 1.5rem;
+  --fs-body: 0.875rem;
+  --lh-body: 1.375rem;
+  --fs-sm: 0.8125rem;
+  --lh-sm: 1.25rem;
+  --fs-caption: 0.75rem;
+  --lh-caption: 1rem;
+  --fs-label: 0.75rem;
+  --lh-label: 1rem;
 
-  /* Dark premium (default) */
-  --background: oklch(0.16 0.012 200);
-  --foreground: oklch(0.97 0.01 180);
-  --surface: oklch(0.2 0.014 200);
-  --surface-elevated: oklch(0.235 0.016 200);
-  --card: oklch(0.205 0.014 200);
-  --card-foreground: oklch(0.97 0.01 180);
-  --popover: oklch(0.22 0.014 200);
-  --popover-foreground: oklch(0.97 0.01 180);
-  --primary: oklch(0.78 0.18 158);
-  --primary-foreground: oklch(0.14 0.02 180);
-  --primary-glow: oklch(0.82 0.22 156);
-  --secondary: oklch(0.27 0.018 200);
-  --secondary-foreground: oklch(0.95 0.01 180);
-  --muted: oklch(0.25 0.014 200);
-  --muted-foreground: oklch(0.65 0.018 200);
-  --accent: oklch(0.72 0.16 230);
-  --accent-foreground: oklch(0.14 0.02 180);
-  --destructive: oklch(0.66 0.22 22);
-  --destructive-foreground: oklch(0.98 0.01 0);
-  --success: oklch(0.78 0.18 158);
-  --warning: oklch(0.82 0.17 75);
-  --danger: oklch(0.68 0.22 18);
-  --info: oklch(0.72 0.16 230);
-  --border: oklch(0.3 0.014 200 / 0.6);
-  --border-strong: oklch(0.4 0.018 200 / 0.8);
-  --input: oklch(0.28 0.014 200);
-  --ring: oklch(0.78 0.18 158);
-  --chart-1: oklch(0.78 0.18 158);
-  --chart-2: oklch(0.72 0.16 230);
-  --chart-3: oklch(0.82 0.17 75);
-  --chart-4: oklch(0.68 0.22 18);
-  --chart-5: oklch(0.7 0.14 290);
-  --sidebar: oklch(0.155 0.012 200);
-  --sidebar-foreground: oklch(0.85 0.012 200);
-  --sidebar-primary: oklch(0.78 0.18 158);
-  --sidebar-primary-foreground: oklch(0.14 0.02 180);
-  --sidebar-accent: oklch(0.23 0.014 200);
-  --sidebar-accent-foreground: oklch(0.95 0.01 180);
-  --sidebar-border: oklch(0.28 0.014 200 / 0.5);
-  --sidebar-ring: oklch(0.78 0.18 158);
+  /* ---- Espaçamento ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
 
-  --gradient-primary: linear-gradient(135deg, oklch(0.78 0.18 158), oklch(0.72 0.16 200));
-  --gradient-surface: linear-gradient(180deg, oklch(0.22 0.014 200), oklch(0.18 0.012 200));
-  --shadow-elevated: 0 10px 40px -10px oklch(0 0 0 / 0.5), 0 0 0 1px oklch(1 0 0 / 0.04);
-  --shadow-glow: 0 0 40px -8px oklch(0.78 0.18 158 / 0.35);
+  /* ---- Raio ---- */
+  --r-xs: 2px;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-full: 999px;
+
+  /* ---- Elevação: usada somente em overlays ---- */
+  --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.32);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.48);
+
+  /* ---- Movimento ---- */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --ease: cubic-bezier(0.2, 0, 0.2, 1);
+
+  /* ---- Layout ---- */
+  --sidebar-w: 240px;
+  --sidebar-rail-w: 60px;
+  --topbar-h: 56px;
+  --content-max: 1440px;
+
+  /* ---- Tema claro (padrão quando o sistema é claro) ---- */
+  --bg: #ffffff;
+  --bg-subtle: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #ebebed;
+  --border: #e3e3e6;
+  --border-strong: #c9c9ce;
+  --text: #0a0a0b;
+  --text-2: #55565c;
+  --text-3: #7a7b82;
+
+  --brand: #75f852;
+  --brand-ink: #000000;
+  --brand-text: #2c6b18;
+  --brand-weak: #eafde2;
+
+  --success: #17803d;
+  --success-bg: #e9f7ee;
+  --warning: #8a6a00;
+  --warning-bg: #fef8e0;
+  --danger: #c42945;
+  --danger-bg: #fdeaee;
+  --info: #1b6e86;
+  --info-bg: #e6f7fc;
+
+  --chart-1: #35b81a;
+  --chart-2: #1b7f9e;
+  --chart-3: #6b57d9;
+  --chart-4: #b08900;
+  --chart-5: #c42945;
+  --chart-6: #54585b;
+  --focus-ring: #1b6e86;
+  color-scheme: light;
+
+  /* Aliases para componentes ainda em migração. */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --surface-elevated: var(--surface-2);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-2);
+  --accent: var(--info);
+  --accent-foreground: #ffffff;
+  --destructive: var(--danger);
+  --destructive-foreground: #ffffff;
+  --input: var(--surface);
+  --ring: var(--focus-ring);
+  --sidebar: var(--bg);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: var(--surface-2);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--focus-ring);
 }
 
-/* Tema claro — o toggle estampa data-theme="light" no <html>.
-   Aproximação: inverte superfícies mantendo o verde primário. */
-:root[data-theme='light'] {
-  --background: oklch(0.98 0.005 200);
-  --foreground: oklch(0.2 0.02 200);
-  --surface: oklch(0.96 0.006 200);
-  --surface-elevated: oklch(0.99 0.004 200);
-  --card: oklch(0.99 0.004 200);
-  --card-foreground: oklch(0.2 0.02 200);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 200);
-  --secondary: oklch(0.92 0.008 200);
-  --secondary-foreground: oklch(0.2 0.02 200);
-  --muted: oklch(0.93 0.006 200);
-  --muted-foreground: oklch(0.45 0.02 200);
-  --border: oklch(0.5 0.01 200 / 0.2);
-  --border-strong: oklch(0.4 0.02 200 / 0.35);
-  --input: oklch(0.9 0.008 200);
-  --sidebar: oklch(0.97 0.005 200);
-  --sidebar-foreground: oklch(0.25 0.02 200);
-  --sidebar-accent: oklch(0.92 0.008 200);
-  --sidebar-accent-foreground: oklch(0.2 0.02 200);
-  --sidebar-border: oklch(0.5 0.01 200 / 0.2);
+:root[data-theme='dark'] {
+  --bg: #0a0a0b;
+  --bg-subtle: #0f0f11;
+  --surface: #141416;
+  --surface-2: #1b1b1e;
+  --surface-3: #232327;
+  --border: #2a2a2f;
+  --border-strong: #3c3c43;
+  --text: #f4f4f5;
+  --text-2: #a6a6ae;
+  --text-3: #77777f;
+  --brand: #75f852;
+  --brand-ink: #000000;
+  --brand-text: #75f852;
+  --brand-weak: #16250f;
+  --success: #03eb88;
+  --success-bg: #062218;
+  --warning: #fde441;
+  --warning-bg: #241f05;
+  --danger: #fd6c82;
+  --danger-bg: #2a0e14;
+  --info: #83e1fa;
+  --info-bg: #06222b;
+  --chart-1: #75f852;
+  --chart-2: #83e1fa;
+  --chart-3: #8c7bff;
+  --chart-4: #fde441;
+  --chart-5: #fd6c82;
+  --chart-6: #8b8b93;
+  --focus-ring: #83e1fa;
+  --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.72);
+  color-scheme: dark;
 }
 
-* {
+/* Sem preferência explícita, o sistema decide sem estampar data-theme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0a0a0b;
+    --bg-subtle: #0f0f11;
+    --surface: #141416;
+    --surface-2: #1b1b1e;
+    --surface-3: #232327;
+    --border: #2a2a2f;
+    --border-strong: #3c3c43;
+    --text: #f4f4f5;
+    --text-2: #a6a6ae;
+    --text-3: #77777f;
+    --brand: #75f852;
+    --brand-ink: #000000;
+    --brand-text: #75f852;
+    --brand-weak: #16250f;
+    --success: #03eb88;
+    --success-bg: #062218;
+    --warning: #fde441;
+    --warning-bg: #241f05;
+    --danger: #fd6c82;
+    --danger-bg: #2a0e14;
+    --info: #83e1fa;
+    --info-bg: #06222b;
+    --chart-1: #75f852;
+    --chart-2: #83e1fa;
+    --chart-3: #8c7bff;
+    --chart-4: #fde441;
+    --chart-5: #fd6c82;
+    --chart-6: #8b8b93;
+    --focus-ring: #83e1fa;
+    --shadow-popover: 0 4px 16px rgba(0, 0, 0, 0.6);
+    --shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.72);
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-  border-color: var(--border);
 }
 
 html,
 body {
+  min-height: 100%;
   margin: 0;
   padding: 0;
-  min-height: 100%;
-  background-color: var(--background);
-  color: var(--foreground);
+  background: var(--bg);
+  color: var(--text);
 }
 
 body {
+  overflow-x: hidden;
   font-family: var(--font-sans);
-  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image:
-    radial-gradient(60% 50% at 50% 0%, oklch(0.78 0.18 158 / 0.06), transparent 70%),
-    radial-gradient(40% 40% at 100% 100%, oklch(0.72 0.16 230 / 0.05), transparent 70%);
-  background-attachment: fixed;
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  color: inherit;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+:where(button, a, input, select, textarea) {
+  transition:
+    color var(--dur-fast) var(--ease),
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.surface-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: var(--sp-3);
+  left: var(--sp-3);
+  z-index: 100;
+  transform: translateY(-180%);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 ::selection {
-  background: oklch(0.78 0.18 158 / 0.3);
+  background: var(--brand);
+  color: var(--brand-ink);
 }
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
+
 ::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: oklch(0.3 0.014 200 / 0.6);
-  border-radius: 8px;
+  background: var(--bg-subtle);
 }
 
-/* Utilitários reutilizados pelos componentes */
-.glass {
-  background: color-mix(in oklab, var(--surface) 70%, transparent);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid var(--border);
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 2px solid var(--bg-subtle);
+  border-radius: var(--r-full);
 }
-.glass-strong {
-  background: color-mix(in oklab, var(--surface-elevated) 85%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  border: 1px solid var(--border-strong);
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
-.text-gradient {
-  background: linear-gradient(135deg, oklch(0.97 0.01 180), oklch(0.78 0.18 158));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.num {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum';
+
+@media (pointer: coarse) {
+  button,
+  a[role='button'],
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
 }

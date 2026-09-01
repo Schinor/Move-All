@@ -1,22 +1,24 @@
 .decision {
-  border-radius: var(--radius-lg);
-  padding: 1rem;
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
 }
 .eyebrow {
-  color: var(--muted-foreground);
-  font-size: 0.68rem;
+  color: var(--text-2);
+  font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 h3 {
   margin: 0.35rem 0;
   font-size: 1.8rem;
-  color: var(--primary);
+  color: var(--brand-text);
 }
 p,
 li {
-  color: var(--muted-foreground);
-  font-size: 0.86rem;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
   line-height: 1.55;
 }
 ul {

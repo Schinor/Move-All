@@ -8,7 +8,7 @@
         {{ up() ? '+' : '' }}{{ kpi().delta.toFixed(1) }}%
       </span>
     </div>
-    <div class="value num text-gradient">{{ kpi().value }}</div>
+    <div class="value num">{{ kpi().value }}</div>
     @if (kpi().spark?.length) {
       <div class="spark">
         <app-sparkline [data]="kpi().spark!" [up]="up()" />

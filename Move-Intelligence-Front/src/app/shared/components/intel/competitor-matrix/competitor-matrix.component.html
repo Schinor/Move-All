@@ -12,10 +12,10 @@
   </div>
 
   @if (loading()) {
-    <div class="loading-state glass">Carregando matriz de concorrentes...</div>
+    <div class="loading-state surface-panel">Carregando matriz de concorrentes...</div>
   } @else if (data() && data().topCompetitors?.length) {
     <div class="competitors-grid">
-      <div class="table-card glass">
+      <div class="table-card surface-panel">
         <table>
           <thead>
             <tr>
@@ -71,6 +71,6 @@
       </div>
     </div>
   } @else {
-    <div class="loading-state glass">Nenhum concorrente identificado nos snapshots recentes deste produto.</div>
+    <div class="loading-state surface-panel">Nenhum concorrente identificado nos snapshots recentes deste produto.</div>
   }
 </div>

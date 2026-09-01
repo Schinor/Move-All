@@ -1,0 +1,51 @@
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-2);
+  min-height: 210px;
+  padding: var(--sp-7) var(--sp-5);
+  color: var(--text-2);
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+}
+
+.empty-state.compact {
+  min-height: 150px;
+  padding: var(--sp-5);
+}
+
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--brand-text);
+  background: var(--brand-weak);
+  border-radius: var(--r-sm);
+}
+
+.empty-state h2,
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state h2 {
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.empty-state p {
+  max-width: 56ch;
+  font-size: var(--fs-sm);
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}

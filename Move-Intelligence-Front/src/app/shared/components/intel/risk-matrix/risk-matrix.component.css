@@ -2,21 +2,21 @@
   display: block;
 }
 .matrix {
-  border-radius: var(--radius-lg);
-  padding: 1rem;
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
 }
 header {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.85rem;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
+  margin-bottom: var(--sp-3);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 header strong {
-  color: var(--foreground);
+  color: var(--text);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -25,15 +25,15 @@ header strong {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--r-sm);
   overflow: hidden;
 }
 .cell {
   min-height: 100px;
-  padding: 0.7rem;
+  padding: var(--sp-3);
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: color-mix(in oklab, var(--card) 55%, transparent);
+  background: var(--surface-2);
 }
 .cell:nth-child(3n) {
   border-right: 0;
@@ -43,29 +43,29 @@ header strong {
 }
 .axis {
   display: block;
-  color: var(--muted-foreground);
-  font-size: 0.65rem;
-  margin-bottom: 0.55rem;
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  margin-bottom: var(--sp-2);
 }
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: var(--sp-2);
 }
 .chip {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border-radius: var(--radius-sm);
-  background: color-mix(in oklab, var(--primary) 12%, transparent);
-  color: var(--foreground);
-  padding: 0.25rem 0.45rem;
+  border-radius: var(--r-sm);
+  background: var(--brand-weak);
+  color: var(--text);
+  padding: var(--sp-1) var(--sp-2);
   text-decoration: none;
-  font-size: 0.68rem;
+  font-size: var(--fs-label);
 }
 .empty {
-  color: var(--muted-foreground);
+  color: var(--text-3);
 }
 @media (max-width: 760px) {
   .grid {

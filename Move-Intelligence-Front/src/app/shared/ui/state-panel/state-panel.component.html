@@ -1,19 +1,19 @@
 @switch (state().status) {
   @case ('loading') {
     <div class="panel" role="status" aria-live="polite">
-      <span class="spinner"></span>
-      <span class="label">Carregando inteligência…</span>
+      <app-skeleton [width]="'120px'" [height]="'16px'" />
+      <span class="label">Carregando dados…</span>
     </div>
   }
   @case ('empty') {
     <div class="panel">
-      <span class="icon">◔</span>
+      <span class="icon"><app-icon name="compass" [size]="20" /></span>
       <span class="label">{{ emptyMessage() }}</span>
       <span class="hint">Estrutura pronta — os dados aparecem quando o motor os produzir.</span>
     </div>
   }
   @case ('error') {
-    <div class="panel error">
+    <div class="panel error" role="alert">
       <span class="icon"><app-icon name="alert-triangle" [size]="20" /></span>
       <span class="label">{{ $any(state()).error }}</span>
     </div>

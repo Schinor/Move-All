@@ -2,25 +2,25 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 1rem;
+  gap: var(--sp-4);
   flex-wrap: wrap;
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--sp-5);
 }
 .title {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: var(--fs-h1);
   font-weight: 600;
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  line-height: var(--lh-h1);
 }
 .subtitle {
-  margin: 0.25rem 0 0;
-  font-size: 0.85rem;
-  color: var(--muted-foreground);
+  margin: var(--sp-1) 0 0;
+  font-size: var(--fs-body);
+  color: var(--text-2);
   max-width: 60ch;
 }
 .actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sp-2);
 }

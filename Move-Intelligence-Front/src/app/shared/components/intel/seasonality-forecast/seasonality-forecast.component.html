@@ -7,10 +7,10 @@
   </div>
 
   @if (loading()) {
-    <div class="loading-state glass">Calculando projeções sazonais...</div>
+    <div class="loading-state surface-panel">Calculando projeções sazonais...</div>
   } @else if (data()) {
     <!-- Card de Ação Estratégica de Importação -->
-    <div class="window-card glass" [class.urgent]="data().optimalSourcingWindow.status === 'JANELA_URGENTE'">
+    <div class="window-card surface-panel" [class.urgent]="data().optimalSourcingWindow.status === 'JANELA_URGENTE'">
       <div class="window-head">
         <div class="status-indicator">
           @if (data().optimalSourcingWindow.status === 'JANELA_URGENTE') {
@@ -56,7 +56,7 @@
     </div>
 
     <!-- Tabela e Barras de Projeção Mensal -->
-    <div class="forecast-grid glass">
+    <div class="forecast-grid surface-panel">
       <h5><app-icon name="bar-chart" [size]="16" /> Projeção de Demanda Mensal (Próximos 6 Meses)</h5>
       
       <div class="bars-container">

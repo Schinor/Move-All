@@ -1,23 +1,71 @@
 import { Injectable, signal } from '@angular/core';
 
-type Theme = 'dark' | 'light';
+export type Theme = 'light' | 'dark' | 'system';
 
-/** Controla o tema estampando data-theme no <html> (dark-first). */
+const THEME_KEY = 'move:theme';
+
+/** Preferência visual persistida, com o sistema como estado inicial honesto. */
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
-  readonly theme = signal<Theme>('dark');
+  readonly theme = signal<Theme>(this.readTheme());
 
   constructor() {
     this.apply(this.theme());
+    this.watchSystemTheme();
   }
 
   toggle(): void {
-    const next: Theme = this.theme() === 'dark' ? 'light' : 'dark';
-    this.theme.set(next);
-    this.apply(next);
+    const current = this.theme();
+    const next: Theme = current === 'system' ? 'light' : current === 'light' ? 'dark' : 'system';
+    this.setTheme(next);
+  }
+
+  setTheme(theme: Theme): void {
+    this.theme.set(theme);
+    this.apply(theme);
+    try {
+      window.localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // A preferência continua válida nesta sessão quando o storage está indisponível.
+    }
+  }
+
+  label(): string {
+    const current = this.theme();
+    return current === 'system'
+      ? 'sistema'
+      : current === 'light'
+        ? 'claro'
+        : 'escuro';
+  }
+
+  icon(): 'sun' | 'moon' | 'monitor' {
+    return this.theme() === 'light' ? 'moon' : this.theme() === 'dark' ? 'sun' : 'monitor';
   }
 
   private apply(theme: Theme): void {
+    if (theme === 'system') {
+      document.documentElement.removeAttribute('data-theme');
+      return;
+    }
     document.documentElement.setAttribute('data-theme', theme);
+  }
+
+  private readTheme(): Theme {
+    try {
+      const stored = window.localStorage.getItem(THEME_KEY);
+      return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'system';
+    } catch {
+      return 'system';
+    }
+  }
+
+  private watchSystemTheme(): void {
+    if (typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (): void => {
+      if (this.theme() === 'system') this.apply('system');
+    };
+    media.addEventListener?.('change', onChange);
   }
 }

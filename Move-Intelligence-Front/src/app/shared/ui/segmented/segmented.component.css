@@ -1,0 +1,29 @@
+.segmented {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 3px;
+  overflow-x: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.segmented button {
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.segmented button:hover,
+.segmented button.selected {
+  color: var(--text);
+  background: var(--surface);
+  border-color: var(--border);
+}

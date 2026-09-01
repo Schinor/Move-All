@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { MonteCarloHistogramBin } from '../../../../core/models/contract.models';
 import { ChartComponent } from '../../../ui/chart/chart.component';
+import { ThemeService } from '../../../../core/services/theme.service';
+import { readEchartsTheme } from '../../../charts/echarts-theme';
 
 @Component({
   selector: 'app-monte-carlo-histogram',
@@ -11,9 +13,13 @@ import { ChartComponent } from '../../../ui/chart/chart.component';
   styleUrl: './monte-carlo-histogram.component.css',
 })
 export class MonteCarloHistogramComponent {
+  private readonly theme = inject(ThemeService);
   readonly bins = input<MonteCarloHistogramBin[]>([]);
 
-  readonly options = computed<EChartsCoreOption>(() => ({
+  readonly options = computed<EChartsCoreOption>(() => {
+    this.theme.theme();
+    const palette = readEchartsTheme();
+    return {
     backgroundColor: 'transparent',
     grid: { left: 16, right: 16, top: 18, bottom: 24, containLabel: true },
     tooltip: {
@@ -24,25 +30,26 @@ export class MonteCarloHistogramComponent {
     xAxis: {
       type: 'category',
       data: this.bins().map((bin) => this.formatBRL(bin.min)),
-      axisLabel: { color: '#9aa7a9', rotate: 30 },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,.14)' } },
+      axisLabel: { color: palette.text3, rotate: 30 },
+      axisLine: { lineStyle: { color: palette.border } },
     },
     yAxis: {
       type: 'value',
-      axisLabel: { color: '#9aa7a9' },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,.08)' } },
+      axisLabel: { color: palette.text3 },
+      splitLine: { lineStyle: { color: palette.border } },
     },
     series: [
       {
         type: 'bar',
         data: this.bins().map((bin) => ({
           value: bin.count,
-          itemStyle: { color: bin.max < 0 ? '#d86b6b' : '#66d9a5' },
+          itemStyle: { color: bin.max < 0 ? palette.chart5 : palette.chart1 },
         })),
         barWidth: '82%',
       },
     ],
-  }));
+    };
+  });
 
   private formatBRL(value: number): string {
     return new Intl.NumberFormat('pt-BR', {

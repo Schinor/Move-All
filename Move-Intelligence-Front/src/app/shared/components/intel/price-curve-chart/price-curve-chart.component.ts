@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { MonteCarloPricePoint } from '../../../../core/models/contract.models';
 import { ChartComponent } from '../../../ui/chart/chart.component';
+import { ThemeService } from '../../../../core/services/theme.service';
+import { readEchartsTheme } from '../../../charts/echarts-theme';
 
 @Component({
   selector: 'app-price-curve-chart',
@@ -11,25 +13,29 @@ import { ChartComponent } from '../../../ui/chart/chart.component';
   styleUrl: './price-curve-chart.component.css',
 })
 export class PriceCurveChartComponent {
+  private readonly theme = inject(ThemeService);
   readonly points = input<MonteCarloPricePoint[]>([]);
 
-  readonly options = computed<EChartsCoreOption>(() => ({
+  readonly options = computed<EChartsCoreOption>(() => {
+    this.theme.theme();
+    const palette = readEchartsTheme();
+    return {
     backgroundColor: 'transparent',
     grid: { left: 16, right: 16, top: 18, bottom: 24, containLabel: true },
     tooltip: { trigger: 'axis' },
     xAxis: {
       type: 'category',
       data: this.points().map((point) => this.formatBRL(point.price)),
-      axisLabel: { color: '#9aa7a9', rotate: 30 },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,.14)' } },
+      axisLabel: { color: palette.text3, rotate: 30 },
+      axisLine: { lineStyle: { color: palette.border } },
     },
     yAxis: {
       type: 'value',
       axisLabel: {
-        color: '#9aa7a9',
+        color: palette.text3,
         formatter: (value: number) => this.formatBRL(value),
       },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,.08)' } },
+      splitLine: { lineStyle: { color: palette.border } },
     },
     series: [
       {
@@ -37,11 +43,11 @@ export class PriceCurveChartComponent {
         smooth: true,
         symbol: 'none',
         data: this.points().map((point) => point.medianVpl),
-        lineStyle: { color: '#66d9a5', width: 2 },
-        areaStyle: { color: 'rgba(77, 220, 155, .14)' },
+        lineStyle: { color: palette.chart1, width: 2 },
       },
     ],
-  }));
+    };
+  });
 
   private formatBRL(value: number): string {
     return new Intl.NumberFormat('pt-BR', {

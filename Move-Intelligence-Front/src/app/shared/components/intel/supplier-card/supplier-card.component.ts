@@ -1,8 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { Supplier } from '../../../../core/models/contract.models';
 import { RiskBadgeComponent } from '../../../ui/risk-badge/risk-badge.component';
-import { ConfidenceIndicatorComponent } from '../confidence-indicator/confidence-indicator.component';
-import { IconComponent } from '../../../ui/icon/icon.component';
+import { IconComponent, IconName } from '../../../ui/icon/icon.component';
 
 @Component({
   selector: 'app-supplier-card',
@@ -20,21 +19,30 @@ export class SupplierCardComponent {
     const s = (this.supplier() as any).rating_stars ?? this.supplier().ratingStars;
     if (s !== undefined && s !== null) return s;
     const val = this.supplier().score?.value;
-    return val ? Math.round((val / 20) * 10) / 10 : 4.5;
+    return val === null || val === undefined ? null : Math.round((val / 20) * 10) / 10;
   });
 
   readonly tier = computed(() => {
     const t = (this.supplier() as any).tier ?? this.supplier().tier;
     if (t) return t;
-    const st = this.stars();
-    if (st >= 4.5) return 'Diamante';
-    if (st >= 3.8) return 'Ouro';
-    if (st >= 3.0) return 'Prata';
-    return 'Bronze';
+    return 'Não informado';
   });
 
-  readonly totalProducts = computed(() => (this.supplier() as any).total_products ?? this.supplier().totalProducts ?? 6);
-  readonly totalSales = computed(() => (this.supplier() as any).total_monthly_sales ?? this.supplier().totalMonthlySales ?? 1250);
+  readonly totalProducts = computed(() => (this.supplier() as any).total_products ?? this.supplier().totalProducts ?? null);
+  readonly totalSales = computed(() => (this.supplier() as any).total_monthly_sales ?? this.supplier().totalMonthlySales ?? null);
+
+  readonly salesLabel = computed(() => {
+    const value = this.totalSales();
+    return value === null ? '—' : `${value.toLocaleString('pt-BR')} un/mês`;
+  });
+
+  readonly tierIcon = computed<IconName>(() => {
+    const tier = this.tier();
+    if (tier === 'Diamante') return 'diamond';
+    if (tier === 'Ouro') return 'medal-gold';
+    if (tier === 'Prata') return 'medal-silver';
+    return 'medal-bronze';
+  });
 
   private formatUsd(value: number | null): string {
     if (value === null) {

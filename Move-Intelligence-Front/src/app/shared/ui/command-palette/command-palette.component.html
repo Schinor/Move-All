@@ -1,0 +1,77 @@
+@if (isOpen()) {
+  <div class="palette-backdrop" (click)="onBackdropClick()">
+    <section
+      #dialog
+      class="palette"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="palette-title"
+      (click)="$event.stopPropagation()"
+    >
+      <h2 id="palette-title" class="sr-only">Buscar na Move Intelligence</h2>
+      <div class="palette-search">
+        <app-icon name="search" [size]="18" />
+        <input
+          #searchInput
+          type="search"
+          [value]="query()"
+          (input)="setQuery($any($event.target).value)"
+          placeholder="Buscar telas, produtos ou ações…"
+          aria-label="Buscar telas, produtos ou ações"
+          autocomplete="off"
+        />
+        <kbd><app-icon name="command" [size]="13" /> K</kbd>
+      </div>
+
+      <div class="palette-body">
+        @if (items().length) {
+          <div class="palette-list" role="listbox" aria-label="Resultados da busca">
+            @for (item of items(); track item.id; let index = $index) {
+              <button
+                type="button"
+                class="palette-item"
+                [class.selected]="selectedIndex() === index"
+                [attr.data-palette-index]="index"
+                [attr.aria-selected]="selectedIndex() === index"
+                role="option"
+                (mouseenter)="selectedIndex.set(index)"
+                (click)="execute(item)"
+              >
+                <span class="item-icon"><app-icon [name]="item.icon" [size]="17" /></span>
+                <span class="item-copy">
+                  <strong>{{ item.label }}</strong>
+                  <small>{{ item.description }}</small>
+                </span>
+                @if (item.kind === 'product') {
+                  <span class="item-hint">Dossiê</span>
+                } @else {
+                  <span class="item-key">↵</span>
+                }
+              </button>
+            }
+          </div>
+        } @else {
+          <div class="palette-empty" role="status">
+            <strong>Nada encontrado para «{{ query() }}»</strong>
+            <span>Tente outro termo ou use uma ação sugerida.</span>
+            <div class="suggested-actions">
+              @for (item of suggested(); track item.id) {
+                <button type="button" class="suggested" (click)="execute(item)">
+                  <app-icon [name]="item.icon" [size]="15" /> {{ item.label }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+        @if (isSearching()) {
+          <p class="searching" role="status">Consultando produtos…</p>
+        }
+      </div>
+      <footer class="palette-footer">
+        <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+        <span><kbd>↵</kbd> abrir</span>
+        <span><kbd>esc</kbd> fechar</span>
+      </footer>
+    </section>
+  </div>
+}

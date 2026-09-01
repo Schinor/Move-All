@@ -1,0 +1,30 @@
+.table-shell {
+  min-width: 0;
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.table-shell :where(table) {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table-shell :where(th, td) {
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.table-shell :where(th) {
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table-shell :where(tr:last-child td) {
+  border-bottom: 0;
+}

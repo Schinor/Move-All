@@ -42,13 +42,13 @@ export class CompetitorMatrixComponent implements OnInit {
     });
   }
 
-  formatCurrency(value: number | undefined): string {
-    if (!value) return 'R$ 0';
+  formatCurrency(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
   }
 
-  formatNumber(value: number | undefined): string {
-    if (!value) return '0';
+  formatNumber(value: number | null | undefined): string {
+    if (value === null || value === undefined) return '—';
     return new Intl.NumberFormat('pt-BR').format(value);
   }
 }

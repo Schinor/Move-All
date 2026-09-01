@@ -1,18 +1,18 @@
-<article class="supplier glass" [class.tier-diamante]="tier() === 'Diamante'" [class.tier-ouro]="tier() === 'Ouro'">
+<article class="supplier surface-panel" [class.tier-diamante]="tier() === 'Diamante'" [class.tier-ouro]="tier() === 'Ouro'">
   <header>
     <span class="flag"><app-icon name="globe" [size]="16" /></span>
     <div class="name-block">
       <h3>{{ supplier().name }}</h3>
       <div class="subtitle-row">
-        <span>{{ supplier().country ?? 'China' }}</span>
+        <span>{{ supplier().country ?? 'Origem não informada' }}</span>
         <span class="tier-badge" [class.diamante]="tier() === 'Diamante'" [class.ouro]="tier() === 'Ouro'" [class.prata]="tier() === 'Prata'">
-          <app-icon [name]="tier() === 'Diamante' ? 'diamond' : tier() === 'Ouro' ? 'medal-gold' : 'medal-silver'" [size]="14" /> Tier {{ tier() }}
+          <app-icon [name]="tierIcon()" [size]="14" /> Tier {{ tier() }}
         </span>
       </div>
     </div>
     <div class="rating-box">
       <div class="stars-gold">
-        <app-icon name="star" [size]="13" /> <strong>{{ stars() }}</strong><small>/5.0</small>
+        <app-icon name="star" [size]="13" /> <strong>{{ stars() ?? '—' }}</strong>@if (stars() !== null) { <small>/5.0</small> }
       </div>
     </div>
   </header>
@@ -20,15 +20,15 @@
   <div class="facts">
     <div>
       <span>Catálogo</span>
-      <strong class="num">{{ totalProducts() }} SKUs</strong>
+      <strong class="num">{{ totalProducts() ?? '—' }}{{ totalProducts() !== null ? ' SKUs' : '' }}</strong>
     </div>
     <div>
       <span>Vendas Est.</span>
-      <strong class="num">{{ totalSales().toLocaleString('pt-BR') }} un/mês</strong>
+      <strong class="num">{{ salesLabel() }}</strong>
     </div>
     <div>
       <span>MOQ</span>
-      <strong class="num">{{ supplier().moq ?? 1 }} un</strong>
+      <strong class="num">{{ supplier().moq ?? '—' }}{{ supplier().moq !== null ? ' un' : '' }}</strong>
     </div>
     <div>
       <span>FOB Médio</span>
@@ -39,7 +39,7 @@
   <footer>
     <div class="meta-row">
       <app-risk-badge [level]="supplier().risk ?? 'baixo'" of="do fornecedor" />
-      <span class="status"><app-icon name="factory" [size]="14" /> Fábrica Homologada</span>
+      <span class="status"><app-icon name="file-check" [size]="14" /> Dados do fornecedor</span>
     </div>
     <div class="certs">
       @if (supplier().certifications.length) {
@@ -47,7 +47,7 @@
           <span>{{ cert }}</span>
         }
       } @else {
-        <span>ISO 9001 · BSCI</span>
+        <span>Certificações não informadas</span>
       }
     </div>
   </footer>

@@ -48,17 +48,17 @@ export class UnitEconomicsCalculatorComponent implements OnInit {
     this.trends.unitEconomicsDefaults(this.productClusterId).subscribe({
       next: (defaults) => {
         if (defaults) {
-          this.precoVendaBrl.set(defaults.precoVendaBrl || 599);
-          this.fobUsd.set(defaults.fobUsd || 28.0);
-          this.cambioUsd.set(defaults.cambioUsd || 5.45);
-          this.freteUnitarioUsd.set(defaults.freteUnitarioUsd || 6.5);
-          this.impostoImportacaoPct.set(defaults.impostoImportacaoPct || 35.0);
-          this.icmsPct.set(defaults.icmsPct || 18.0);
-          this.comissaoMarketplacePct.set(defaults.comissaoMarketplacePct || 16.0);
-          this.custoFulfillmentBrl.set(defaults.custoFulfillmentBrl || 32.0);
-          this.custoFixoMensalBrl.set(defaults.custoFixoMensalBrl || 4500.0);
-          this.elasticidadePreco.set(defaults.elasticidadePreco || -1.6);
-          this.volumeBaseMensal.set(defaults.volumeBaseMensal || 250);
+          this.precoVendaBrl.set(defaults.precoVendaBrl ?? 599);
+          this.fobUsd.set(defaults.fobUsd ?? 28.0);
+          this.cambioUsd.set(defaults.cambioUsd ?? 5.45);
+          this.freteUnitarioUsd.set(defaults.freteUnitarioUsd ?? 6.5);
+          this.impostoImportacaoPct.set(defaults.impostoImportacaoPct ?? 35.0);
+          this.icmsPct.set(defaults.icmsPct ?? 18.0);
+          this.comissaoMarketplacePct.set(defaults.comissaoMarketplacePct ?? 16.0);
+          this.custoFulfillmentBrl.set(defaults.custoFulfillmentBrl ?? 32.0);
+          this.custoFixoMensalBrl.set(defaults.custoFixoMensalBrl ?? 4500.0);
+          this.elasticidadePreco.set(defaults.elasticidadePreco ?? -1.6);
+          this.volumeBaseMensal.set(defaults.volumeBaseMensal ?? 250);
         }
         this.recalculate();
       },
@@ -95,13 +95,13 @@ export class UnitEconomicsCalculatorComponent implements OnInit {
     });
   }
 
-  formatCurrency(value: number | undefined): string {
-    if (value === undefined || value === null) return 'R$ 0,00';
+  formatCurrency(value: number | null | undefined): string {
+    if (value === undefined || value === null) return '—';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }
 
-  formatNumber(value: number | undefined): string {
-    if (value === undefined || value === null) return '0';
+  formatNumber(value: number | null | undefined): string {
+    if (value === undefined || value === null) return '—';
     return new Intl.NumberFormat('pt-BR').format(value);
   }
 }

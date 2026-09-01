@@ -62,33 +62,39 @@ export class SupplierComparisonTableComponent {
     }
   }
 
-  getStars(supplier: Supplier): number {
+  getStars(supplier: Supplier): number | null {
     const s = (supplier as any).rating_stars ?? supplier.ratingStars;
     if (s !== undefined && s !== null) return s;
     const val = supplier.score?.value;
-    return val ? Math.round((val / 20) * 10) / 10 : 4.5;
+    return val === null || val === undefined ? null : Math.round((val / 20) * 10) / 10;
   }
 
   getTier(supplier: Supplier): string {
     const t = (supplier as any).tier ?? supplier.tier;
     if (t) return t;
     const st = this.getStars(supplier);
+    if (st === null) return 'Não informado';
     if (st >= 4.5) return 'Diamante';
     if (st >= 3.8) return 'Ouro';
     if (st >= 3.0) return 'Prata';
     return 'Bronze';
   }
 
-  getTotalProducts(supplier: Supplier): number {
-    return (supplier as any).total_products ?? supplier.totalProducts ?? 6;
+  getTotalProducts(supplier: Supplier): number | null {
+    return (supplier as any).total_products ?? supplier.totalProducts ?? null;
   }
 
-  getTotalSales(supplier: Supplier): number {
-    return (supplier as any).total_monthly_sales ?? supplier.totalMonthlySales ?? 1250;
+  getTotalSales(supplier: Supplier): number | null {
+    return (supplier as any).total_monthly_sales ?? supplier.totalMonthlySales ?? null;
   }
 
   formatUsd(value: number | null): string {
     if (value === null) return '—';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD' }).format(value);
+  }
+
+  formatSales(supplier: Supplier): string {
+    const value = this.getTotalSales(supplier);
+    return value === null ? '—' : `${value.toLocaleString('pt-BR')} un/mês`;
   }
 }

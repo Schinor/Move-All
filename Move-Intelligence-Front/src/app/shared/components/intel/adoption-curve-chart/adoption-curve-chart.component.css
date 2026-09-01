@@ -1,54 +1,55 @@
 .chart-card {
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
 }
 header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--sp-2);
 }
 .chart-title {
   display: block;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   font-weight: 600;
-  color: var(--foreground);
+  color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 .chart-subtitle {
   display: block;
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  margin-top: 2px;
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  margin-top: var(--sp-1);
 }
 .header-metrics {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sp-2);
 }
 .growth-tag {
-  font-size: 0.75rem;
+  font-size: var(--fs-caption);
   font-weight: 700;
-  padding: 0.2rem 0.5rem;
-  border-radius: 9999px;
+  min-height: 28px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-full);
   letter-spacing: 0.02em;
 }
 .growth-tag.positive {
-  background: rgba(102, 217, 165, 0.15);
-  color: #66d9a5;
-  border: 1px solid rgba(102, 217, 165, 0.3);
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success);
 }
 .growth-tag.negative {
-  background: rgba(248, 113, 113, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
 }
 .points-badge {
-  font-size: 0.75rem;
-  color: var(--muted-foreground);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0.2rem 0.5rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: var(--fs-caption);
+  color: var(--text-2);
+  background: var(--surface-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
 }

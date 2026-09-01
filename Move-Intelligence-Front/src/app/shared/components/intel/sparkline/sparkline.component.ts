@@ -13,9 +13,7 @@ export class SparklineComponent {
 
   private readonly w = 100;
   private readonly h = 36;
-  readonly gradId = `sp-${Math.random().toString(36).slice(2)}`;
-
-  readonly stroke = computed(() => (this.up() ? 'var(--primary)' : 'var(--danger)'));
+  readonly stroke = computed(() => (this.up() ? 'var(--success)' : 'var(--danger)'));
 
   private readonly points = computed<[number, number][]>(() => {
     const d = this.data();
@@ -38,8 +36,4 @@ export class SparklineComponent {
       .join(' '),
   );
 
-  readonly areaPath = computed(() => {
-    const p = this.linePath();
-    return p ? `${p} L${this.w},${this.h} L0,${this.h} Z` : '';
-  });
 }

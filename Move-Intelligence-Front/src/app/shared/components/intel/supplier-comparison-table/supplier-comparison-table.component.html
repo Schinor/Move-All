@@ -1,4 +1,4 @@
-<div class="table-wrap glass">
+<div class="table-wrap surface-panel">
   <table>
     <thead>
       <tr>
@@ -19,29 +19,29 @@
           <td>
             <div class="name-cell">
               <strong>{{ supplier.name }}</strong>
-              <span class="category-tag">{{ supplier.category ?? 'Equipamento fitness' }}</span>
+              <span class="category-tag">{{ supplier.category ?? 'Categoria não informada' }}</span>
             </div>
           </td>
-          <td><app-icon name="globe" [size]="14" /> {{ supplier.country ?? 'China' }}</td>
+          <td><app-icon name="globe" [size]="14" /> {{ supplier.country ?? 'Não informada' }}</td>
           <td>
             <div class="stars-cell">
-              <span class="stars-gold"><app-icon name="star" [size]="12" /> {{ getStars(supplier) }}</span>
+              <span class="stars-gold"><app-icon name="star" [size]="12" /> {{ getStars(supplier) ?? '—' }}</span>
               <span class="tier-tag" [class.diamante]="getTier(supplier) === 'Diamante'" [class.ouro]="getTier(supplier) === 'Ouro'">
                 {{ getTier(supplier) }}
               </span>
             </div>
           </td>
-          <td class="num">{{ getTotalProducts(supplier) }} SKUs</td>
-          <td class="num">{{ getTotalSales(supplier).toLocaleString('pt-BR') }} un/mês</td>
-          <td class="num">{{ supplier.moq ?? 1 }} un</td>
+          <td class="num">{{ getTotalProducts(supplier) ?? '—' }}{{ getTotalProducts(supplier) !== null ? ' SKUs' : '' }}</td>
+          <td class="num">{{ formatSales(supplier) }}</td>
+          <td class="num">{{ supplier.moq ?? '—' }}{{ supplier.moq !== null ? ' un' : '' }}</td>
           <td class="num"><strong>{{ formatUsd(supplier.fob) }}</strong></td>
-          <td>45 dias</td>
+          <td>{{ supplier.leadTime === null ? '—' : supplier.leadTime + ' dias' }}</td>
           <td>
             <div class="score-cell">
               <div class="score-bar-bg">
-                <span class="score-bar-fill" [style.width.%]="supplier.score.value ?? 85"></span>
+                <span class="score-bar-fill" [style.width.%]="supplier.score.value ?? 0"></span>
               </div>
-              <span class="num">{{ supplier.score.value ?? 85 }}</span>
+              <span class="num">{{ supplier.score.value ?? '—' }}</span>
             </div>
           </td>
         </tr>

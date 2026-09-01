@@ -1,15 +1,15 @@
 .chart-card {
-  border-radius: var(--radius-lg);
-  padding: 1rem;
+  border-radius: var(--r-md);
+  padding: var(--sp-4);
 }
 header {
   display: flex;
   justify-content: space-between;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 header strong {
-  color: var(--foreground);
+  color: var(--text);
 }

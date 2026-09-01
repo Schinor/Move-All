@@ -1,0 +1,38 @@
+.explain-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.explain-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.explain-trigger:hover {
+  color: var(--brand-text);
+  background: var(--brand-weak);
+}
+
+.explain-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--sp-2));
+  z-index: 20;
+  width: min(280px, 70vw);
+  padding: var(--sp-3);
+  color: var(--text);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-popover);
+}

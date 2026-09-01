@@ -1,49 +1,113 @@
-<header class="topbar">
-  <div class="left">
+<header class="topbar" (click)="closeMenus()">
+  <div class="topbar-leading">
     <button
       type="button"
       class="icon-btn sidebar-toggle"
-      (click)="toggleSidebar()"
+      (click)="$event.stopPropagation(); toggleSidebar()"
       [attr.aria-expanded]="layout.sidebarOpen()"
       aria-controls="app-navigation"
-      [attr.aria-label]="layout.sidebarOpen() ? 'Ocultar menu principal' : 'Mostrar menu principal'"
-      [attr.title]="layout.sidebarOpen() ? 'Ocultar menu principal' : 'Mostrar menu principal'"
+      [attr.aria-label]="layout.sidebarOpen() ? 'Recolher navegação' : 'Abrir navegação'"
+      [attr.title]="layout.sidebarOpen() ? 'Recolher navegação' : 'Abrir navegação'"
     >
-      <app-icon [name]="layout.sidebarOpen() ? 'panel-left-close' : 'panel-left'" [size]="16" />
+      <app-icon [name]="layout.sidebarOpen() ? 'panel-left-close' : 'panel-left'" [size]="17" />
     </button>
-    <span class="market-pill">
-      <span class="dot"></span>
-      Mercado Aberto
-    </span>
-    <span class="quote num">BRL · Atualizado há 2min · 14h32 BRT</span>
-  </div>
-
-  <div class="search-wrap">
-    <div class="search">
-      <span class="search-icon"><app-icon name="search" [size]="16" /></span>
-      <input type="search" placeholder="Buscar tendências, categorias, fornecedores…" aria-label="Buscar" />
-      <kbd class="kbd"><app-icon name="command" [size]="12" /> K</kbd>
+    <div class="breadcrumb" aria-label="Localização atual">
+      <span class="eyebrow">Move Intelligence</span>
+      <span class="breadcrumb-separator" aria-hidden="true">/</span>
+      <strong>{{ breadcrumb() }}</strong>
     </div>
   </div>
 
-  <div class="right">
-    <button type="button" class="ask">
-      <app-icon name="sparkles" [size]="14" />
+  <button
+    type="button"
+    class="search-trigger"
+    aria-label="Buscar telas, produtos ou ações"
+    (click)="$event.stopPropagation(); openPalette($event, palette)"
+  >
+    <span class="search-copy"><app-icon name="search" [size]="16" /> Buscar tendências, categorias ou fornecedores</span>
+    <kbd><app-icon name="command" [size]="12" /> K</kbd>
+  </button>
+
+  <div class="topbar-actions" (click)="$event.stopPropagation()">
+    <a class="ask-button" routerLink="/ai-copilot" aria-label="Abrir AI Copilot">
+      <app-icon name="sparkles" [size]="15" />
       <span>Ask Move AI</span>
+    </a>
+    <button
+      type="button"
+      class="icon-btn"
+      (click)="toggleTheme()"
+      [attr.aria-label]="'Tema: ' + themeService.label()"
+      [attr.title]="'Tema: ' + themeService.label()"
+    >
+      <app-icon [name]="themeService.icon()" [size]="17" />
     </button>
-    <button type="button" class="icon-btn" (click)="toggleTheme()" aria-label="Alternar tema" title="Alternar tema">
-      <app-icon [name]="theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
-    </button>
-    <button type="button" class="icon-btn bell" aria-label="Notificações" title="Notificações">
-      <app-icon name="bell" [size]="16" />
-      <span class="badge"></span>
-    </button>
-    <div class="user">
-      <div class="avatar">RB</div>
-      <div class="user-text">
-        <span class="user-name">Rafael Brudden</span>
-        <span class="user-role">Diretor de Produto</span>
+    @if (unreadAlerts().length > 0) {
+      <div class="menu-anchor">
+        <button
+          type="button"
+          class="icon-btn notification-button"
+          (click)="toggleNotifications()"
+          aria-label="Abrir notificações não lidas"
+          [attr.aria-expanded]="notificationsOpen()"
+          aria-controls="notification-menu"
+          title="Notificações não lidas"
+        >
+          <app-icon name="bell" [size]="17" />
+          <span class="notification-dot" aria-hidden="true"></span>
+        </button>
+        @if (notificationsOpen()) {
+          <section id="notification-menu" class="popover notification-menu" aria-label="Notificações">
+            <div class="popover-heading">
+              <strong>Notificações</strong>
+              <span>{{ unreadAlerts().length }} não lida(s)</span>
+            </div>
+            <div class="notification-list">
+              @for (alert of unreadAlerts(); track alert.id) {
+                <a class="notification" routerLink="/sinais" (click)="closeMenus()">
+                  <span class="severity" [attr.data-severity]="alertSeverity(alert)"></span>
+                  <span>
+                    <strong>{{ alert.message }}</strong>
+                    <small>{{ alert.createdAt | date: 'dd/MM/yyyy HH:mm' }}</small>
+                  </span>
+                </a>
+              }
+            </div>
+            <a class="popover-link" routerLink="/sinais" (click)="closeMenus()">Ver todos os sinais</a>
+          </section>
+        }
       </div>
+    }
+    <div class="menu-anchor">
+      <button
+        type="button"
+        class="account-button"
+        (click)="toggleAccount()"
+        [attr.aria-expanded]="accountOpen()"
+        aria-controls="account-menu"
+        aria-label="Abrir menu da conta"
+      >
+        <span class="account-mark" aria-hidden="true">M</span>
+        <span class="account-copy"><strong>Conta</strong><small>Move Intelligence</small></span>
+        <app-icon name="chevron-down" [size]="14" />
+      </button>
+      @if (accountOpen()) {
+        <section id="account-menu" class="popover account-menu" aria-label="Menu da conta">
+          <div class="popover-heading">
+            <strong>Conta</strong>
+            <span>Acesso à plataforma</span>
+          </div>
+          <button type="button" class="menu-action" (click)="toggleTheme()">
+            <app-icon [name]="themeService.icon()" [size]="16" />
+            <span>Tema: {{ themeService.label() }}</span>
+          </button>
+          <a class="menu-action" routerLink="/login" (click)="closeMenus()">
+            <app-icon name="lock" [size]="16" />
+            <span>Gerenciar acesso</span>
+          </a>
+        </section>
+      }
     </div>
   </div>
 </header>
+<app-command-palette #palette />

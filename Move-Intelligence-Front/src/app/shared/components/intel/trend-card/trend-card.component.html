@@ -1,7 +1,4 @@
 <a class="trend-card" [routerLink]="['/tendencia', trend().productClusterId]">
-  <div class="topline"></div>
-  <div class="glow"></div>
-
   <div class="inner">
     <div class="head">
       <div class="head-left">
@@ -19,7 +16,7 @@
 
     <div class="score-row">
       <div>
-        <div class="score num text-gradient">{{ scoreValue() ?? '—' }}</div>
+        <div class="score num">{{ scoreValue() ?? '—' }}</div>
         <div class="score-label">Trend Score</div>
       </div>
       @if (trend().spark?.length) {
