@@ -7,6 +7,10 @@
   font-size: var(--fs-caption);
 }
 
+.view-toggle {
+  display: block;
+}
+
 .toolbar {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto auto;
@@ -81,10 +85,34 @@
 }
 
 .loading-table {
-  display: grid;
+  display: none;
   gap: 1px;
   overflow: hidden;
   background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.loading-table.active {
+  display: grid;
+}
+
+.loading-card-grid {
+  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-4);
+}
+
+.loading-card-grid.active {
+  display: grid;
+}
+
+.loading-card {
+  display: grid;
+  gap: var(--sp-4);
+  min-height: 286px;
+  padding: var(--sp-4);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
 }
@@ -103,6 +131,10 @@
 }
 
 app-data-table {
+  display: none;
+}
+
+app-data-table.active {
   display: block;
 }
 
@@ -216,8 +248,7 @@ th.product-heading {
   font-weight: 700;
 }
 
-.growth.down,
-.mobile-metrics .down {
+.growth.down {
   color: var(--danger);
 }
 
@@ -236,50 +267,18 @@ th.product-heading {
   color: var(--text);
 }
 
-.mobile-cards {
+.card-grid {
   display: none;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-4);
 }
 
-.mobile-card {
-  padding: var(--sp-4);
-  border-radius: var(--r-md);
-}
-
-.mobile-card-heading {
+.card-grid.active {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
-  gap: var(--sp-3);
 }
 
-.mobile-card-heading a {
-  color: var(--brand-text);
-}
-
-.mobile-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--sp-3);
-  margin: var(--sp-4) 0 0;
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--border);
-}
-
-.mobile-metrics div {
-  display: grid;
-  gap: 2px;
-}
-
-.mobile-metrics dt {
-  color: var(--text-3);
-  font-size: var(--fs-label);
-}
-
-.mobile-metrics dd {
-  margin: 0;
-  color: var(--text);
-  font-size: var(--fs-sm);
-  font-weight: 700;
+.card-grid app-trend-card {
+  min-width: 0;
 }
 
 @media (max-width: 1100px) {
@@ -290,16 +289,20 @@ th.product-heading {
 }
 
 @media (max-width: 767px) {
+  .view-toggle {
+    display: none;
+  }
+
   app-data-table {
     display: none;
   }
 
-  .mobile-cards {
+  .card-grid,
+  .loading-card-grid {
     display: grid;
-    gap: var(--sp-3);
   }
 
-  .mobile-metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .loading-table {
+    display: none;
   }
 }

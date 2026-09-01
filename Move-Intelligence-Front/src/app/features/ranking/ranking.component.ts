@@ -3,11 +3,14 @@ import { RouterLink } from '@angular/router';
 import { toAsyncState } from '../../core/api/async-state';
 import { TrendProduct, TrendStage } from '../../core/models/contract.models';
 import { TrendsService } from '../../core/services/trends.service';
+import { RankingViewMode, ViewModeService } from '../../core/services/view-mode.service';
+import { TrendCardComponent } from '../../shared/components/intel/trend-card/trend-card.component';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header/page-header.component';
 import { RiskBadgeComponent } from '../../shared/ui/risk-badge/risk-badge.component';
 import { SkeletonComponent } from '../../shared/ui/skeleton/skeleton.component';
+import { SegmentedComponent, SegmentOption } from '../../shared/ui/segmented/segmented.component';
 import { ScoreGaugeComponent } from '../../shared/components/intel/score-gauge/score-gauge.component';
 import { StatePanelComponent } from '../../shared/ui/state-panel/state-panel.component';
 import { DataTableComponent } from '../../shared/ui/data-table/data-table.component';
@@ -31,13 +34,17 @@ type StageFilter = 'all' | TrendStage | 'launch';
     ScoreGaugeComponent,
     IconComponent,
     DataTableComponent,
+    SegmentedComponent,
+    TrendCardComponent,
   ],
   templateUrl: './ranking.component.html',
   styleUrl: './ranking.component.css',
 })
 export class RankingComponent {
   private readonly trends = inject(TrendsService);
+  private readonly viewModeService = inject(ViewModeService);
   readonly products = toAsyncState(this.trends.listProducts({ sort: 'trend_score', limit: 50 }));
+  readonly viewMode = this.viewModeService.viewMode;
   readonly query = signal('');
   readonly stage = signal<StageFilter>('all');
   readonly sortKey = signal<SortKey>('score');
@@ -49,6 +56,10 @@ export class RankingComponent {
     { id: 'rising', label: 'Ascensão' },
     { id: 'peaking', label: 'Pico' },
     { id: 'launch', label: 'Lançar agora' },
+  ];
+  readonly viewOptions: SegmentOption[] = [
+    { value: 'table', label: 'Tabela' },
+    { value: 'cards', label: 'Cartões' },
   ];
 
   readonly rankedProducts = computed(() => {
@@ -80,6 +91,12 @@ export class RankingComponent {
 
   setStage(stage: StageFilter): void {
     this.stage.set(stage);
+  }
+
+  setViewMode(viewMode: string): void {
+    if (viewMode === 'table' || viewMode === 'cards') {
+      this.viewModeService.setViewMode(viewMode satisfies RankingViewMode);
+    }
   }
 
   sort(key: SortKey): void {

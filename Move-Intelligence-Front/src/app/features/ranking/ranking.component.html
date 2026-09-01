@@ -3,11 +3,24 @@
   subtitle="Produtos priorizados por sinais de tendência, oportunidade, crescimento e risco."
 >
   <span class="data-note">Dados fornecidos pela API</span>
+  <div class="view-toggle">
+    <app-segmented
+      label="Modo de visualização do ranking"
+      [options]="viewOptions"
+      [selected]="viewMode()"
+      (selectedChange)="setViewMode($event)"
+    />
+  </div>
 </app-page-header>
 
 @switch (products().status) {
   @case ('loading') {
-    <section class="loading-table" role="status" aria-label="Carregando ranking">
+    <section
+      class="loading-table"
+      [class.active]="viewMode() === 'table'"
+      role="status"
+      aria-label="Carregando ranking em tabela"
+    >
       @for (row of [1, 2, 3, 4, 5]; track row) {
         <div class="loading-row">
           <app-skeleton [width]="'7%'" />
@@ -15,6 +28,21 @@
           <app-skeleton [width]="'12%'" />
           <app-skeleton [width]="'14%'" />
           <app-skeleton [width]="'12%'" />
+        </div>
+      }
+    </section>
+    <section
+      class="loading-card-grid"
+      [class.active]="viewMode() === 'cards'"
+      role="status"
+      aria-label="Carregando ranking em cartões"
+    >
+      @for (card of [1, 2, 3, 4, 5, 6]; track card) {
+        <div class="loading-card">
+          <app-skeleton [width]="'55%'" [height]="'12px'" />
+          <app-skeleton [width]="'82%'" [height]="'20px'" />
+          <app-skeleton [width]="'30%'" [height]="'44px'" />
+          <app-skeleton [height]="'58px'" />
         </div>
       }
     </section>
@@ -59,7 +87,11 @@
     </section>
 
     @if (rows().length) {
-      <app-data-table label="Ranking de tendências">
+      <app-data-table
+        class="table-view"
+        [class.active]="viewMode() === 'table'"
+        label="Ranking de tendências"
+      >
         <table>
           <caption class="sr-only">Produtos classificados por Trend Score e indicadores relacionados</caption>
           <thead>
@@ -102,23 +134,13 @@
         </table>
       </app-data-table>
 
-      <div class="mobile-cards" aria-label="Ranking de tendências em cartões">
+      <div
+        class="card-grid"
+        [class.active]="viewMode() === 'cards'"
+        aria-label="Ranking de tendências em cartões"
+      >
         @for (product of rows(); track product.productClusterId) {
-          <article class="mobile-card surface-panel">
-            <div class="mobile-card-heading">
-              <span class="rank num">#{{ rank(product) }}</span>
-              <div class="product">
-                <strong>{{ product.canonicalName }}</strong>
-                <span>{{ (product.category | humanize) || 'Categoria não informada' }}</span>
-              </div>
-              <a [routerLink]="['/tendencia', product.productClusterId]" aria-label="Ver dossiê de {{ product.canonicalName }}"><app-icon name="arrow-up-right" [size]="16" /></a>
-            </div>
-            <dl class="mobile-metrics">
-              <div><dt>Trend Score</dt><dd class="num">{{ product.trendScore.value ?? '—' }}</dd></div>
-              <div><dt>Crescimento</dt><dd class="num" [class.down]="(product.growthPct ?? 0) < 0">{{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}</dd></div>
-              <div><dt>Risco</dt><dd><app-risk-badge [level]="product.risk" /></dd></div>
-            </dl>
-          </article>
+          <app-trend-card [trend]="product" />
         }
       </div>
     } @else {
