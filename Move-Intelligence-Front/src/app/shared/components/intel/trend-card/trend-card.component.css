@@ -1,3 +1,8 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
 .trend-card {
   position: relative;
   display: block;
@@ -6,6 +11,7 @@
   background: var(--surface);
   text-decoration: none;
   color: inherit;
+  height: 100%;
   transition: border-color var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
 }
 .trend-card:hover {
@@ -13,6 +19,9 @@
 }
 .inner {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: var(--sp-4);
 }
 .head {
@@ -45,14 +54,16 @@
   color: var(--brand-text);
 }
 .name {
+  display: -webkit-box;
+  min-block-size: 2lh;
   margin: var(--sp-1) 0 0;
   font-family: var(--font-display);
   font-size: var(--fs-body);
   font-weight: 600;
   line-height: var(--lh-body);
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .arrow {
   color: var(--text-3);
@@ -88,7 +99,7 @@
 .stats {
   margin-top: var(--sp-4);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: var(--sp-2);
 }
 .stat {
@@ -115,19 +126,21 @@
 .s-value.down {
   color: var(--danger);
 }
-.stat:nth-child(2) .s-value,
-.stat:nth-child(3) .s-value {
+.s-value.neutral {
   color: var(--text);
 }
 .foot {
-  margin-top: var(--sp-4);
+  margin-top: auto;
   padding-top: var(--sp-4);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
 }
 .pipeline {
+  margin-left: auto;
   font-size: var(--fs-caption);
   color: var(--text-2);
 }

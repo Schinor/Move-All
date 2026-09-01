@@ -5,12 +5,13 @@ import { RiskBadgeComponent } from '../../../ui/risk-badge/risk-badge.component'
 import { IconComponent } from '../../../ui/icon/icon.component';
 import { TrendProduct } from '../../../../core/models/contract.models';
 import { STAGE_LABEL, formatBRL } from '../../../util/format';
+import { HumanizePipe } from '../../../util/humanize.pipe';
 
 /** Cartão de tendência (portado do TrendCard do mockup). Dado via @Input. */
 @Component({
   selector: 'app-trend-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, SparklineComponent, RiskBadgeComponent, IconComponent],
+  imports: [RouterLink, SparklineComponent, RiskBadgeComponent, IconComponent, HumanizePipe],
   templateUrl: './trend-card.component.html',
   styleUrl: './trend-card.component.css',
 })
@@ -22,5 +23,10 @@ export class TrendCardComponent {
     this.trend().stage ? (STAGE_LABEL[this.trend().stage as string] ?? '') : '',
   );
   readonly scoreValue = computed(() => this.trend().trendScore?.value ?? null);
+  readonly hasStats = computed(() =>
+    [this.trend().growthPct, this.trend().marginPct, this.trend().leadTimeDays].some(
+      (value) => value !== null,
+    ),
+  );
   readonly pipeline = computed(() => formatBRL(this.trend().projectedRevenue));
 }

@@ -3,13 +3,13 @@
     <div class="head">
       <div class="head-left">
         <div class="tags">
-          <span class="cat">{{ trend().category ?? '—' }}</span>
+          <span class="cat">{{ (trend().category | humanize) || 'Categoria não informada' }}</span>
           <span class="sep"></span>
           @if (stageLabel()) {
             <span class="stage">{{ stageLabel() }}</span>
           }
         </div>
-        <h3 class="name">{{ trend().canonicalName }}</h3>
+        <h3 class="name" [attr.title]="trend().canonicalName">{{ trend().canonicalName }}</h3>
       </div>
       <span class="arrow"><app-icon name="arrow-up-right" [size]="16" /></span>
     </div>
@@ -26,27 +26,37 @@
       }
     </div>
 
-    <div class="stats">
-      <div class="stat">
-        <div class="s-label">Crescimento</div>
-        <div class="s-value num" [class.down]="!up()">
-          <app-icon [name]="up() ? 'trending-up' : 'trending-down'" [size]="12" />
-          {{ trend().growthPct !== null ? (up() ? '+' : '') + trend().growthPct + '%' : '—' }}
-        </div>
+    @if (hasStats()) {
+      <div class="stats">
+        @if (trend().growthPct !== null) {
+          <div class="stat">
+            <div class="s-label">Crescimento</div>
+            <div class="s-value num" [class.down]="!up()">
+              <app-icon [name]="up() ? 'trending-up' : 'trending-down'" [size]="12" />
+              {{ (up() ? '+' : '') + trend().growthPct + '%' }}
+            </div>
+          </div>
+        }
+        @if (trend().marginPct !== null) {
+          <div class="stat">
+            <div class="s-label">Margem</div>
+            <div class="s-value num neutral">{{ trend().marginPct }}%</div>
+          </div>
+        }
+        @if (trend().leadTimeDays !== null) {
+          <div class="stat">
+            <div class="s-label">Lead-time</div>
+            <div class="s-value num neutral">{{ trend().leadTimeDays }}d</div>
+          </div>
+        }
       </div>
-      <div class="stat">
-        <div class="s-label">Margem</div>
-        <div class="s-value num">{{ trend().marginPct !== null ? trend().marginPct + '%' : '—' }}</div>
-      </div>
-      <div class="stat">
-        <div class="s-label">Lead-time</div>
-        <div class="s-value num">{{ trend().leadTimeDays !== null ? trend().leadTimeDays + 'd' : '—' }}</div>
-      </div>
-    </div>
+    }
 
     <div class="foot">
       <app-risk-badge [level]="trend().risk" of="de mercado" />
-      <div class="pipeline">Pipeline <span class="num">{{ pipeline() }}</span></div>
+      @if (trend().projectedRevenue !== null) {
+        <div class="pipeline">Pipeline <span class="num">{{ pipeline() }}</span></div>
+      }
     </div>
   </div>
 </a>
