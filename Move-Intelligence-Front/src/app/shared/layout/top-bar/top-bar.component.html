@@ -1,5 +1,16 @@
 <header class="topbar">
   <div class="left">
+    <button
+      type="button"
+      class="icon-btn sidebar-toggle"
+      (click)="toggleSidebar()"
+      [attr.aria-expanded]="layout.sidebarOpen()"
+      aria-controls="app-navigation"
+      [attr.aria-label]="layout.sidebarOpen() ? 'Ocultar menu principal' : 'Mostrar menu principal'"
+      [attr.title]="layout.sidebarOpen() ? 'Ocultar menu principal' : 'Mostrar menu principal'"
+    >
+      <app-icon [name]="layout.sidebarOpen() ? 'panel-left-close' : 'panel-left'" [size]="16" />
+    </button>
     <span class="market-pill">
       <span class="dot"></span>
       Mercado Aberto
@@ -18,12 +29,12 @@
   <div class="right">
     <button type="button" class="ask">
       <app-icon name="sparkles" [size]="14" />
-      Ask Move AI
+      <span>Ask Move AI</span>
     </button>
-    <button type="button" class="icon-btn" (click)="toggleTheme()" aria-label="Alternar tema">
+    <button type="button" class="icon-btn" (click)="toggleTheme()" aria-label="Alternar tema" title="Alternar tema">
       <app-icon [name]="theme() === 'dark' ? 'sun' : 'moon'" [size]="16" />
     </button>
-    <button type="button" class="icon-btn bell" aria-label="Notificações">
+    <button type="button" class="icon-btn bell" aria-label="Notificações" title="Notificações">
       <app-icon name="bell" [size]="16" />
       <span class="badge"></span>
     </button>

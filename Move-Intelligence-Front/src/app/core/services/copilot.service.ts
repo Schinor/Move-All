@@ -1,14 +1,78 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from '../api/api-client';
-import { CopilotChatRequest, CopilotChatResponse } from '../models/contract.models';
+import {
+  CopilotChatRequest,
+  CopilotChatResponse,
+  CopilotConversationDetail,
+  CopilotConversationSummary,
+  CopilotConversationUpdate,
+} from '../models/contract.models';
+
+const CLIENT_ID_KEY = 'move-intelligence:copilot-client-id';
+const ACTIVE_CONVERSATION_KEY = 'move-intelligence:copilot-active-conversation';
 
 @Injectable({ providedIn: 'root' })
 export class CopilotService {
   private readonly api = inject(ApiClient);
+  private readonly clientId = this.getOrCreateClientId();
 
   chat(request: CopilotChatRequest): Observable<CopilotChatResponse> {
-    return this.api.post<CopilotChatResponse>('/copilot/chat', request);
+    return this.api.post<CopilotChatResponse>('/copilot/chat', this.withClientContext(request));
+  }
+
+  listConversations(): Observable<CopilotConversationSummary[]> {
+    return this.api.get<CopilotConversationSummary[]>('/copilot/conversations', {
+      client_id: this.clientId,
+    });
+  }
+
+  getConversation(id: string): Observable<CopilotConversationDetail> {
+    return this.api.get<CopilotConversationDetail>(`/copilot/conversations/${id}`, {
+      client_id: this.clientId,
+    });
+  }
+
+  deleteConversation(id: string): Observable<{ deleted: boolean; conversationId: string }> {
+    return this.api.delete<{ deleted: boolean; conversationId: string }>(
+      `/copilot/conversations/${id}`,
+      { client_id: this.clientId },
+    );
+  }
+
+  updateConversation(
+    id: string,
+    changes: CopilotConversationUpdate,
+  ): Observable<CopilotConversationSummary> {
+    return this.api.patch<CopilotConversationSummary>(
+      `/copilot/conversations/${id}`,
+      changes,
+      { client_id: this.clientId },
+    );
+  }
+
+  getRememberedConversationId(): string | undefined {
+    try {
+      return window.localStorage.getItem(ACTIVE_CONVERSATION_KEY) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  rememberConversation(id: string): void {
+    try {
+      window.localStorage.setItem(ACTIVE_CONVERSATION_KEY, id);
+    } catch {
+      // A conversa continua persistida no banco mesmo quando o armazenamento local está indisponível.
+    }
+  }
+
+  clearRememberedConversation(): void {
+    try {
+      window.localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+    } catch {
+      // Ignore falhas de armazenamento local.
+    }
   }
 
   async chatStream(
@@ -19,7 +83,7 @@ export class CopilotService {
     const response = await fetch('/api/copilot/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(this.withClientContext(request)),
     });
 
     if (!response.ok || !response.body) {
@@ -67,5 +131,29 @@ export class CopilotService {
       }
     }
     return fullText;
+  }
+
+  private withClientContext(request: CopilotChatRequest): CopilotChatRequest {
+    return { ...request, clientId: this.clientId };
+  }
+
+  private getOrCreateClientId(): string {
+    try {
+      const stored = window.localStorage.getItem(CLIENT_ID_KEY)?.trim();
+      if (stored) return stored;
+
+      const generated = this.generateClientId();
+      window.localStorage.setItem(CLIENT_ID_KEY, generated);
+      return generated;
+    } catch {
+      return this.generateClientId();
+    }
+  }
+
+  private generateClientId(): string {
+    if (typeof globalThis.crypto?.randomUUID === 'function') {
+      return globalThis.crypto.randomUUID();
+    }
+    return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   }
 }

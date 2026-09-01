@@ -1,4 +1,4 @@
-<aside class="sidebar">
+<aside id="app-navigation" class="sidebar" aria-label="Navegação principal">
   <div class="brand">
     <div class="logo">M</div>
     <div class="brand-text">
@@ -16,6 +16,8 @@
             [routerLink]="item.path"
             routerLinkActive="active"
             [routerLinkActiveOptions]="{ exact: !!item.exact }"
+            (click)="closeOnCompact()"
+            [attr.title]="item.label"
           >
             <span class="icon">
               @switch (item.icon) {

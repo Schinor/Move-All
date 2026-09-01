@@ -15,6 +15,10 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
+}
+.sidebar-toggle {
+  flex: 0 0 auto;
 }
 .market-pill {
   display: inline-flex;
@@ -50,6 +54,7 @@
   flex: 1;
   max-width: 36rem;
   margin: 0 auto;
+  min-width: 0;
 }
 .search {
   position: relative;
@@ -96,6 +101,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
 }
 .ask {
   display: inline-flex;
@@ -182,5 +188,22 @@
   }
   .market-pill {
     display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    gap: 0.45rem;
+    padding-inline: 0.75rem;
+  }
+
+  .right {
+    gap: 0.25rem;
+  }
+
+  .ask {
+    width: 36px;
+    padding-inline: 0;
+    justify-content: center;
   }
 }

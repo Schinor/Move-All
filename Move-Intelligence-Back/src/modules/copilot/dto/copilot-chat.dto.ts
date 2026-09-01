@@ -33,6 +33,11 @@ export class CopilotChatDto {
   conversationId?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  clientId?: string;
+
+  @IsOptional()
   @IsObject()
   scope?: Record<string, unknown>;
 }

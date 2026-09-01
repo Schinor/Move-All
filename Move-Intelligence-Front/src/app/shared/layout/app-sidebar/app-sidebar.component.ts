@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { LayoutService } from '../../../core/services/layout.service';
 
 type IconKey = 'compass' | 'bar-chart' | 'columns' | 'bell' | 'sparkles' | 'boxes';
 
@@ -18,6 +19,8 @@ interface NavItem {
   styleUrl: './app-sidebar.component.css',
 })
 export class AppSidebarComponent {
+  readonly layout = inject(LayoutService);
+
   readonly nav: NavItem[] = [
     { path: '/', label: 'Executivo', icon: 'compass', exact: true },
     { path: '/ranking', label: 'Ranking', icon: 'bar-chart' },
@@ -26,4 +29,8 @@ export class AppSidebarComponent {
     { path: '/ai-copilot', label: 'AI Copilot', icon: 'sparkles' },
     { path: '/sourcing', label: 'Sourcing', icon: 'boxes' },
   ];
+
+  closeOnCompact(): void {
+    if (window.innerWidth <= 1024) this.layout.closeSidebar();
+  }
 }

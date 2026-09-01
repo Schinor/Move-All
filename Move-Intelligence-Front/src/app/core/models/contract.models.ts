@@ -317,7 +317,9 @@ export const DEFAULT_WINDOW: TimeWindow = '6m';
 export interface CopilotChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  id?: string;
   timestamp?: string;
+  createdAt?: string;
   toolCallsExecuted?: number;
   groundedAt?: string;
 }
@@ -328,6 +330,7 @@ export interface CopilotChatRequest {
     content: string;
   }>;
   conversationId?: string;
+  clientId?: string;
   scope?: Record<string, unknown>;
 }
 
@@ -338,3 +341,26 @@ export interface CopilotChatResponse {
   groundedAt: string;
 }
 
+export interface CopilotConversationSummary {
+  id: string;
+  title: string;
+  isPinned: boolean;
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CopilotConversationUpdate {
+  title?: string;
+  isPinned?: boolean;
+}
+
+export interface CopilotConversationDetail extends CopilotConversationSummary {
+  messages: Array<{
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    toolCalls?: unknown;
+    createdAt: string;
+  }>;
+}

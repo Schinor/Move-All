@@ -1,9 +1,16 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { NvidiaService, ChatMessage, ChatTool } from '../ai-gateway/nvidia.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
+import { UpdateCopilotConversationDto } from './dto/update-copilot-conversation.dto';
 
 const SYSTEM_PROMPT = `Você é o Move AI Copilot, analista sênior de inteligência de mercado e sourcing para o segmento Fitness (equipamentos comerciais, residenciais, musculação, cardio, crossfit, calistenia, pilates e fisioterapia).
 PRINCÍPIOS MANDATÓRIOS:
@@ -17,7 +24,8 @@ const COPILOT_TOOLS: ChatTool[] = [
     type: 'function',
     function: {
       name: 'search_products',
-      description: 'Busca produtos fitness no catálogo pelo nome ou categoria, retornando scores e preços reais.',
+      description:
+        'Busca produtos fitness no catálogo pelo nome ou categoria, retornando scores e preços reais.',
       parameters: {
         type: 'object',
         properties: {
@@ -27,7 +35,8 @@ const COPILOT_TOOLS: ChatTool[] = [
           },
           category: {
             type: 'string',
-            description: 'Categoria fitness opcional (ex.: "musculacao_pesos_livres", "cardio_fitness")',
+            description:
+              'Categoria fitness opcional (ex.: "musculacao_pesos_livres", "cardio_fitness")',
           },
           limit: {
             type: 'number',
@@ -41,7 +50,8 @@ const COPILOT_TOOLS: ChatTool[] = [
     type: 'function',
     function: {
       name: 'get_product_details',
-      description: 'Obtém detalhes analíticos aprofundados de um produto específico pelo seu ID (scores, histórico de preços, risco Monte Carlo).',
+      description:
+        'Obtém detalhes analíticos aprofundados de um produto específico pelo seu ID (scores, histórico de preços, risco Monte Carlo).',
       parameters: {
         type: 'object',
         properties: {
@@ -58,7 +68,8 @@ const COPILOT_TOOLS: ChatTool[] = [
     type: 'function',
     function: {
       name: 'get_market_signals',
-      description: 'Consulta os sinais aduaneiros (TradeAtlas/Comex) e sinais de demanda recentes no mercado brasileiro.',
+      description:
+        'Consulta os sinais aduaneiros (TradeAtlas/Comex) e sinais de demanda recentes no mercado brasileiro.',
       parameters: {
         type: 'object',
         properties: {
@@ -114,46 +125,119 @@ export class CopilotService {
     private readonly opportunityEngine: OpportunityEngineService,
   ) {}
 
+  async listConversations(clientId?: string) {
+    const normalizedClientId = this.normalizeClientId(clientId);
+    if (!normalizedClientId) return [];
+
+    const conversations = await this.prisma.aiConversation.findMany({
+      where: {
+        OR: [{ clientId: normalizedClientId }, { clientId: null }],
+      },
+      orderBy: [{ isPinned: 'desc' }, { updatedAt: 'desc' }],
+      take: 50,
+      include: {
+        _count: { select: { messages: true } },
+      },
+    });
+
+    return conversations.map((conversation) => ({
+      id: conversation.id,
+      title: conversation.title || 'Nova conversa',
+      is_pinned: conversation.isPinned ?? false,
+      message_count: conversation._count.messages,
+      created_at: conversation.createdAt.toISOString(),
+      updated_at: conversation.updatedAt.toISOString(),
+    }));
+  }
+
+  async getConversation(id: string, clientId?: string) {
+    const conversation = await this.findConversation(id, clientId);
+    if (!conversation) {
+      throw new NotFoundException('Conversa não encontrada.');
+    }
+
+    await this.claimConversation(conversation, clientId);
+
+    const fullConversation = await this.prisma.aiConversation.findUnique({
+      where: { id: conversation.id },
+      include: {
+        messages: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+
+    if (!fullConversation) {
+      throw new NotFoundException('Conversa não encontrada.');
+    }
+
+    return {
+      id: fullConversation.id,
+      title: fullConversation.title || 'Nova conversa',
+      is_pinned: fullConversation.isPinned ?? false,
+      message_count: fullConversation.messages.length,
+      created_at: fullConversation.createdAt.toISOString(),
+      updated_at: fullConversation.updatedAt.toISOString(),
+      messages: fullConversation.messages.map((message) => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        tool_calls: message.toolCalls,
+        created_at: message.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  async deleteConversation(id: string, clientId?: string) {
+    const conversation = await this.findConversation(id, clientId);
+    if (!conversation) {
+      throw new NotFoundException('Conversa não encontrada.');
+    }
+
+    await this.prisma.aiConversation.delete({ where: { id: conversation.id } });
+    return { deleted: true, conversation_id: conversation.id };
+  }
+
+  async updateConversation(id: string, dto: UpdateCopilotConversationDto, clientId?: string) {
+    const conversation = await this.findConversation(id, clientId);
+    if (!conversation) {
+      throw new NotFoundException('Conversa não encontrada.');
+    }
+
+    const data: { title?: string; isPinned?: boolean } = {};
+    if (dto.title !== undefined) {
+      const title = dto.title.trim();
+      if (!title) {
+        throw new BadRequestException('O nome da conversa não pode ficar vazio.');
+      }
+      data.title = title;
+    }
+    if (dto.isPinned !== undefined) data.isPinned = dto.isPinned;
+
+    const updated = await this.prisma.aiConversation.update({
+      where: { id: conversation.id },
+      data,
+      include: { _count: { select: { messages: true } } },
+    });
+
+    return {
+      id: updated.id,
+      title: updated.title || 'Nova conversa',
+      is_pinned: updated.isPinned ?? false,
+      message_count: updated._count.messages,
+      created_at: updated.createdAt.toISOString(),
+      updated_at: updated.updatedAt.toISOString(),
+    };
+  }
+
   async chat(dto: CopilotChatDto) {
     if (!this.nvidia.isAvailable) {
-      throw new ServiceUnavailableException('Move AI indisponível — chave NVIDIA_API_KEY não configurada.');
+      throw new ServiceUnavailableException(
+        'Move AI indisponível — chave NVIDIA_API_KEY não configurada.',
+      );
     }
 
-    // 1. Gerenciar ou criar conversa
-    let conversationId = dto.conversationId;
-    if (conversationId) {
-      const exists = await this.prisma.aiConversation.findUnique({ where: { id: conversationId } });
-      if (!exists) {
-        conversationId = undefined;
-      }
-    }
-
-    if (!conversationId) {
-      const newConv = await this.prisma.aiConversation.create({
-        data: {
-          title: dto.messages.at(0)?.content.slice(0, 60) ?? 'Nova Consulta Fitness',
-        },
-      });
-      conversationId = newConv.id;
-    }
-
-    // 2. Salvar mensagem do usuário
-    const lastUserMsg = dto.messages.filter((m) => m.role === 'user').at(-1);
-    if (lastUserMsg) {
-      await this.prisma.aiMessage.create({
-        data: {
-          conversationId,
-          role: 'user',
-          content: lastUserMsg.content,
-        },
-      });
-    }
-
-    // 3. Montar mensagens para o modelo
-    const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...dto.messages.map((m) => ({ role: m.role, content: m.content })),
-    ];
+    const prepared = await this.prepareConversation(dto);
+    const conversationId = prepared.conversationId;
+    const messages = prepared.messages;
 
     let toolCallsCount = 0;
     const maxToolIterations = 3;
@@ -223,6 +307,7 @@ export class CopilotService {
         content: finalReply,
       },
     });
+    await this.touchConversation(conversationId);
 
     return {
       reply: finalReply,
@@ -236,41 +321,14 @@ export class CopilotService {
     dto: CopilotChatDto,
   ): AsyncGenerator<{ token?: string; done?: boolean; conversation_id?: string }, void, unknown> {
     if (!this.nvidia.isAvailable) {
-      throw new ServiceUnavailableException('Move AI indisponível — chave NVIDIA_API_KEY não configurada.');
+      throw new ServiceUnavailableException(
+        'Move AI indisponível — chave NVIDIA_API_KEY não configurada.',
+      );
     }
 
-    let conversationId = dto.conversationId;
-    if (conversationId) {
-      const exists = await this.prisma.aiConversation.findUnique({ where: { id: conversationId } });
-      if (!exists) {
-        conversationId = undefined;
-      }
-    }
-
-    if (!conversationId) {
-      const newConv = await this.prisma.aiConversation.create({
-        data: {
-          title: dto.messages.at(0)?.content.slice(0, 60) ?? 'Nova Consulta Fitness',
-        },
-      });
-      conversationId = newConv.id;
-    }
-
-    const lastUserMsg = dto.messages.filter((m) => m.role === 'user').at(-1);
-    if (lastUserMsg) {
-      await this.prisma.aiMessage.create({
-        data: {
-          conversationId,
-          role: 'user',
-          content: lastUserMsg.content,
-        },
-      });
-    }
-
-    const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
-      ...dto.messages.map((m) => ({ role: m.role, content: m.content })),
-    ];
+    const prepared = await this.prepareConversation(dto);
+    const conversationId = prepared.conversationId;
+    const messages = prepared.messages;
 
     // Verifica se ferramentas são necessárias antes de gerar o stream final
     const toolCheckResponse = await this.nvidia.chatCompletion(messages, {
@@ -327,9 +385,122 @@ export class CopilotService {
           content: fullReply.trim(),
         },
       });
+      await this.touchConversation(conversationId);
     }
 
     yield { done: true, conversation_id: conversationId };
+  }
+
+  private async prepareConversation(dto: CopilotChatDto): Promise<{
+    conversationId: string;
+    messages: ChatMessage[];
+  }> {
+    const lastUserMsg = dto.messages.filter((message) => message.role === 'user').at(-1);
+    const conversation = await this.findConversation(dto.conversationId, dto.clientId);
+    let conversationId: string;
+
+    if (!conversation) {
+      const newConversation = await this.prisma.aiConversation.create({
+        data: {
+          title: (
+            lastUserMsg?.content ||
+            dto.messages.at(0)?.content ||
+            'Nova Consulta Fitness'
+          ).slice(0, 60),
+          clientId: this.normalizeClientId(dto.clientId) ?? null,
+        },
+      });
+      conversationId = newConversation.id;
+    } else {
+      conversationId = conversation.id;
+      await this.claimConversation(conversation, dto.clientId);
+    }
+
+    const storedMessages = await this.prisma.aiMessage.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: 'asc' },
+      select: { role: true, content: true },
+    });
+
+    if (lastUserMsg) {
+      await this.prisma.aiMessage.create({
+        data: {
+          conversationId,
+          role: 'user',
+          content: lastUserMsg.content,
+        },
+      });
+      await this.touchConversation(conversationId);
+    }
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...storedMessages.map((message) => ({
+        role: this.toChatRole(message.role),
+        content: message.content,
+      })),
+    ];
+
+    if (lastUserMsg) {
+      messages.push({ role: 'user', content: lastUserMsg.content });
+    } else if (storedMessages.length === 0) {
+      messages.push(
+        ...dto.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      );
+    }
+
+    return { conversationId, messages };
+  }
+
+  private async findConversation(id?: string, clientId?: string) {
+    if (!id) return null;
+
+    const normalizedClientId = this.normalizeClientId(clientId);
+    if (normalizedClientId) {
+      return this.prisma.aiConversation.findFirst({
+        where: {
+          id,
+          OR: [{ clientId: normalizedClientId }, { clientId: null }],
+        },
+      });
+    }
+
+    return this.prisma.aiConversation.findUnique({ where: { id } });
+  }
+
+  private async claimConversation(
+    conversation: { id: string; clientId: string | null },
+    clientId?: string,
+  ): Promise<void> {
+    const normalizedClientId = this.normalizeClientId(clientId);
+    if (normalizedClientId && !conversation.clientId) {
+      await this.prisma.aiConversation.update({
+        where: { id: conversation.id },
+        data: { clientId: normalizedClientId },
+      });
+    }
+  }
+
+  private async touchConversation(id: string): Promise<void> {
+    await this.prisma.aiConversation.update({
+      where: { id },
+      data: { updatedAt: new Date() },
+    });
+  }
+
+  private normalizeClientId(clientId?: string): string | undefined {
+    const normalized = clientId?.trim();
+    return normalized ? normalized : undefined;
+  }
+
+  private toChatRole(role: string): ChatMessage['role'] {
+    if (role === 'user' || role === 'assistant' || role === 'system' || role === 'tool') {
+      return role;
+    }
+    return 'assistant';
   }
 
   private async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {
@@ -342,9 +513,7 @@ export class CopilotService {
 
           const clusters = await this.prisma.productCluster.findMany({
             where: {
-              ...(query
-                ? { canonicalName: { contains: query, mode: 'insensitive' } }
-                : {}),
+              ...(query ? { canonicalName: { contains: query, mode: 'insensitive' } } : {}),
               ...(category ? { category } : {}),
             },
             include: {
@@ -399,9 +568,7 @@ export class CopilotService {
             westernSaturationScore: 0.2,
           });
 
-          const prices = cluster.snapshots
-            .map((s) => Number(s.priceMin))
-            .filter((p) => p > 0);
+          const prices = cluster.snapshots.map((s) => Number(s.priceMin)).filter((p) => p > 0);
 
           return {
             id: cluster.id,
@@ -474,23 +641,28 @@ export class CopilotService {
             take: limit * 3,
           });
 
-          const byExporter = new Map<string, { count: number; country: string | null; fobTotal: number }>();
+          const byExporter = new Map<
+            string,
+            { count: number; country: string | null; fobTotal: number }
+          >();
           for (const s of shipments) {
             if (!s.exporterName) continue;
-            const existing = byExporter.get(s.exporterName) ?? { count: 0, country: s.originCountry, fobTotal: 0 };
+            const existing = byExporter.get(s.exporterName) ?? {
+              count: 0,
+              country: s.originCountry,
+              fobTotal: 0,
+            };
             existing.count += 1;
             if (s.fobUsd) existing.fobTotal += Number(s.fobUsd);
             byExporter.set(s.exporterName, existing);
           }
 
-          return [...byExporter.entries()]
-            .slice(0, limit)
-            .map(([name, data]) => ({
-              supplier_name: name,
-              origin_country: data.country,
-              shipments_observed: data.count,
-              avg_fob_usd: data.count > 0 ? Math.round(data.fobTotal / data.count) : null,
-            }));
+          return [...byExporter.entries()].slice(0, limit).map(([name, data]) => ({
+            supplier_name: name,
+            origin_country: data.country,
+            shipments_observed: data.count,
+            avg_fob_usd: data.count > 0 ? Math.round(data.fobTotal / data.count) : null,
+          }));
         }
 
         case 'get_collection_status': {

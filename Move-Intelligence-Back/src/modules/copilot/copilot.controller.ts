@@ -1,20 +1,38 @@
-import { Body, Controller, Post, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { CopilotService } from './copilot.service';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
-
-interface ResponseLike {
-  setHeader(name: string, value: string): void;
-  flushHeaders?(): void;
-  write(chunk: string): boolean;
-  end(): void;
-}
+import { UpdateCopilotConversationDto } from './dto/update-copilot-conversation.dto';
 
 @Public()
 @Controller('copilot')
 export class CopilotController {
   constructor(private readonly copilot: CopilotService) {}
+
+  @Get('conversations')
+  listConversations(@Query('client_id') clientId?: string) {
+    return this.copilot.listConversations(clientId);
+  }
+
+  @Get('conversations/:id')
+  getConversation(@Param('id') id: string, @Query('client_id') clientId?: string) {
+    return this.copilot.getConversation(id, clientId);
+  }
+
+  @Delete('conversations/:id')
+  deleteConversation(@Param('id') id: string, @Query('client_id') clientId?: string) {
+    return this.copilot.deleteConversation(id, clientId);
+  }
+
+  @Patch('conversations/:id')
+  updateConversation(
+    @Param('id') id: string,
+    @Query('client_id') clientId: string | undefined,
+    @Body() dto: UpdateCopilotConversationDto,
+  ) {
+    return this.copilot.updateConversation(id, dto, clientId);
+  }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('chat')

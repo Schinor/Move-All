@@ -474,12 +474,15 @@ model AiRecommendation {
 model AiConversation {
   id        String      @id @default(uuid()) @db.Uuid
   userId    String?     @map("user_id") @db.Uuid
+  clientId  String?     @map("client_id")
   title     String?
+  isPinned  Boolean     @default(false) @map("is_pinned")
   createdAt DateTime    @default(now()) @map("created_at")
   updatedAt DateTime    @updatedAt @map("updated_at")
   messages  AiMessage[]
 
   @@index([userId, updatedAt])
+  @@index([clientId, updatedAt])
   @@map("ai_conversations")
 }
 

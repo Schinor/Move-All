@@ -2,7 +2,15 @@
   <router-outlet />
 } @else {
   <div class="app-shell">
-    <app-sidebar />
+    <app-sidebar [class.sidebar-collapsed]="!layout.sidebarOpen()" />
+    @if (layout.sidebarOpen()) {
+      <button
+        type="button"
+        class="sidebar-backdrop"
+        (click)="layout.closeSidebar()"
+        aria-label="Fechar menu principal"
+      ></button>
+    }
     <div class="app-main">
       <app-top-bar />
       <main class="app-content">

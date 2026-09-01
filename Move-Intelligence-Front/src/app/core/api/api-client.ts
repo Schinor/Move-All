@@ -48,4 +48,36 @@ export class ApiClient {
       .post<unknown>(`${this.baseUrl}${path}`, body)
       .pipe(map((res) => toCamel(res) as T));
   }
+
+  patch<T>(
+    path: string,
+    body: unknown,
+    query?: Record<string, string | number | undefined>,
+  ): Observable<T> {
+    let params = new HttpParams();
+    if (query) {
+      for (const [key, val] of Object.entries(query)) {
+        if (val !== undefined && val !== null) {
+          params = params.set(key, String(val));
+        }
+      }
+    }
+    return this.http
+      .patch<unknown>(`${this.baseUrl}${path}`, body, { params })
+      .pipe(map((res) => toCamel(res) as T));
+  }
+
+  delete<T>(path: string, query?: Record<string, string | number | undefined>): Observable<T> {
+    let params = new HttpParams();
+    if (query) {
+      for (const [key, val] of Object.entries(query)) {
+        if (val !== undefined && val !== null) {
+          params = params.set(key, String(val));
+        }
+      }
+    }
+    return this.http
+      .delete<unknown>(`${this.baseUrl}${path}`, { params })
+      .pipe(map((res) => toCamel(res) as T));
+  }
 }

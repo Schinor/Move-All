@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { LayoutService } from '../../../core/services/layout.service';
 import { ThemeService } from '../../../core/services/theme.service';
 import { IconComponent } from '../../ui/icon/icon.component';
 
@@ -11,10 +12,15 @@ import { IconComponent } from '../../ui/icon/icon.component';
   styleUrl: './top-bar.component.css',
 })
 export class TopBarComponent {
+  readonly layout = inject(LayoutService);
   private readonly themeService = inject(ThemeService);
   readonly theme = this.themeService.theme;
 
   toggleTheme(): void {
     this.themeService.toggle();
+  }
+
+  toggleSidebar(): void {
+    this.layout.toggleSidebar();
   }
 }

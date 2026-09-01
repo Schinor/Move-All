@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router, RouterOutlet } from '@angular/router';
 import { map } from 'rxjs';
+import { LayoutService } from './core/services/layout.service';
 import { AppSidebarComponent } from './shared/layout/app-sidebar/app-sidebar.component';
 import { TopBarComponent } from './shared/layout/top-bar/top-bar.component';
 
@@ -16,6 +17,7 @@ const AUTH_ROUTES = ['/login', '/cadastro'];
 })
 export class App {
   private readonly router = inject(Router);
+  readonly layout = inject(LayoutService);
 
   /** Retorna true quando a URL atual pertence ao fluxo de autenticação. */
   readonly isAuthRoute = toSignal(
