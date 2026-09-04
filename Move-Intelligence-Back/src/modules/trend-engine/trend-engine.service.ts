@@ -14,6 +14,19 @@ export interface TrendSnapshotInput {
   collectedAt: Date;
 }
 
+/** Insumos pré-agregados do ranking: Postgres calcula as janelas, o engine só pontua. */
+export interface TrendWindowRollup {
+  category?: string | null;
+  firstAvgPrice: number | null;
+  lastAvgPrice: number | null;
+  firstAvgReviews: number | null;
+  lastAvgReviews: number | null;
+  firstAvgSignal: number | null;
+  lastAvgSignal: number | null;
+  firstSalesSignalType?: SalesSignalType | null;
+  latest: TrendSnapshotInput;
+}
+
 /**
  * Peso do componente "baseline" (sinal absoluto) dentro de cada eixo do
  * breakdown. O baseline é somado ao componente de crescimento, nunca o
@@ -58,15 +71,6 @@ export class TrendEngineService {
       return this.emptyScore();
     }
 
-    const signalScore = this.rules.normalizeSalesSignal(
-      latest.salesSignalRaw,
-      latest.salesSignalType,
-    );
-
-    if (!this.hasMinimumRelevance(latest, signalScore, category)) {
-      return this.emptyScore();
-    }
-
     const earliestTime = ordered[0].collectedAt.getTime();
     const latestTime = ordered[ordered.length - 1].collectedAt.getTime();
     const firstGroup = ordered.filter(
@@ -79,49 +83,69 @@ export class TrendEngineService {
     const avg = (items: number[]) =>
       items.length ? items.reduce((a, b) => a + b, 0) / items.length : null;
 
-    const firstSignal = avg(
-      firstGroup
-        .map((s) => s.salesSignalRaw)
-        .filter((v): v is number => v !== null && v !== undefined && v > 0),
-    );
-    const latestSignal = avg(
-      latestGroup
-        .map((s) => s.salesSignalRaw)
-        .filter((v): v is number => v !== null && v !== undefined && v > 0),
+    return this.scoreFromWindows({
+      category,
+      firstAvgPrice: avg(
+        firstGroup
+          .map((s) => s.priceMin)
+          .filter((v): v is number => v !== null && v !== undefined && v > 0),
+      ),
+      lastAvgPrice: avg(
+        latestGroup
+          .map((s) => s.priceMin)
+          .filter((v): v is number => v !== null && v !== undefined && v > 0),
+      ),
+      firstAvgReviews: avg(
+        firstGroup
+          .map((s) => s.reviewCount)
+          .filter((v): v is number => v !== null && v !== undefined),
+      ),
+      lastAvgReviews: avg(
+        latestGroup
+          .map((s) => s.reviewCount)
+          .filter((v): v is number => v !== null && v !== undefined),
+      ),
+      firstAvgSignal: avg(
+        firstGroup
+          .map((s) => s.salesSignalRaw)
+          .filter((v): v is number => v !== null && v !== undefined && v > 0),
+      ),
+      lastAvgSignal: avg(
+        latestGroup
+          .map((s) => s.salesSignalRaw)
+          .filter((v): v is number => v !== null && v !== undefined && v > 0),
+      ),
+      firstSalesSignalType: first.salesSignalType,
+      latest,
+    });
+  }
+
+  calculateFromRollup(rollup: TrendWindowRollup): TrendScoreBreakdown {
+    return this.scoreFromWindows(rollup);
+  }
+
+  private scoreFromWindows(input: TrendWindowRollup): TrendScoreBreakdown {
+    const latest = input.latest;
+    const category = input.category ?? undefined;
+    const signalScore = this.rules.normalizeSalesSignal(
+      latest.salesSignalRaw,
+      latest.salesSignalType,
     );
 
-    const firstReviews = avg(
-      firstGroup
-        .map((s) => s.reviewCount)
-        .filter((v): v is number => v !== null && v !== undefined),
-    );
-    const latestReviews = avg(
-      latestGroup
-        .map((s) => s.reviewCount)
-        .filter((v): v is number => v !== null && v !== undefined),
-    );
+    if (!this.hasMinimumRelevance(latest, signalScore, category)) {
+      return this.emptyScore();
+    }
 
-    const firstPrice = avg(
-      firstGroup
-        .map((s) => s.priceMin)
-        .filter((v): v is number => v !== null && v !== undefined && v > 0),
-    );
-    const latestPrice = avg(
-      latestGroup
-        .map((s) => s.priceMin)
-        .filter((v): v is number => v !== null && v !== undefined && v > 0),
-    );
-
-    // --- Componente de crescimento (exige série histórica) ----------------
     const isRank =
       this.isRankSignal(latest.salesSignalType) ||
-      this.isRankSignal(first.salesSignalType);
-    const reviewGrowth = this.relativeGrowth(firstReviews, latestReviews);
-    const rawMarketplaceGrowth = this.relativeGrowth(firstSignal, latestSignal);
+      this.isRankSignal(input.firstSalesSignalType);
+    const reviewGrowth = this.relativeGrowth(input.firstAvgReviews, input.lastAvgReviews);
+    const rawMarketplaceGrowth = this.relativeGrowth(
+      input.firstAvgSignal,
+      input.lastAvgSignal,
+    );
     const marketplaceGrowth = isRank ? -rawMarketplaceGrowth : rawMarketplaceGrowth;
-    const priceChange = this.relativeGrowth(firstPrice, latestPrice);
-
-    // --- Componente baseline (sinais absolutos do snapshot mais recente) ---
+    const priceChange = this.relativeGrowth(input.firstAvgPrice, input.lastAvgPrice);
     const baseline = this.baselineComponents(latest, signalScore);
 
     const weights = this.rules.getTrendWeights();

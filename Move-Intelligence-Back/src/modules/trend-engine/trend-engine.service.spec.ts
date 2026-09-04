@@ -1,5 +1,5 @@
 import { BusinessRulesService } from '../../shared/business-rules/business-rules.service';
-import { TrendEngineService, TrendSnapshotInput } from './trend-engine.service';
+import { TrendEngineService, TrendSnapshotInput, TrendWindowRollup } from './trend-engine.service';
 
 const DAY = 24 * 60 * 60 * 1000;
 const T0 = new Date('2026-01-01T00:00:00.000Z');
@@ -295,6 +295,42 @@ describe('TrendEngineService', () => {
       ]);
 
       expect(estavel.trendScore).toBe(primeiraCarga.trendScore);
+    });
+  });
+
+  describe('calculateFromRollup', () => {
+    it('produz o mesmo breakdown que calculateFromSnapshots para uma janela de dois pontos', () => {
+      const snapshots: TrendSnapshotInput[] = [
+        snapshot({
+          reviewCount: 200,
+          priceMin: 40,
+          salesSignalRaw: 100,
+          salesSignalType: 'sales_count',
+          collectedAt: T0,
+        }),
+        snapshot({
+          reviewCount: 900,
+          priceMin: 35,
+          salesSignalRaw: 400,
+          salesSignalType: 'sales_count',
+          collectedAt: T1,
+        }),
+      ];
+      const latest = snapshots[1];
+      const rollup: TrendWindowRollup = {
+        firstAvgPrice: 40,
+        lastAvgPrice: 35,
+        firstAvgReviews: 200,
+        lastAvgReviews: 900,
+        firstAvgSignal: 100,
+        lastAvgSignal: 400,
+        firstSalesSignalType: 'sales_count',
+        latest,
+      };
+
+      expect(engine.calculateFromRollup(rollup)).toEqual(
+        engine.calculateFromSnapshots(snapshots),
+      );
     });
   });
 });

@@ -1,5 +1,5 @@
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
-import { CopilotService } from './copilot.service';
+import { CopilotService, compactToolOutputs, MAX_HISTORY_MESSAGES } from './copilot.service';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { NvidiaService } from '../ai-gateway/nvidia.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
@@ -97,8 +97,8 @@ describe('CopilotService', () => {
       clientId: 'client-123',
     });
     mockPrisma.aiMessage.findMany.mockResolvedValueOnce([
-      { role: 'user', content: 'Qual é a tendência anterior?' },
       { role: 'assistant', content: 'A resposta anterior veio da base.' },
+      { role: 'user', content: 'Qual é a tendência anterior?' },
     ]);
     mockNvidia.chatCompletion.mockResolvedValueOnce({
       content: 'Vou continuar a análise com esse contexto.',
@@ -113,6 +113,12 @@ describe('CopilotService', () => {
       messages: [{ role: 'user', content: 'E qual é o próximo passo?' }],
     });
 
+    expect(mockPrisma.aiMessage.findMany).toHaveBeenCalledWith({
+      where: { conversationId: 'conv-123' },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_HISTORY_MESSAGES,
+      select: { role: true, content: true },
+    });
     expect(mockNvidia.chatCompletion.mock.calls[0][0]).toEqual([
       expect.objectContaining({ role: 'system' }),
       { role: 'user', content: 'Qual é a tendência anterior?' },
@@ -291,5 +297,31 @@ describe('CopilotService', () => {
     expect(result.tool_calls_executed).toBe(1);
     expect(result.reply).toContain('Esteira Ergométrica Dobrável Pro');
     expect(mockPrisma.productCluster.findMany).toHaveBeenCalled();
+  });
+
+  it('deve truncar saídas de ferramenta antigas e preservar a última rodada', () => {
+    const bulky = JSON.stringify({ rows: 'x'.repeat(500) });
+    const compacted = compactToolOutputs([
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: 'busque esteiras' },
+      { role: 'assistant', content: '', tool_calls: [] },
+      { role: 'tool', name: 'search_products', content: bulky },
+      { role: 'user', content: 'e agora halteres?' },
+      { role: 'assistant', content: '', tool_calls: [] },
+      { role: 'tool', name: 'search_products', content: '{"ok":true}' },
+    ]);
+
+    const olderTool = compacted.find(
+      (message) => message.role === 'tool' && message.content?.includes('truncated'),
+    );
+    const latestTool = compacted.at(-1);
+
+    expect(olderTool?.content).toContain('"truncated":true');
+    expect(olderTool?.content).not.toContain('x'.repeat(500));
+    expect(latestTool).toEqual({
+      role: 'tool',
+      name: 'search_products',
+      content: '{"ok":true}',
+    });
   });
 });

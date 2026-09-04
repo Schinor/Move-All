@@ -12,6 +12,51 @@ import { OpportunityEngineService } from '../opportunity-engine/opportunity-engi
 import { CopilotChatDto } from './dto/copilot-chat.dto';
 import { UpdateCopilotConversationDto } from './dto/update-copilot-conversation.dto';
 
+export const MAX_HISTORY_MESSAGES = 20;
+const TOOL_OUTPUT_PREVIEW_CHARS = 400;
+
+/**
+ * Older tool dumps are JSON payloads that dominate token cost. Keep the latest
+ * contiguous tool-round intact and replace earlier tool contents with a short summary.
+ */
+export function compactToolOutputs(messages: ChatMessage[]): ChatMessage[] {
+  let lastRoundStart = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'tool') {
+      lastRoundStart = i;
+      while (lastRoundStart > 0 && messages[lastRoundStart - 1].role === 'tool') {
+        lastRoundStart--;
+      }
+      break;
+    }
+  }
+
+  if (lastRoundStart < 0) {
+    return messages;
+  }
+
+  return messages.map((message, index) => {
+    if (message.role !== 'tool' || index >= lastRoundStart) {
+      return message;
+    }
+
+    const content = message.content ?? '';
+    if (content.length <= TOOL_OUTPUT_PREVIEW_CHARS) {
+      return message;
+    }
+
+    return {
+      ...message,
+      content: JSON.stringify({
+        truncated: true,
+        name: message.name ?? 'tool',
+        chars: content.length,
+        preview: content.slice(0, TOOL_OUTPUT_PREVIEW_CHARS),
+      }),
+    };
+  });
+}
+
 const SYSTEM_PROMPT = `Você é o Move AI Copilot, analista sênior de inteligência de mercado e sourcing para o segmento Fitness (equipamentos comerciais, residenciais, musculação, cardio, crossfit, calistenia, pilates e fisioterapia).
 PRINCÍPIOS MANDATÓRIOS:
 1. A IA EXPLICA e CONTEXTUALIZA, mas NUNCA inventa métricas, preços, nomes de produtos ou scores.
@@ -244,13 +289,16 @@ export class CopilotService {
     let finalReply = '';
 
     for (let iteration = 0; iteration < maxToolIterations; iteration++) {
-      const response = await this.nvidia.chatCompletion(messages, {
+      const response = await this.nvidia.chatCompletion(compactToolOutputs(messages), {
         endpointName: 'copilot_chat',
         tools: COPILOT_TOOLS,
         toolChoice: 'auto',
         temperature: 0.2,
         maxTokens: 2048,
-        metadata: { conversationId },
+        metadata: {
+          conversationId,
+          historyMessages: messages.length,
+        },
       });
 
       if (response.toolCalls && response.toolCalls.length > 0) {
@@ -290,11 +338,14 @@ export class CopilotService {
 
     if (!finalReply) {
       // Se estourou as iterações sem texto, faz uma chamada final sem ferramentas
-      const fallbackResponse = await this.nvidia.chatCompletion(messages, {
+      const fallbackResponse = await this.nvidia.chatCompletion(compactToolOutputs(messages), {
         endpointName: 'copilot_chat_summary',
         temperature: 0.2,
         maxTokens: 1024,
-        metadata: { conversationId },
+        metadata: {
+          conversationId,
+          historyMessages: messages.length,
+        },
       });
       finalReply = fallbackResponse.content ?? 'Análise concluída com base nos dados obtidos.';
     }
@@ -331,13 +382,16 @@ export class CopilotService {
     const messages = prepared.messages;
 
     // Verifica se ferramentas são necessárias antes de gerar o stream final
-    const toolCheckResponse = await this.nvidia.chatCompletion(messages, {
+    const toolCheckResponse = await this.nvidia.chatCompletion(compactToolOutputs(messages), {
       endpointName: 'copilot_tool_check',
       tools: COPILOT_TOOLS,
       toolChoice: 'auto',
       temperature: 0.2,
       maxTokens: 1024,
-      metadata: { conversationId },
+      metadata: {
+        conversationId,
+        historyMessages: messages.length,
+      },
     });
 
     if (toolCheckResponse.toolCalls && toolCheckResponse.toolCalls.length > 0) {
@@ -367,11 +421,14 @@ export class CopilotService {
     }
 
     let fullReply = '';
-    for await (const token of this.nvidia.chatStream(messages, {
+    for await (const token of this.nvidia.chatStream(compactToolOutputs(messages), {
       endpointName: 'copilot_chat_stream',
       temperature: 0.2,
       maxTokens: 2048,
-      metadata: { conversationId },
+      metadata: {
+        conversationId,
+        historyMessages: messages.length,
+      },
     })) {
       fullReply += token;
       yield { token, conversation_id: conversationId };
@@ -416,11 +473,18 @@ export class CopilotService {
       await this.claimConversation(conversation, dto.clientId);
     }
 
-    const storedMessages = await this.prisma.aiMessage.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'asc' },
-      select: { role: true, content: true },
-    });
+    const storedMessages = (
+      await this.prisma.aiMessage.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: MAX_HISTORY_MESSAGES,
+        select: { role: true, content: true },
+      })
+    ).reverse();
+
+    this.logger.debug(
+      `Copilot history window=${storedMessages.length}/${MAX_HISTORY_MESSAGES} conversation=${conversationId}`,
+    );
 
     if (lastUserMsg) {
       await this.prisma.aiMessage.create({

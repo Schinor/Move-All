@@ -91,7 +91,7 @@ model ProductListingSnapshot {
   importJob         ImportJob?           @relation(fields: [importJobId], references: [id])
   rawProduct        IntelligenceProduct? @relation(fields: [rawProductId], references: [id])
 
-  @@index([marketplace, externalProductId, collectedAt])
+  @@unique([marketplace, externalProductId, collectedAt], map: "pls_marketplace_extid_collected_at_key")
   @@index([productClusterId, collectedAt])
   @@index([collectedAt])
   @@index([importJobId])
@@ -234,6 +234,8 @@ model ProductCluster {
   aiRecommendations AiRecommendation[]
 
   @@index([createdAt])
+  @@index([canonicalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_clusters_canonical_trgm")
+  @@index([category], map: "idx_clusters_category")
   @@map("product_clusters")
 }
 

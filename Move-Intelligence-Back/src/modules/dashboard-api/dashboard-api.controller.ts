@@ -8,8 +8,16 @@ export class DashboardApiController {
   constructor(private readonly dashboard: DashboardApiService) {}
 
   @Get('trends/products')
-  listTrendingProducts(@Query('limit') limit?: string) {
-    return this.dashboard.listTrendingProducts(Number(limit ?? 50));
+  listTrendingProducts(
+    @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
+    @Query('category') category?: string,
+  ) {
+    return this.dashboard.listTrendingProducts({
+      limit: Number(limit ?? 50),
+      sort,
+      category,
+    });
   }
 
   @Get('trends/products/:id')

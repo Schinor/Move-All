@@ -73,7 +73,7 @@ const FIXED_FITNESS_CATALOG: ClusterDefinition[] = [
   {
     canonicalName: 'Kit Anilhas Olímpicas Emborrachadas Bumper 50kg',
     category: 'musculacao_pesos_livres',
-    clusterKey: 'dumbbells',
+    clusterKey: 'olympic_bumper_plates_50kg',
     growthProfile: 'steady',
     basePriceBrl: 849.0,
     basePriceUsd: 65.0,
@@ -184,7 +184,7 @@ const FIXED_FITNESS_CATALOG: ClusterDefinition[] = [
   {
     canonicalName: 'Simulador de Escada Ergométrica Comercial',
     category: 'cardio_fitness',
-    clusterKey: 'commercial_gym_equipment',
+    clusterKey: 'stair_climber_commercial',
     growthProfile: 'explosive',
     basePriceBrl: 14900.0,
     basePriceUsd: 1150.0,
@@ -352,7 +352,7 @@ const FIXED_FITNESS_CATALOG: ClusterDefinition[] = [
   {
     canonicalName: 'Rolo de Liberação Miofascial Foam Roller Texturizado',
     category: 'pilates_yoga_mobilidade',
-    clusterKey: 'recovery_massage',
+    clusterKey: 'foam_roller_textured',
     growthProfile: 'steady',
     basePriceBrl: 79.0,
     basePriceUsd: 4.8,
@@ -994,6 +994,293 @@ function computeTrajectory(
   };
 }
 
+type SeedStats = {
+  totalProducts: number;
+  totalSnapshots: number;
+  totalDemandSignals: number;
+  totalDemandLinks: number;
+  totalShipments: number;
+};
+
+async function seedOneCluster(
+  tx: Prisma.TransactionClient,
+  clusterDef: ClusterDefinition,
+  weeks: Date[],
+  importJobId: string,
+  stats: SeedStats,
+) {
+  let cluster = await tx.productCluster.findFirst({
+    where: { canonicalName: clusterDef.canonicalName },
+  });
+
+  if (!cluster) {
+    cluster = await tx.productCluster.create({
+      data: {
+        canonicalName: clusterDef.canonicalName,
+        category: clusterDef.category,
+        confidenceScore: new Prisma.Decimal(0.98),
+        riskLevel:
+          clusterDef.growthProfile === 'explosive'
+            ? 'baixo'
+            : clusterDef.growthProfile === 'rising'
+              ? 'baixo'
+              : 'medio',
+        financialScore: clusterDef.growthProfile === 'explosive' ? 88 : 75,
+      },
+    });
+  }
+
+  const marketplaces = [
+    { code: 'mercadolivre', country: 'BR', currency: 'BRL', priceMultiplier: 1.0, seller: 'Move Sports Oficial' },
+    { code: 'amazon_br', country: 'BR', currency: 'BRL', priceMultiplier: 1.05, seller: 'Amazon Brasil Retail' },
+    { code: 'shopee_br', country: 'BR', currency: 'BRL', priceMultiplier: 0.95, seller: 'FitTech Distribuidora' },
+    { code: 'alibaba', country: 'CN', currency: 'USD', priceMultiplier: 1.0, seller: clusterDef.suppliers[0]?.name ?? 'Global Gym Supplier' },
+    { code: '1688', country: 'CN', currency: 'CNY', priceMultiplier: 7.2, seller: clusterDef.suppliers[0]?.name ?? 'China Fitness Manufacturer' },
+    { code: 'amazon', country: 'US', currency: 'USD', priceMultiplier: 1.15, seller: 'Prime Fitness US' },
+  ];
+
+  for (const mp of marketplaces) {
+    const extId = `ext_${clusterDef.clusterKey}_${mp.code}`;
+    await tx.productClusterItem.upsert({
+      where: {
+        marketplace_externalProductId: {
+          marketplace: mp.code,
+          externalProductId: extId,
+        },
+      },
+      create: {
+        clusterId: cluster.id,
+        marketplace: mp.code,
+        externalProductId: extId,
+        similarityScore: new Prisma.Decimal(0.95),
+        matchedBy: 'canonical_catalog',
+      },
+      update: {
+        clusterId: cluster.id,
+      },
+    });
+  }
+
+  for (let weekIdx = 0; weekIdx < weeks.length; weekIdx++) {
+    const weekDate = weeks[weekIdx];
+    const trajectory = computeTrajectory(clusterDef.growthProfile, weekIdx, WEEKS_COUNT);
+
+    for (const [geo, kwList] of Object.entries(clusterDef.keywords)) {
+      for (const kw of kwList) {
+        const kwNoise = Math.sin(weekIdx + kw.length) * 4;
+        const finalIndex = Math.max(5, Math.min(100, Math.round(trajectory.demandTrend + kwNoise)));
+        const signalId = randomUUID();
+
+        await tx.intelligenceDemandSignal.upsert({
+          where: {
+            keyword_geo_source_weekStart: {
+              keyword: kw,
+              geo,
+              source: 'google_trends',
+              weekStart: weekDate,
+            },
+          },
+          create: {
+            id: signalId,
+            keyword: kw,
+            geo,
+            source: 'google_trends',
+            weekStart: weekDate,
+            trendIndex: new Prisma.Decimal(finalIndex),
+            rawValue: new Prisma.Decimal(finalIndex * 125),
+            capturedAt: weekDate,
+          },
+          update: {
+            trendIndex: new Prisma.Decimal(finalIndex),
+          },
+        });
+        stats.totalDemandSignals++;
+      }
+    }
+
+    for (const mp of marketplaces) {
+      const recordId = `prod_${clusterDef.clusterKey}_${mp.code}`;
+      const isBrl = mp.currency === 'BRL';
+      const isUsd = mp.currency === 'USD';
+      const isCny = mp.currency === 'CNY';
+
+      const priceBase = isBrl
+        ? clusterDef.basePriceBrl
+        : isUsd
+          ? clusterDef.basePriceUsd
+          : clusterDef.basePriceUsd * 7.1;
+      const priceNoise = 1.0 + Math.sin(weekIdx * 0.8 + mp.code.length) * 0.04;
+      const finalPrice = Math.round(priceBase * mp.priceMultiplier * priceNoise * 100) / 100;
+
+      const reviews = Math.round(clusterDef.baseReviews * trajectory.reviewMultiplier);
+      const sales = Math.round(clusterDef.baseMonthlySales * trajectory.salesMultiplier);
+      const rating = Math.min(5.0, Math.round((clusterDef.baseRating + Math.sin(weekIdx) * 0.1) * 10) / 10);
+
+      const prodUuid = randomUUID();
+      const rawProduct = await tx.intelligenceProduct.upsert({
+        where: {
+          source_recordId_capturedAt: {
+            source: mp.code,
+            recordId,
+            capturedAt: weekDate,
+          },
+        },
+        create: {
+          id: prodUuid,
+          source: mp.code,
+          recordId,
+          capturedAt: weekDate,
+          title: `${clusterDef.canonicalName} - ${mp.seller}`,
+          canonicalTitle: clusterDef.canonicalName,
+          brand: mp.seller,
+          cluster: clusterDef.clusterKey,
+          priceValue: new Prisma.Decimal(finalPrice),
+          priceCurrency: mp.currency,
+          rating: new Prisma.Decimal(rating),
+          reviewsCount: reviews,
+          monthlySales: sales,
+          moq: isUsd || isCny ? 50 : 1,
+          supplier: mp.seller,
+          dataQuality: 'catalog_listing',
+          sourceSpecific: {
+            marketplace_origin: mp.country,
+            weekly_index: weekIdx,
+            seller: mp.seller,
+            stock_status: 'in_stock',
+          },
+        },
+        update: {
+          priceValue: new Prisma.Decimal(finalPrice),
+          reviewsCount: reviews,
+          monthlySales: sales,
+        },
+      });
+      stats.totalProducts++;
+
+      const snapshotPayload = {
+        marketplace: mp.code,
+        externalProductId: `ext_${clusterDef.clusterKey}_${mp.code}`,
+        productClusterId: cluster.id,
+        rawProductId: rawProduct.id,
+        title: `${clusterDef.canonicalName} (${mp.code.toUpperCase()})`,
+        priceMin: new Prisma.Decimal(finalPrice),
+        priceMax: new Prisma.Decimal(finalPrice * 1.08),
+        currency: mp.currency,
+        moq: isUsd || isCny ? 50 : 1,
+        stock: 250,
+        rating: new Prisma.Decimal(rating),
+        reviewCount: reviews,
+        salesSignalRaw: new Prisma.Decimal(sales),
+        salesSignalType: 'units_monthly',
+        sellerName: mp.seller,
+        imageCount: 5,
+        imageUrl: `https://images.move-intelligence.com/fitness/${clusterDef.clusterKey}.jpg`,
+        productUrl: `https://${mp.code}.com/dp/${clusterDef.clusterKey}`,
+        collectedAt: weekDate,
+      };
+
+      await tx.productListingSnapshot.upsert({
+        where: {
+          marketplace_externalProductId_collectedAt: {
+            marketplace: snapshotPayload.marketplace,
+            externalProductId: snapshotPayload.externalProductId,
+            collectedAt: weekDate,
+          },
+        },
+        create: snapshotPayload,
+        update: {
+          productClusterId: cluster.id,
+          rawProductId: rawProduct.id,
+          title: snapshotPayload.title,
+          priceMin: snapshotPayload.priceMin,
+          priceMax: snapshotPayload.priceMax,
+          currency: snapshotPayload.currency,
+          rating: snapshotPayload.rating,
+          reviewCount: snapshotPayload.reviewCount,
+          salesSignalRaw: snapshotPayload.salesSignalRaw,
+          sellerName: snapshotPayload.sellerName,
+          imageUrl: snapshotPayload.imageUrl,
+          productUrl: snapshotPayload.productUrl,
+        },
+      });
+      stats.totalSnapshots++;
+
+      const signalGeo = mp.country === 'BR' ? 'BR' : 'US';
+      const relevantSignals = await tx.intelligenceDemandSignal.findMany({
+        where: {
+          weekStart: weekDate,
+          geo: signalGeo,
+          keyword: { in: clusterDef.keywords[signalGeo] },
+        },
+        orderBy: { keyword: 'asc' },
+        take: 2,
+      });
+
+      for (const sig of relevantSignals) {
+        try {
+          await tx.intelligenceProductDemandLink.upsert({
+            where: {
+              productId_demandSignalId_keyword: {
+                productId: rawProduct.id,
+                demandSignalId: sig.id,
+                keyword: sig.keyword,
+              },
+            },
+            create: {
+              id: randomUUID(),
+              productId: rawProduct.id,
+              demandSignalId: sig.id,
+              keyword: sig.keyword,
+              matchMethod: 'cluster_map',
+              createdAt: weekDate,
+            },
+            update: {},
+          });
+          stats.totalDemandLinks++;
+        } catch {
+          // ignore duplicate links
+        }
+      }
+    }
+  }
+
+  for (const sup of clusterDef.suppliers) {
+    for (let s = 0; s < 4; s++) {
+      const shipDate = new Date(weeks[Math.floor(Math.random() * weeks.length)]);
+      const fobTotal = Math.round(clusterDef.basePriceUsd * (150 + s * 100) * 100) / 100;
+      const netKg = Math.round((150 + s * 100) * 12.5);
+
+      const natKey = `ship_${clusterDef.clusterKey}_${sup.name.slice(0, 10)}_${s}_${shipDate.toISOString().split('T')[0]}`;
+      await tx.shipment.upsert({
+        where: { naturalKey: natKey },
+        create: {
+          naturalKey: natKey,
+          importJobId,
+          arrivalDate: shipDate,
+          importerName: 'MOVE EQUIPAMENTOS FITNESS DO BRASIL LTDA',
+          importerCountry: 'Brazil',
+          exporterName: sup.name,
+          exporterCountry: sup.country,
+          originCountry: sup.country,
+          hsCode: '9506.91.00',
+          productDetails: `${clusterDef.canonicalName} - Lote Comercial ${sup.city}`,
+          fobUsd: new Prisma.Decimal(fobTotal),
+          cifUsd: new Prisma.Decimal(fobTotal * 1.14),
+          grossWeightKg: new Prisma.Decimal(netKg * 1.08),
+          netWeightKg: new Prisma.Decimal(netKg),
+          quantity: new Prisma.Decimal(150 + s * 100),
+          quantityUnit: 'UN',
+          portOfArrival: 'Porto de Santos (SP)',
+          portOfDeparture: `Port of ${sup.city}`,
+          declarationNumber: `DI-26/08-${Math.floor(100000 + Math.random() * 900000)}`,
+        },
+        update: {},
+      });
+      stats.totalShipments++;
+    }
+  }
+}
+
 async function main() {
   console.log('🚀 Iniciando geração do dataset robusto de 6 meses (Fitness Intelligence)...');
 
@@ -1031,270 +1318,35 @@ async function main() {
 
   console.log(`📅 Período coberto: de ${weeks[0].toISOString().split('T')[0]} a ${weeks[weeks.length - 1].toISOString().split('T')[0]} (${weeks.length} semanas)`);
 
-  let totalProducts = 0;
-  let totalSnapshots = 0;
-  let totalDemandSignals = 0;
-  let totalDemandLinks = 0;
-  let totalShipments = 0;
+  const stats = {
+    totalProducts: 0,
+    totalSnapshots: 0,
+    totalDemandSignals: 0,
+    totalDemandLinks: 0,
+    totalShipments: 0,
+  };
 
-  for (const clusterDef of FIXED_FITNESS_CATALOG) {
-    console.log(`\n📦 Processando Cluster: ${clusterDef.canonicalName} [${clusterDef.category}]`);
+  const catalogSize = FIXED_FITNESS_CATALOG.length;
+  for (let clusterIdx = 0; clusterIdx < catalogSize; clusterIdx++) {
+    const clusterDef = FIXED_FITNESS_CATALOG[clusterIdx];
+    console.log(
+      `\n📦 [${clusterIdx + 1}/${catalogSize}] Processando Cluster: ${clusterDef.canonicalName} [${clusterDef.category}]`,
+    );
 
-    // 1. Criar ou Obter ProductCluster
-    let cluster = await prisma.productCluster.findFirst({
-      where: { canonicalName: clusterDef.canonicalName },
-    });
-
-    if (!cluster) {
-      cluster = await prisma.productCluster.create({
-        data: {
-          canonicalName: clusterDef.canonicalName,
-          category: clusterDef.category,
-          confidenceScore: new Prisma.Decimal(0.98),
-          riskLevel: clusterDef.growthProfile === 'explosive' ? 'baixo' : clusterDef.growthProfile === 'rising' ? 'baixo' : 'medio',
-          financialScore: clusterDef.growthProfile === 'explosive' ? 88 : 75,
-        },
-      });
-    }
-
-    const marketplaces = [
-      { code: 'mercadolivre', country: 'BR', currency: 'BRL', priceMultiplier: 1.0, seller: 'Move Sports Oficial' },
-      { code: 'amazon_br', country: 'BR', currency: 'BRL', priceMultiplier: 1.05, seller: 'Amazon Brasil Retail' },
-      { code: 'shopee_br', country: 'BR', currency: 'BRL', priceMultiplier: 0.95, seller: 'FitTech Distribuidora' },
-      { code: 'alibaba', country: 'CN', currency: 'USD', priceMultiplier: 1.0, seller: clusterDef.suppliers[0]?.name ?? 'Global Gym Supplier' },
-      { code: '1688', country: 'CN', currency: 'CNY', priceMultiplier: 7.2, seller: clusterDef.suppliers[0]?.name ?? 'China Fitness Manufacturer' },
-      { code: 'amazon', country: 'US', currency: 'USD', priceMultiplier: 1.15, seller: 'Prime Fitness US' },
-    ];
-
-    // Vincular items ao cluster
-    for (const mp of marketplaces) {
-      const extId = `ext_${clusterDef.clusterKey}_${mp.code}`;
-      await prisma.productClusterItem.upsert({
-        where: {
-          marketplace_externalProductId: {
-            marketplace: mp.code,
-            externalProductId: extId,
-          },
-        },
-        create: {
-          clusterId: cluster.id,
-          marketplace: mp.code,
-          externalProductId: extId,
-          similarityScore: new Prisma.Decimal(0.95),
-          matchedBy: 'canonical_catalog',
-        },
-        update: {
-          clusterId: cluster.id,
-        },
-      });
-    }
-
-    // 2. Gerar histórico de 26 semanas para este cluster
-    for (let weekIdx = 0; weekIdx < weeks.length; weekIdx++) {
-      const weekDate = weeks[weekIdx];
-      const trajectory = computeTrajectory(clusterDef.growthProfile, weekIdx, WEEKS_COUNT);
-
-      // A. Demand Signals (Google Trends BR & US)
-      for (const [geo, kwList] of Object.entries(clusterDef.keywords)) {
-        for (const kw of kwList) {
-          const kwNoise = (Math.sin(weekIdx + kw.length) * 4);
-          const finalIndex = Math.max(5, Math.min(100, Math.round(trajectory.demandTrend + kwNoise)));
-          const signalId = randomUUID();
-
-          const demandSignal = await prisma.intelligenceDemandSignal.upsert({
-            where: {
-              keyword_geo_source_weekStart: {
-                keyword: kw,
-                geo,
-                source: 'google_trends',
-                weekStart: weekDate,
-              },
-            },
-            create: {
-              id: signalId,
-              keyword: kw,
-              geo,
-              source: 'google_trends',
-              weekStart: weekDate,
-              trendIndex: new Prisma.Decimal(finalIndex),
-              rawValue: new Prisma.Decimal(finalIndex * 125),
-              capturedAt: weekDate,
-            },
-            update: {
-              trendIndex: new Prisma.Decimal(finalIndex),
-            },
-          });
-          totalDemandSignals++;
-        }
-      }
-
-      // B. Products & Snapshots nos Marketplaces
-      for (const mp of marketplaces) {
-        const recordId = `prod_${clusterDef.clusterKey}_${mp.code}`;
-        const isBrl = mp.currency === 'BRL';
-        const isUsd = mp.currency === 'USD';
-        const isCny = mp.currency === 'CNY';
-
-        // Preço com leve ruído estocástico e desconto por ganho de escala
-        const priceBase = isBrl ? clusterDef.basePriceBrl : isUsd ? clusterDef.basePriceUsd : (clusterDef.basePriceUsd * 7.1);
-        const priceNoise = 1.0 + (Math.sin(weekIdx * 0.8 + mp.code.length) * 0.04);
-        const finalPrice = Math.round(priceBase * mp.priceMultiplier * priceNoise * 100) / 100;
-
-        const reviews = Math.round(clusterDef.baseReviews * trajectory.reviewMultiplier);
-        const sales = Math.round(clusterDef.baseMonthlySales * trajectory.salesMultiplier);
-        const rating = Math.min(5.0, Math.round((clusterDef.baseRating + (Math.sin(weekIdx) * 0.1)) * 10) / 10);
-
-        const prodUuid = randomUUID();
-        const rawProduct = await prisma.intelligenceProduct.upsert({
-          where: {
-            source_recordId_capturedAt: {
-              source: mp.code,
-              recordId,
-              capturedAt: weekDate,
-            },
-          },
-          create: {
-            id: prodUuid,
-            source: mp.code,
-            recordId,
-            capturedAt: weekDate,
-            title: `${clusterDef.canonicalName} - ${mp.seller}`,
-            canonicalTitle: clusterDef.canonicalName,
-            brand: mp.seller,
-            cluster: clusterDef.clusterKey,
-            priceValue: new Prisma.Decimal(finalPrice),
-            priceCurrency: mp.currency,
-            rating: new Prisma.Decimal(rating),
-            reviewsCount: reviews,
-            monthlySales: sales,
-            moq: isUsd || isCny ? 50 : 1,
-            supplier: mp.seller,
-            dataQuality: 'catalog_listing',
-            sourceSpecific: {
-              marketplace_origin: mp.country,
-              weekly_index: weekIdx,
-              seller: mp.seller,
-              stock_status: 'in_stock',
-            },
-          },
-          update: {
-            priceValue: new Prisma.Decimal(finalPrice),
-            reviewsCount: reviews,
-            monthlySales: sales,
-          },
-        });
-        totalProducts++;
-
-        // Analytical Snapshot
-        await prisma.productListingSnapshot.create({
-          data: {
-            marketplace: mp.code,
-            externalProductId: `ext_${clusterDef.clusterKey}_${mp.code}`,
-            productClusterId: cluster.id,
-            rawProductId: rawProduct.id,
-            title: `${clusterDef.canonicalName} (${mp.code.toUpperCase()})`,
-            priceMin: new Prisma.Decimal(finalPrice),
-            priceMax: new Prisma.Decimal(finalPrice * 1.08),
-            currency: mp.currency,
-            moq: isUsd || isCny ? 50 : 1,
-            stock: 250,
-            rating: new Prisma.Decimal(rating),
-            reviewCount: reviews,
-            salesSignalRaw: new Prisma.Decimal(sales),
-            salesSignalType: 'units_monthly',
-            sellerName: mp.seller,
-            imageCount: 5,
-            imageUrl: `https://images.move-intelligence.com/fitness/${clusterDef.clusterKey}.jpg`,
-            productUrl: `https://${mp.code}.com/dp/${clusterDef.clusterKey}`,
-            collectedAt: weekDate,
-          },
-        });
-        totalSnapshots++;
-
-        // Demand Links
-        const signalGeo = mp.country === 'BR' ? 'BR' : 'US';
-        const relevantSignals = await prisma.intelligenceDemandSignal.findMany({
-          where: {
-            weekStart: weekDate,
-            geo: signalGeo,
-            keyword: { in: clusterDef.keywords[signalGeo] },
-          },
-          orderBy: { keyword: 'asc' },
-          take: 2,
-        });
-
-        for (const sig of relevantSignals) {
-          try {
-            await prisma.intelligenceProductDemandLink.upsert({
-              where: {
-                productId_demandSignalId_keyword: {
-                  productId: rawProduct.id,
-                  demandSignalId: sig.id,
-                  keyword: sig.keyword,
-                },
-              },
-              create: {
-                id: randomUUID(),
-                productId: rawProduct.id,
-                demandSignalId: sig.id,
-                keyword: sig.keyword,
-                matchMethod: 'cluster_map',
-                createdAt: weekDate,
-              },
-              update: {},
-            });
-            totalDemandLinks++;
-          } catch {
-            // ignore duplicate links
-          }
-        }
-      }
-    }
-
-    // 3. Despachos Aduaneiros Recentes (Shipments / TradeAtlas / Comex)
-    for (const sup of clusterDef.suppliers) {
-      for (let s = 0; s < 4; s++) {
-        const shipDate = new Date(weeks[Math.floor(Math.random() * weeks.length)]);
-        const fobTotal = Math.round(clusterDef.basePriceUsd * (150 + s * 100) * 100) / 100;
-        const netKg = Math.round((150 + s * 100) * 12.5);
-
-        const natKey = `ship_${clusterDef.clusterKey}_${sup.name.slice(0, 10)}_${s}_${shipDate.toISOString().split('T')[0]}`;
-        await prisma.shipment.upsert({
-          where: { naturalKey: natKey },
-          create: {
-            naturalKey: natKey,
-            importJobId: importJob.id,
-            arrivalDate: shipDate,
-            importerName: 'MOVE EQUIPAMENTOS FITNESS DO BRASIL LTDA',
-            importerCountry: 'Brazil',
-            exporterName: sup.name,
-            exporterCountry: sup.country,
-            originCountry: sup.country,
-            hsCode: '9506.91.00',
-            productDetails: `${clusterDef.canonicalName} - Lote Comercial ${sup.city}`,
-            fobUsd: new Prisma.Decimal(fobTotal),
-            cifUsd: new Prisma.Decimal(fobTotal * 1.14),
-            grossWeightKg: new Prisma.Decimal(netKg * 1.08),
-            netWeightKg: new Prisma.Decimal(netKg),
-            quantity: new Prisma.Decimal(150 + s * 100),
-            quantityUnit: 'UN',
-            portOfArrival: 'Porto de Santos (SP)',
-            portOfDeparture: `Port of ${sup.city}`,
-            declarationNumber: `DI-26/08-${Math.floor(100000 + Math.random() * 900000)}`,
-          },
-          update: {},
-        });
-        totalShipments++;
-      }
-    }
+    await prisma.$transaction(
+      async (tx) => {
+        await seedOneCluster(tx, clusterDef, weeks, importJob.id, stats);
+      },
+      { timeout: 120_000 },
+    );
   }
 
   console.log('\n📊 Estatísticas de Inserção:');
-  console.log(`- Produtos brutos persistidos: ${totalProducts}`);
-  console.log(`- Snapshots analíticos criados: ${totalSnapshots}`);
-  console.log(`- Sinais de demanda (Google Trends): ${totalDemandSignals}`);
-  console.log(`- Vínculos Produto-Demanda: ${totalDemandLinks}`);
-  console.log(`- Despachos aduaneiros (Shipments): ${totalShipments}`);
+  console.log(`- Produtos brutos persistidos: ${stats.totalProducts}`);
+  console.log(`- Snapshots analíticos criados: ${stats.totalSnapshots}`);
+  console.log(`- Sinais de demanda (Google Trends): ${stats.totalDemandSignals}`);
+  console.log(`- Vínculos Produto-Demanda: ${stats.totalDemandLinks}`);
+  console.log(`- Despachos aduaneiros (Shipments): ${stats.totalShipments}`);
 
   // 4. Executar Simulações Monte Carlo em Lote para calcular Scores e Risco
   console.log('\n🎲 Executando simulação estocástica Monte Carlo em lote para atualizar risco do ranking...');

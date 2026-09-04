@@ -91,6 +91,9 @@ export class NvidiaService {
     const apiUrl = process.env.NVIDIA_API_URL ?? this.defaultApiUrl;
     const maxRetries = 2;
 
+    // Keep the system prompt as the first message so any opportunistic prefix/KV
+    // reuse can hit. Do not send OpenAI `prompt_cache_key` / Anthropic
+    // `cache_control`: NVIDIA's cloud OpenAI wrapper rejects them with HTTP 400.
     const requestBody: Record<string, unknown> = {
       model,
       messages,

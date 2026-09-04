@@ -59,6 +59,8 @@ data/
 *.dump
 *.sql
 !Move-Intelligence-Back/prisma/init-extensions.sql
+# Migrations do Prisma (excecao ao *.sql acima)
+!Move-Intelligence-Back/prisma/migrations/**/*.sql
 *.sql.gz
 *.sqlite
 *.sqlite3

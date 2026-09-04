@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { ConnectorsRegistry } from '../connectors/connectors.registry';
-import { TrendEngineService, TrendSnapshotInput } from '../trend-engine/trend-engine.service';
+import {
+  TrendEngineService,
+  TrendSnapshotInput,
+  TrendWindowRollup,
+} from '../trend-engine/trend-engine.service';
 import { BusinessRulesService } from '../../shared/business-rules/business-rules.service';
 import { TrendScoreBreakdown } from '../../shared/types/scoring.types';
 import {
@@ -109,6 +114,106 @@ type ClusterWithSnapshots = {
   snapshots: SnapshotRow[];
 };
 
+type ClusterRollup = {
+  id: string;
+  canonicalName: string;
+  category: string | null;
+  riskLevel: string | null;
+  financialScore: number | null;
+  firstCollectedAt: Date;
+  lastCollectedAt: Date;
+  firstAvgPrice: number | null;
+  lastAvgPrice: number | null;
+  firstAvgReviews: number | null;
+  lastAvgReviews: number | null;
+  firstAvgSignal: number | null;
+  lastAvgSignal: number | null;
+  firstSalesSignalType: string | null;
+  latestMarketplace: string;
+  latestPrice: number | null;
+  latestRating: number | null;
+  latestReviews: number | null;
+  latestSignal: number | null;
+  latestSignalType: string | null;
+  marketplaces: string[];
+  demandSources: string[];
+  latestImageUrl: string | null;
+  hasReviews: boolean;
+  hasSales: boolean;
+  hasSeller: boolean;
+  projectedRevenue: number;
+  priceMean: number | null;
+  priceStddev: number | null;
+  priceCount: number;
+  volumeSpark: number[];
+  demandSpark: number[];
+  demandScore: number | null;
+  sellers: string[];
+};
+
+type TrendListSort =
+  | 'trend_score'
+  | 'opportunity_score'
+  | 'growth'
+  | 'name'
+  | 'projected_revenue';
+
+type TrendListOptions = {
+  limit?: number;
+  sort?: string;
+  category?: string;
+};
+
+type ClusterRollupRow = {
+  id: string;
+  canonical_name: string;
+  category: string | null;
+  risk_level: string | null;
+  financial_score: number | null;
+  first_collected_at: Date;
+  last_collected_at: Date;
+  first_avg_price: unknown;
+  last_avg_price: unknown;
+  first_avg_reviews: unknown;
+  last_avg_reviews: unknown;
+  first_avg_signal: unknown;
+  last_avg_signal: unknown;
+  first_signal_type: string | null;
+  latest_marketplace: string;
+  latest_price: unknown;
+  latest_rating: unknown;
+  latest_reviews: unknown;
+  latest_signal: unknown;
+  latest_signal_type: string | null;
+  marketplaces: string[] | null;
+  demand_sources: string[] | null;
+  latest_image_url: string | null;
+  has_reviews: boolean;
+  has_sales: boolean;
+  has_seller: boolean;
+  projected_revenue: unknown;
+  price_mean: unknown;
+  price_stddev: unknown;
+  price_count: unknown;
+  volume_spark: unknown[] | null;
+  demand_spark: unknown[] | null;
+  demand_score: unknown;
+  sellers: string[] | null;
+};
+
+const TREND_SORTS: Record<string, TrendListSort> = {
+  trend_score: 'trend_score',
+  default: 'trend_score',
+  opportunity_score: 'opportunity_score',
+  opportunity: 'opportunity_score',
+  growth: 'growth',
+  growth_pct: 'growth',
+  name: 'name',
+  canonical_name: 'name',
+  projected_revenue: 'projected_revenue',
+  revenue: 'projected_revenue',
+};
+
 const DEFAULT_WINDOW = '30d';
 
 /**
@@ -121,12 +226,6 @@ const DEFAULT_WINDOW = '30d';
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
 
 const MAX_RANKED_CLUSTERS = 20000;
-
-/** Ordenação determinística do universo de clusters ranqueáveis. */
-const RANKED_CLUSTERS_ORDER = [
-  { createdAt: 'asc' as const },
-  { id: 'asc' as const },
-];
 
 @Injectable()
 export class DashboardApiService {
@@ -145,46 +244,275 @@ export class DashboardApiService {
 
   // ---- /trends/products ------------------------------------------------
 
-  async listTrendingProducts(limit = 50) {
-    return this.cached(`dashboard:trends:products:${limit}`, 3600, async () => {
-      const clusters = await this.findRankableClusters();
+  async listTrendingProducts(
+    limitOrOpts: number | TrendListOptions = 50,
+  ) {
+    const opts = this.parseTrendListOptions(limitOrOpts);
+    const cacheKey = `dashboard:trends:products:${opts.limit}:${opts.sort}:${opts.category ?? 'all'}`;
 
-      const products = clusters
-        .filter((cluster) => cluster.snapshots.length > 0)
-        .map((cluster) => this.clusterToTrendProduct(cluster));
-
-      // Desempate por nome canônico para que scores iguais não alternem de
-      // posição entre requisições.
-      products.sort(
-        (a, b) =>
-          (b.trend_score.value ?? 0) - (a.trend_score.value ?? 0) ||
-          a.canonical_name.localeCompare(b.canonical_name),
-      );
-      return products.slice(0, Math.max(0, limit));
+    return this.cached(cacheKey, 3600, async () => {
+      const rollups = await this.loadClusterRollups(opts.category);
+      const products = rollups.map((row) => this.clusterRollupToTrendProduct(row));
+      products.sort((a, b) => this.compareTrendProducts(a, b, opts.sort));
+      return products.slice(0, Math.max(0, opts.limit));
     });
   }
 
   /**
-   * Universo de clusters ranqueáveis (os que têm ao menos um snapshot), lido de
-   * forma determinística e com teto de segurança.
+   * Uma linha por cluster com os insumos do Trend Engine já agregados no Postgres.
+   * Substitui o carregamento aninhado de até 20k clusters × 500 snapshots.
    */
-  private async findRankableClusters(): Promise<ClusterWithSnapshots[]> {
-    return (await this.prisma.productCluster.findMany({
-      where: { snapshots: { some: {} } },
-      include: {
-        snapshots: {
-          orderBy: { collectedAt: 'asc' },
-          take: 500,
-          include: {
-            rawProduct: {
-              include: { demandLinks: { include: { demandSignal: true } } },
-            },
-          },
-        },
-      },
-      orderBy: RANKED_CLUSTERS_ORDER,
-      take: MAX_RANKED_CLUSTERS,
-    })) as unknown as ClusterWithSnapshots[];
+  private async loadClusterRollups(category?: string): Promise<ClusterRollup[]> {
+    const categoryFilter = category
+      ? Prisma.sql`AND c.category = ${category}`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<ClusterRollupRow[]>(Prisma.sql`
+      WITH bounds AS (
+        SELECT
+          product_cluster_id,
+          MIN(collected_at) AS first_at,
+          MAX(collected_at) AS last_at
+        FROM product_listing_snapshots
+        WHERE product_cluster_id IS NOT NULL
+        GROUP BY product_cluster_id
+      ),
+      windowed AS (
+        SELECT
+          s.product_cluster_id,
+          (AVG(s.price_min) FILTER (
+            WHERE s.price_min IS NOT NULL AND s.price_min > 0
+              AND s.collected_at <= b.first_at + INTERVAL '24 hours'
+          ))::float8 AS first_avg_price,
+          (AVG(s.price_min) FILTER (
+            WHERE s.price_min IS NOT NULL AND s.price_min > 0
+              AND s.collected_at >= b.last_at - INTERVAL '24 hours'
+          ))::float8 AS last_avg_price,
+          (AVG(s.review_count) FILTER (
+            WHERE s.review_count IS NOT NULL
+              AND s.collected_at <= b.first_at + INTERVAL '24 hours'
+          ))::float8 AS first_avg_reviews,
+          (AVG(s.review_count) FILTER (
+            WHERE s.review_count IS NOT NULL
+              AND s.collected_at >= b.last_at - INTERVAL '24 hours'
+          ))::float8 AS last_avg_reviews,
+          (AVG(s.sales_signal_raw) FILTER (
+            WHERE s.sales_signal_raw IS NOT NULL AND s.sales_signal_raw > 0
+              AND s.collected_at <= b.first_at + INTERVAL '24 hours'
+          ))::float8 AS first_avg_signal,
+          (AVG(s.sales_signal_raw) FILTER (
+            WHERE s.sales_signal_raw IS NOT NULL AND s.sales_signal_raw > 0
+              AND s.collected_at >= b.last_at - INTERVAL '24 hours'
+          ))::float8 AS last_avg_signal,
+          (AVG(s.price_min) FILTER (WHERE s.price_min IS NOT NULL AND s.price_min > 0))::float8 AS price_mean,
+          (STDDEV_POP(s.price_min) FILTER (WHERE s.price_min IS NOT NULL AND s.price_min > 0))::float8 AS price_stddev,
+          (COUNT(*) FILTER (WHERE s.price_min IS NOT NULL AND s.price_min > 0))::int AS price_count,
+          BOOL_OR(s.review_count IS NOT NULL) AS has_reviews,
+          BOOL_OR(s.sales_signal_raw IS NOT NULL) AS has_sales,
+          BOOL_OR(
+            s.seller_id IS NOT NULL
+            OR (s.seller_name IS NOT NULL AND BTRIM(s.seller_name) <> '')
+          ) AS has_seller,
+          COALESCE(SUM(
+            CASE
+              WHEN s.price_min > 0 AND s.sales_signal_raw > 0
+              THEN s.price_min * s.sales_signal_raw
+              ELSE 0
+            END
+          ), 0)::float8 AS projected_revenue,
+          COALESCE(
+            ARRAY_AGG(DISTINCT s.marketplace) FILTER (WHERE s.marketplace IS NOT NULL),
+            '{}'::text[]
+          ) AS marketplaces,
+          COALESCE(
+            ARRAY_AGG(DISTINCT COALESCE(s.seller_id, s.seller_name)) FILTER (
+              WHERE s.seller_id IS NOT NULL
+                OR (s.seller_name IS NOT NULL AND BTRIM(s.seller_name) <> '')
+            ),
+            '{}'::text[]
+          ) AS sellers,
+          (
+            ARRAY_AGG(s.image_url ORDER BY s.collected_at DESC)
+              FILTER (WHERE s.image_url IS NOT NULL)
+          )[1] AS latest_image_url
+        FROM product_listing_snapshots s
+        JOIN bounds b ON b.product_cluster_id = s.product_cluster_id
+        GROUP BY s.product_cluster_id
+      ),
+      latest_row AS (
+        SELECT DISTINCT ON (product_cluster_id)
+          product_cluster_id,
+          marketplace AS latest_marketplace,
+          price_min::float8 AS latest_price,
+          rating::float8 AS latest_rating,
+          review_count AS latest_reviews,
+          sales_signal_raw::float8 AS latest_signal,
+          sales_signal_type AS latest_signal_type
+        FROM product_listing_snapshots
+        WHERE product_cluster_id IS NOT NULL
+        ORDER BY product_cluster_id, collected_at DESC, id DESC
+      ),
+      first_row AS (
+        SELECT DISTINCT ON (product_cluster_id)
+          product_cluster_id,
+          sales_signal_type AS first_signal_type,
+          collected_at AS first_collected_at
+        FROM product_listing_snapshots
+        WHERE product_cluster_id IS NOT NULL
+        ORDER BY product_cluster_id, collected_at ASC, id ASC
+      ),
+      volume_spark AS (
+        SELECT
+          product_cluster_id,
+          COALESCE(
+            ARRAY_AGG(avg_vol ORDER BY day) FILTER (WHERE avg_vol IS NOT NULL),
+            '{}'::float8[]
+          ) AS volume_spark
+        FROM (
+          SELECT
+            product_cluster_id,
+            (collected_at AT TIME ZONE 'UTC')::date AS day,
+            (AVG(sales_signal_raw) FILTER (WHERE sales_signal_raw > 0))::float8 AS avg_vol
+          FROM product_listing_snapshots
+          WHERE product_cluster_id IS NOT NULL
+          GROUP BY 1, 2
+        ) daily
+        GROUP BY product_cluster_id
+      ),
+      demand_latest AS (
+        SELECT DISTINCT ON (s.product_cluster_id, ds.keyword, ds.geo, ds.source)
+          s.product_cluster_id,
+          ds.source,
+          ds.trend_index::float8 AS trend_index
+        FROM product_listing_snapshots s
+        JOIN product_demand_link pdl ON pdl.product_id = s.raw_product_id
+        JOIN demand_signals ds ON ds.id = pdl.demand_signal_id
+        WHERE s.product_cluster_id IS NOT NULL
+          AND s.raw_product_id IS NOT NULL
+        ORDER BY s.product_cluster_id, ds.keyword, ds.geo, ds.source, ds.week_start DESC
+      ),
+      demand_agg AS (
+        SELECT
+          product_cluster_id,
+          COALESCE(ARRAY_AGG(DISTINCT source), '{}'::text[]) AS demand_sources,
+          AVG(trend_index)::float8 AS demand_score
+        FROM demand_latest
+        GROUP BY product_cluster_id
+      ),
+      demand_spark AS (
+        SELECT
+          weekly.product_cluster_id,
+          COALESCE(
+            ARRAY_AGG(week_avg ORDER BY week_start) FILTER (WHERE week_avg IS NOT NULL),
+            '{}'::float8[]
+          ) AS demand_spark
+        FROM (
+          SELECT
+            s.product_cluster_id,
+            ds.week_start,
+            AVG(ds.trend_index)::float8 AS week_avg
+          FROM product_listing_snapshots s
+          JOIN product_demand_link pdl ON pdl.product_id = s.raw_product_id
+          JOIN demand_signals ds ON ds.id = pdl.demand_signal_id
+          WHERE s.product_cluster_id IS NOT NULL
+            AND s.raw_product_id IS NOT NULL
+          GROUP BY s.product_cluster_id, ds.week_start
+        ) weekly
+        GROUP BY weekly.product_cluster_id
+      )
+      SELECT
+        c.id,
+        c.canonical_name,
+        c.category,
+        c.risk_level,
+        c.financial_score,
+        fr.first_collected_at,
+        b.last_at AS last_collected_at,
+        w.first_avg_price,
+        w.last_avg_price,
+        w.first_avg_reviews,
+        w.last_avg_reviews,
+        w.first_avg_signal,
+        w.last_avg_signal,
+        fr.first_signal_type,
+        lr.latest_marketplace,
+        lr.latest_price,
+        lr.latest_rating,
+        lr.latest_reviews,
+        lr.latest_signal,
+        lr.latest_signal_type,
+        w.marketplaces,
+        COALESCE(da.demand_sources, '{}'::text[]) AS demand_sources,
+        w.latest_image_url,
+        w.has_reviews,
+        w.has_sales,
+        w.has_seller,
+        w.projected_revenue,
+        w.price_mean,
+        w.price_stddev,
+        w.price_count,
+        COALESCE(vs.volume_spark, '{}'::float8[]) AS volume_spark,
+        COALESCE(dsp.demand_spark, '{}'::float8[]) AS demand_spark,
+        da.demand_score,
+        w.sellers
+      FROM product_clusters c
+      JOIN bounds b ON b.product_cluster_id = c.id
+      JOIN windowed w ON w.product_cluster_id = c.id
+      JOIN latest_row lr ON lr.product_cluster_id = c.id
+      JOIN first_row fr ON fr.product_cluster_id = c.id
+      LEFT JOIN volume_spark vs ON vs.product_cluster_id = c.id
+      LEFT JOIN demand_agg da ON da.product_cluster_id = c.id
+      LEFT JOIN demand_spark dsp ON dsp.product_cluster_id = c.id
+      WHERE 1 = 1
+        ${categoryFilter}
+      ORDER BY c.created_at ASC, c.id ASC
+      LIMIT ${MAX_RANKED_CLUSTERS}
+    `);
+
+    return rows.map((row) => this.mapClusterRollup(row));
+  }
+
+  private mapClusterRollup(row: ClusterRollupRow): ClusterRollup {
+    return {
+      id: row.id,
+      canonicalName: row.canonical_name,
+      category: row.category,
+      riskLevel: row.risk_level,
+      financialScore: this.toNumber(row.financial_score),
+      firstCollectedAt: new Date(row.first_collected_at),
+      lastCollectedAt: new Date(row.last_collected_at),
+      firstAvgPrice: this.toNumber(row.first_avg_price),
+      lastAvgPrice: this.toNumber(row.last_avg_price),
+      firstAvgReviews: this.toNumber(row.first_avg_reviews),
+      lastAvgReviews: this.toNumber(row.last_avg_reviews),
+      firstAvgSignal: this.toNumber(row.first_avg_signal),
+      lastAvgSignal: this.toNumber(row.last_avg_signal),
+      firstSalesSignalType: row.first_signal_type,
+      latestMarketplace: row.latest_marketplace,
+      latestPrice: this.toNumber(row.latest_price),
+      latestRating: this.toNumber(row.latest_rating),
+      latestReviews: this.toNumber(row.latest_reviews),
+      latestSignal: this.toNumber(row.latest_signal),
+      latestSignalType: row.latest_signal_type,
+      marketplaces: row.marketplaces ?? [],
+      demandSources: row.demand_sources ?? [],
+      latestImageUrl: row.latest_image_url,
+      hasReviews: Boolean(row.has_reviews),
+      hasSales: Boolean(row.has_sales),
+      hasSeller: Boolean(row.has_seller),
+      projectedRevenue: this.toNumber(row.projected_revenue) ?? 0,
+      priceMean: this.toNumber(row.price_mean),
+      priceStddev: this.toNumber(row.price_stddev),
+      priceCount: this.toNumber(row.price_count) ?? 0,
+      volumeSpark: (row.volume_spark ?? [])
+        .map((value) => this.toNumber(value))
+        .filter((value): value is number => value !== null),
+      demandSpark: (row.demand_spark ?? [])
+        .map((value) => this.toNumber(value))
+        .filter((value): value is number => value !== null),
+      demandScore: this.toNumber(row.demand_score),
+      sellers: row.sellers ?? [],
+    };
   }
 
   // ---- /trends/products/:id -------------------------------------------
@@ -227,33 +555,22 @@ export class DashboardApiService {
   // ---- /dashboard/summary ---------------------------------------------
 
   async getDashboardSummary() {
-    const clusters = await this.findRankableClusters();
+    const rollups = await this.loadClusterRollups();
 
-    if (clusters.length === 0) {
+    if (rollups.length === 0) {
       // Sem dados de marketplace: usa os dados importados (Comex/TradeAtlas).
       return this.importDashboardSummary();
     }
 
-    const products = clusters
-      .map((cluster) => this.clusterToTrendProduct(cluster))
-      .sort((a, b) => (b.trend_score.value ?? 0) - (a.trend_score.value ?? 0));
+    const products = rollups
+      .map((row) => this.clusterRollupToTrendProduct(row))
+      .sort((a, b) => this.compareTrendProducts(a, b, 'trend_score'));
     const avgScore = Math.round(
       products.reduce((sum, product) => sum + (product.trend_score.value ?? 0), 0) /
         products.length,
     );
-    const suppliers = new Set(
-      clusters.flatMap((cluster) =>
-        cluster.snapshots
-          .map((snapshot) => snapshot.sellerId ?? snapshot.sellerName)
-          .filter((seller): seller is string => Boolean(seller)),
-      ),
-    );
-
-    const origins = new Set(
-      clusters.flatMap((cluster) =>
-        cluster.snapshots.map((snapshot) => snapshot.marketplace),
-      ),
-    );
+    const suppliers = new Set(rollups.flatMap((row) => row.sellers));
+    const origins = new Set(rollups.flatMap((row) => row.marketplaces));
     const activeOpportunities = products.filter(
       (product) => (product.opportunity_score.value ?? 0) >= 35,
     ).length;
@@ -897,6 +1214,157 @@ export class DashboardApiService {
 
   // ---- Helpers ---------------------------------------------------------
 
+  private parseTrendListOptions(
+    limitOrOpts: number | TrendListOptions,
+  ): { limit: number; sort: TrendListSort; category?: string } {
+    const opts: TrendListOptions =
+      typeof limitOrOpts === 'number' ? { limit: limitOrOpts } : (limitOrOpts ?? {});
+    const parsedLimit = Number(opts.limit ?? 50);
+    const limit = Number.isFinite(parsedLimit) ? Math.max(0, Math.min(500, parsedLimit)) : 50;
+    const sortKey = (opts.sort ?? 'trend_score').trim().toLowerCase();
+    const sort = TREND_SORTS[sortKey] ?? 'trend_score';
+    const category = opts.category?.trim().slice(0, 120) || undefined;
+    return { limit, sort, category };
+  }
+
+  private compareTrendProducts(
+    a: ReturnType<DashboardApiService['clusterRollupToTrendProduct']>,
+    b: ReturnType<DashboardApiService['clusterRollupToTrendProduct']>,
+    sort: TrendListSort,
+  ): number {
+    switch (sort) {
+      case 'name':
+        return a.canonical_name.localeCompare(b.canonical_name);
+      case 'growth':
+        return (b.growth_pct ?? Number.NEGATIVE_INFINITY) - (a.growth_pct ?? Number.NEGATIVE_INFINITY);
+      case 'opportunity_score':
+        return (b.opportunity_score.value ?? 0) - (a.opportunity_score.value ?? 0);
+      case 'projected_revenue':
+        return (b.projected_revenue ?? 0) - (a.projected_revenue ?? 0);
+      case 'trend_score':
+      default:
+        return (
+          (b.trend_score.value ?? 0) - (a.trend_score.value ?? 0) ||
+          a.canonical_name.localeCompare(b.canonical_name)
+        );
+    }
+  }
+
+  private clusterRollupToTrendProduct(row: ClusterRollup) {
+    const rollup: TrendWindowRollup = {
+      category: row.category,
+      firstAvgPrice: row.firstAvgPrice,
+      lastAvgPrice: row.lastAvgPrice,
+      firstAvgReviews: row.firstAvgReviews,
+      lastAvgReviews: row.lastAvgReviews,
+      firstAvgSignal: row.firstAvgSignal,
+      lastAvgSignal: row.lastAvgSignal,
+      firstSalesSignalType: row.firstSalesSignalType as TrendWindowRollup['firstSalesSignalType'],
+      latest: {
+        marketplace: row.latestMarketplace,
+        priceMin: row.latestPrice,
+        rating: row.latestRating,
+        reviewCount: row.latestReviews,
+        salesSignalRaw: row.latestSignal,
+        salesSignalType: row.latestSignalType as never,
+        collectedAt: row.lastCollectedAt,
+      },
+    };
+    const breakdown = this.trendEngine.calculateFromRollup(rollup);
+    const demandScore =
+      row.demandScore === null ? null : Math.round(row.demandScore);
+    const marketplaceScore = Math.round(breakdown.trendScore * 100);
+    const combinedTrendScore =
+      demandScore === null
+        ? marketplaceScore
+        : Math.round(marketplaceScore * 0.4 + demandScore * 0.6);
+    const mainSources = [...new Set([...row.marketplaces, ...row.demandSources])];
+    const volumes = row.volumeSpark;
+    const demandSeries = row.demandSpark;
+    const spark =
+      volumes.length > 1
+        ? volumes
+        : demandSeries.length > 1
+          ? demandSeries
+          : this.sparkSeries(volumes, []);
+    const marketplaces = new Set(row.marketplaces.map((name) => name.toLowerCase()));
+    const westernMarketplaces = ['amazon', 'google-shopping', 'mercado_livre', 'shein'];
+    const westernPresence = westernMarketplaces.filter((marketplace) =>
+      marketplaces.has(marketplace),
+    ).length;
+    const westernSaturation = Math.round(
+      (westernPresence / westernMarketplaces.length) * 100,
+    );
+    const evidenceCoverage = [
+      row.priceCount > 0,
+      row.hasReviews,
+      row.hasSales,
+      row.hasSeller,
+    ].filter(Boolean).length;
+    const coverageScore = evidenceCoverage * 25;
+    const opportunityScore =
+      demandScore === null
+        ? Math.round(marketplaceScore * 0.7 + coverageScore * 0.3)
+        : combinedTrendScore;
+
+    return {
+      product_cluster_id: row.id,
+      canonical_name: row.canonicalName,
+      category: row.category,
+      image_url: row.latestImageUrl,
+      trend_score:
+        demandScore === null
+          ? this.trendIndicator(breakdown)
+          : indicator(
+              combinedTrendScore,
+              'Score combinado: 60% demanda normalizada e 40% sinais do marketplace.',
+              {
+                demand_score: demandScore,
+                marketplace_score: marketplaceScore,
+              },
+              DEFAULT_WINDOW,
+            ),
+      opportunity_score: indicator(
+        opportunityScore,
+        demandScore === null
+          ? 'Oportunidade calculada com score do marketplace e cobertura dos dados observados.'
+          : 'Oportunidade calculada com demanda e evidências atuais de marketplace.',
+        demandScore === null
+          ? { marketplace_score: marketplaceScore, evidence_coverage: coverageScore }
+          : { demand_score: demandScore, marketplace_score: marketplaceScore },
+        DEFAULT_WINDOW,
+      ),
+      western_saturation_score: indicator(
+        westernSaturation,
+        'Presença observada do cluster em Amazon, Google Shopping, Mercado Livre e Shein.',
+        {
+          marketplaces_observed: westernPresence,
+          marketplaces_considered: westernMarketplaces.length,
+        },
+        DEFAULT_WINDOW,
+      ),
+      margin_estimate: pendingIndicator(),
+      risk: this.simulatedRisk(row.riskLevel) ?? this.riskFromStats(row),
+      financial_score: row.financialScore,
+      main_sources: mainSources,
+      recommendation:
+        combinedTrendScore > 0
+          ? 'Sinal observado em demanda e marketplace. Validar margem e fornecedor antes da compra.'
+          : 'Dados iniciais coletados. Aguardando série histórica.',
+      stage: this.stageFromScore(combinedTrendScore),
+      spark,
+      growth_pct:
+        volumes.length > 1
+          ? this.growthPct(volumes)
+          : demandSeries.length > 1
+            ? this.growthPct(demandSeries)
+            : null,
+      margin_pct: null,
+      lead_time_days: null,
+      projected_revenue: row.projectedRevenue > 0 ? this.round(row.projectedRevenue) : null,
+    };
+  }
+
   private toTrendInput(row: SnapshotRow): TrendSnapshotInput {
     return {
       marketplace: row.marketplace,
@@ -1005,7 +1473,7 @@ export class DashboardApiService {
       ),
       margin_estimate: pendingIndicator(),
       // Risco oficial vem da simulação Monte Carlo; a heurística de preço é fallback.
-      risk: this.simulatedRisk(cluster) ?? this.riskFromPrices(prices),
+      risk: this.simulatedRisk(cluster.riskLevel) ?? this.riskFromPrices(prices),
       financial_score: cluster.financialScore ?? null,
       main_sources: mainSources,
       recommendation:
@@ -1202,10 +1670,23 @@ export class DashboardApiService {
 
   /** Risco persistido pela simulação Monte Carlo, se estiver num nível conhecido. */
   private simulatedRisk(
-    cluster: ClusterWithSnapshots,
+    level?: string | null,
   ): 'baixo' | 'medio' | 'alto' | null {
-    const level = cluster.riskLevel;
     return level === 'baixo' || level === 'medio' || level === 'alto' ? level : null;
+  }
+
+  private riskFromStats(row: ClusterRollup): 'baixo' | 'medio' | 'alto' | null {
+    if (row.priceCount < 2 || row.priceMean === null || row.priceMean <= 0 || row.priceStddev === null) {
+      return null;
+    }
+    const cv = row.priceStddev / row.priceMean;
+    if (cv < 0.25) {
+      return 'baixo';
+    }
+    if (cv < 0.6) {
+      return 'medio';
+    }
+    return 'alto';
   }
 
   private riskFromPrices(prices: number[]): 'baixo' | 'medio' | 'alto' | null {
