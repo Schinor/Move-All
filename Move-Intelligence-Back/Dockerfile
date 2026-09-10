@@ -15,6 +15,7 @@ RUN apt-get update \
 WORKDIR /app/back
 COPY --from=node-builder /build/back/node_modules ./node_modules
 COPY --from=node-builder /build/back/dist ./dist
+COPY --from=node-builder /build/back/scripts ./scripts
 COPY --from=node-builder /build/back/prisma ./prisma
 COPY --from=node-builder /build/back/package*.json ./
 COPY Move-Intelligence-Dados /app/data
