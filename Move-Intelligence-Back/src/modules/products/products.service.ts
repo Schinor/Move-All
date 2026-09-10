@@ -1341,12 +1341,18 @@ Responda APENAS um objeto JSON com o seguinte formato:
     const margemContribuicaoPct =
       precoVendaBrl > 0 ? Math.round((margemContribuicaoBrl / precoVendaBrl) * 1000) / 10 : 0;
 
-    const deltaPrecoPct =
-      defaults.precoVendaBrl > 0 ? (precoVendaBrl - defaults.precoVendaBrl) / defaults.precoVendaBrl : 0;
-    const volumeProjetado = Math.max(
-      0,
-      Math.round(volumeBaseMensal * (1 + elasticidadePreco * deltaPrecoPct)),
-    );
+    // Demanda iso-elástica: V = V0 * (P / P0) ^ Ed, ancorada no preço de
+    // referência do cluster. A forma linear (1 + Ed * delta) zerava o volume a
+    // partir de P0 * (1 + 1/|Ed|) — com Ed = -1.6 isso acontecia já em 1.6x o
+    // preço de referência, travando lucro e ROI no resto da faixa do slider.
+    const precoReferenciaBrl = defaults.precoVendaBrl;
+    const projetarVolume = (preco: number): number => {
+      if (!(precoReferenciaBrl > 0) || !(preco > 0)) return volumeBaseMensal;
+      const volume = volumeBaseMensal * Math.pow(preco / precoReferenciaBrl, elasticidadePreco);
+      return Number.isFinite(volume) ? Math.max(0, Math.round(volume)) : 0;
+    };
+
+    const volumeProjetado = projetarVolume(precoVendaBrl);
 
     const breakEvenUnits =
       margemContribuicaoBrl > 0 ? Math.ceil(custoFixoMensalBrl / margemContribuicaoBrl) : 0;
@@ -1357,8 +1363,11 @@ Responda APENAS um objeto JSON com o seguinte formato:
       investimentoEstoque > 0 ? Math.round((lucroLiquidoMensal / investimentoEstoque) * 1000) / 10 : 0;
 
     const curvaSensibilidade = [-0.4, -0.3, -0.2, -0.1, 0, 0.1, 0.2, 0.3, 0.4].map((delta) => {
-      const pTest = Math.round(defaults.precoVendaBrl * (1 + delta));
-      const vTest = Math.max(0, Math.round(volumeBaseMensal * (1 + elasticidadePreco * delta)));
+      // Ancorada no preço simulado para que a curva acompanhe o slider; o
+      // volume continua saindo da mesma curva de demanda (P0, V0), então em
+      // delta = 0 o ponto coincide com volumeProjetado.
+      const pTest = Math.round(precoVendaBrl * (1 + delta));
+      const vTest = projetarVolume(pTest);
       const impVenda = pTest * (icmsPct / 100);
       const comiss = pTest * (comissaoMarketplacePct / 100);
       const cVar = custoLandedBrl + impVenda + comiss + custoFulfillmentBrl;
