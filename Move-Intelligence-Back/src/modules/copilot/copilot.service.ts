@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { NvidiaService, ChatMessage, ChatTool } from '../ai-gateway/nvidia.service';
+import { OpenRouterService, ChatMessage, ChatTool } from '../ai-gateway/openrouter.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
@@ -165,7 +165,7 @@ export class CopilotService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly nvidia: NvidiaService,
+    private readonly openRouter: OpenRouterService,
     private readonly trendEngine: TrendEngineService,
     private readonly opportunityEngine: OpportunityEngineService,
   ) {}
@@ -274,9 +274,9 @@ export class CopilotService {
   }
 
   async chat(dto: CopilotChatDto) {
-    if (!this.nvidia.isAvailable) {
+    if (!this.openRouter.isAvailable) {
       throw new ServiceUnavailableException(
-        'Move AI indisponível — chave NVIDIA_API_KEY não configurada.',
+        'Move AI indisponível — chave OPENROUTER_API_KEY não configurada.',
       );
     }
 
@@ -289,7 +289,7 @@ export class CopilotService {
     let finalReply = '';
 
     for (let iteration = 0; iteration < maxToolIterations; iteration++) {
-      const response = await this.nvidia.chatCompletion(compactToolOutputs(messages), {
+      const response = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
         endpointName: 'copilot_chat',
         tools: COPILOT_TOOLS,
         toolChoice: 'auto',
@@ -338,7 +338,7 @@ export class CopilotService {
 
     if (!finalReply) {
       // Se estourou as iterações sem texto, faz uma chamada final sem ferramentas
-      const fallbackResponse = await this.nvidia.chatCompletion(compactToolOutputs(messages), {
+      const fallbackResponse = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
         endpointName: 'copilot_chat_summary',
         temperature: 0.2,
         maxTokens: 1024,
@@ -371,9 +371,9 @@ export class CopilotService {
   async *chatStream(
     dto: CopilotChatDto,
   ): AsyncGenerator<{ token?: string; done?: boolean; conversation_id?: string }, void, unknown> {
-    if (!this.nvidia.isAvailable) {
+    if (!this.openRouter.isAvailable) {
       throw new ServiceUnavailableException(
-        'Move AI indisponível — chave NVIDIA_API_KEY não configurada.',
+        'Move AI indisponível — chave OPENROUTER_API_KEY não configurada.',
       );
     }
 
@@ -382,7 +382,7 @@ export class CopilotService {
     const messages = prepared.messages;
 
     // Verifica se ferramentas são necessárias antes de gerar o stream final
-    const toolCheckResponse = await this.nvidia.chatCompletion(compactToolOutputs(messages), {
+    const toolCheckResponse = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
       endpointName: 'copilot_tool_check',
       tools: COPILOT_TOOLS,
       toolChoice: 'auto',
@@ -421,7 +421,7 @@ export class CopilotService {
     }
 
     let fullReply = '';
-    for await (const token of this.nvidia.chatStream(compactToolOutputs(messages), {
+    for await (const token of this.openRouter.chatStream(compactToolOutputs(messages), {
       endpointName: 'copilot_chat_stream',
       temperature: 0.2,
       maxTokens: 2048,

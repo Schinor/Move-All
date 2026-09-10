@@ -22,7 +22,7 @@ import {
   RunMonteCarloDto,
 } from './dto/run-monte-carlo.dto';
 import { MONTE_CARLO_ANALYST_SYSTEM_PROMPT } from './monte-carlo-ai.prompt';
-import { NvidiaService } from '../ai-gateway/nvidia.service';
+import { OpenRouterService } from '../ai-gateway/openrouter.service';
 
 const WINDOW_MS: Record<string, number> = {
   '24h': 24 * 60 * 60 * 1000,
@@ -94,7 +94,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly trendEngine: TrendEngineService,
     private readonly opportunityEngine: OpportunityEngineService,
-    private readonly nvidia: NvidiaService,
+    private readonly openRouter: OpenRouterService,
     private readonly cache?: RedisCacheService,
   ) {}
 
@@ -299,7 +299,7 @@ export class ProductsService {
     const { premises, sources } = await this.defaultMonteCarloPremises(cluster);
     this.applyPremiseOverrides(premises, sources, dto.premises ?? {});
 
-    const aiResult = await this.callNvidiaPremiseAnalyst({
+    const aiResult = await this.callOpenRouterPremiseAnalyst({
       cluster,
       premises,
       sources,
@@ -711,7 +711,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
   "recommended_next_step": "Ação operacional imediata sugerida para o time comercial."
 }`;
 
-    const aiResponse = await this.nvidia.chatCompletion(
+    const aiResponse = await this.openRouter.chatCompletion(
       [
         { role: 'system', content: systemPrompt },
         {
@@ -781,7 +781,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
     };
   }
 
-  private async callNvidiaPremiseAnalyst(params: {
+  private async callOpenRouterPremiseAnalyst(params: {
     cluster: ClusterForSimulation;
     premises: MonteCarloPremises;
     sources: Record<keyof MonteCarloPremises, PremiseSource>;
@@ -814,7 +814,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
       ],
     });
 
-    const response = await this.nvidia.chatCompletion(
+    const response = await this.openRouter.chatCompletion(
       [
         { role: 'system', content: MONTE_CARLO_ANALYST_SYSTEM_PROMPT },
         { role: 'user', content: userContent },
@@ -829,7 +829,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
     );
 
     if (!response.content) {
-      throw new ServiceUnavailableException('NVIDIA premise analyst returned no content.');
+      throw new ServiceUnavailableException('OpenRouter premise analyst returned no content.');
     }
 
     return this.parseAiJson(response.content);
@@ -872,7 +872,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
       return JSON.parse(jsonText) as AiPremiseResponse;
     } catch (error) {
       throw new ServiceUnavailableException(
-        `NVIDIA premise analyst returned invalid JSON: ${
+        `OpenRouter premise analyst returned invalid JSON: ${
           error instanceof Error ? error.message : 'unknown error'
         }`,
       );

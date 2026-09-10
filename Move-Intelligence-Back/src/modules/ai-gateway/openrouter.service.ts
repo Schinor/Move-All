@@ -1,3 +1,4 @@
+// OpenRouter gateway for the Move AI provider.
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
 
@@ -25,7 +26,7 @@ export interface ChatTool {
   };
 }
 
-export interface NvidiaChatOptions {
+export interface OpenRouterChatOptions {
   endpointName?: string;
   model?: string;
   temperature?: number;
@@ -37,7 +38,7 @@ export interface NvidiaChatOptions {
   metadata?: Record<string, unknown>;
 }
 
-export interface NvidiaChatResponse {
+export interface OpenRouterChatResponse {
   content: string | null;
   toolCalls?: Array<{
     id: string;
@@ -57,15 +58,15 @@ export interface NvidiaChatResponse {
 }
 
 @Injectable()
-export class NvidiaService {
-  private readonly logger = new Logger(NvidiaService.name);
-  private readonly defaultApiUrl = 'https://integrate.api.nvidia.com/v1/chat/completions';
-  private readonly defaultModel = 'meta/muse-glimmer-30b';
+export class OpenRouterService {
+  private readonly logger = new Logger(OpenRouterService.name);
+  private readonly defaultApiUrl = 'https://openrouter.ai/api/v1/chat/completions';
+  private readonly defaultModel = 'inclusionai/ling-3.0-flash-fin:free';
 
   constructor(private readonly prisma: PrismaService) {}
 
   get apiKey(): string | undefined {
-    return process.env.NVIDIA_API_KEY;
+    return process.env.OPENROUTER_API_KEY;
   }
 
   get isAvailable(): boolean {
@@ -73,27 +74,25 @@ export class NvidiaService {
   }
 
   /**
-   * Executa uma chamada de chat completion à API da NVIDIA com retry,
+   * Executa uma chamada de chat completion à API do OpenRouter com retry,
    * timeout e registro em AiCallLog.
    */
   async chatCompletion(
     messages: ChatMessage[],
-    options: NvidiaChatOptions = {},
-  ): Promise<NvidiaChatResponse> {
+    options: OpenRouterChatOptions = {},
+  ): Promise<OpenRouterChatResponse> {
     if (!this.isAvailable) {
       throw new ServiceUnavailableException(
-        'NVIDIA_API_KEY não configurada no servidor Move.',
+        'OPENROUTER_API_KEY não configurada no servidor Move.',
       );
     }
 
     const endpointName = options.endpointName ?? 'chat_completion';
-    const model = options.model ?? process.env.NVIDIA_MODEL ?? this.defaultModel;
-    const apiUrl = process.env.NVIDIA_API_URL ?? this.defaultApiUrl;
+    const model = options.model ?? process.env.OPENROUTER_MODEL ?? this.defaultModel;
+    const apiUrl = process.env.OPENROUTER_API_URL ?? this.defaultApiUrl;
     const maxRetries = 2;
 
-    // Keep the system prompt as the first message so any opportunistic prefix/KV
-    // reuse can hit. Do not send OpenAI `prompt_cache_key` / Anthropic
-    // `cache_control`: NVIDIA's cloud OpenAI wrapper rejects them with HTTP 400.
+    // Keep the request body compatible with OpenRouter's OpenAI-compatible API.
     const requestBody: Record<string, unknown> = {
       model,
       messages,
@@ -122,10 +121,7 @@ export class NvidiaService {
       try {
         const response = await fetch(apiUrl, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-          },
+          headers: this.requestHeaders(),
           body: JSON.stringify(requestBody),
           signal: AbortSignal.timeout(35_000),
         });
@@ -134,10 +130,10 @@ export class NvidiaService {
 
         if (!response.ok) {
           const errorBody = await response.text().catch(() => '');
-          const errorMsg = `NVIDIA API HTTP ${response.status}: ${errorBody.slice(0, 500)}`;
+          const errorMsg = `OpenRouter API HTTP ${response.status}: ${errorBody.slice(0, 500)}`;
           
           if (attempt <= maxRetries && response.status >= 500) {
-            this.logger.warn(`NVIDIA API tentativa ${attempt} falhou (${response.status}). Retentando...`);
+            this.logger.warn(`OpenRouter tentativa ${attempt} falhou (${response.status}). Retentando...`);
             await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
             continue;
           }
@@ -151,7 +147,7 @@ export class NvidiaService {
             metadata: options.metadata,
           });
 
-          throw new ServiceUnavailableException(`Falha na API da NVIDIA: ${errorMsg}`);
+          throw new ServiceUnavailableException(`Falha na API do OpenRouter: ${errorMsg}`);
         }
 
         const data = (await response.json()) as {
@@ -209,7 +205,7 @@ export class NvidiaService {
       } catch (err: unknown) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt <= maxRetries) {
-          this.logger.warn(`Erro na tentativa ${attempt} contra NVIDIA: ${lastError.message}. Retentando...`);
+          this.logger.warn(`Erro na tentativa ${attempt} contra OpenRouter: ${lastError.message}. Retentando...`);
           await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
         }
       }
@@ -226,23 +222,23 @@ export class NvidiaService {
     });
 
     throw new ServiceUnavailableException(
-      `Move AI / NVIDIA indisponível após retentativas: ${lastError?.message}`,
+      `Move AI / OpenRouter indisponível após retentativas: ${lastError?.message}`,
     );
   }
 
   /**
-   * Executa uma chamada de chat completion em streaming (SSE) à API da NVIDIA.
+   * Executa uma chamada de chat completion em streaming (SSE) à API do OpenRouter.
    */
   async *chatStream(
     messages: ChatMessage[],
-    options: NvidiaChatOptions = {},
+    options: OpenRouterChatOptions = {},
   ): AsyncGenerator<string, void, unknown> {
     if (!this.isAvailable) {
-      throw new ServiceUnavailableException('NVIDIA_API_KEY não configurada no servidor Move.');
+      throw new ServiceUnavailableException('OPENROUTER_API_KEY não configurada no servidor Move.');
     }
 
-    const model = options.model ?? process.env.NVIDIA_MODEL ?? this.defaultModel;
-    const apiUrl = process.env.NVIDIA_API_URL ?? this.defaultApiUrl;
+    const model = options.model ?? process.env.OPENROUTER_MODEL ?? this.defaultModel;
+    const apiUrl = process.env.OPENROUTER_API_URL ?? this.defaultApiUrl;
 
     const requestBody: Record<string, unknown> = {
       model,
@@ -254,16 +250,13 @@ export class NvidiaService {
 
     const response = await fetch(apiUrl, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: this.requestHeaders(),
       body: JSON.stringify(requestBody),
     });
 
     if (!response.ok || !response.body) {
       const errorText = await response.text().catch(() => '');
-      throw new ServiceUnavailableException(`NVIDIA Stream error (${response.status}): ${errorText}`);
+      throw new ServiceUnavailableException(`OpenRouter stream error (${response.status}): ${errorText}`);
     }
 
     const reader = response.body.getReader();
@@ -323,7 +316,23 @@ export class NvidiaService {
         },
       });
     } catch (err) {
-      this.logger.error(`Falha ao registrar log da chamada NVIDIA: ${err}`);
+      this.logger.error(`Falha ao registrar log da chamada OpenRouter: ${err}`);
     }
+  }
+
+  private requestHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.apiKey}`,
+      'Content-Type': 'application/json',
+    };
+
+    if (process.env.OPENROUTER_HTTP_REFERER) {
+      headers['HTTP-Referer'] = process.env.OPENROUTER_HTTP_REFERER;
+    }
+    if (process.env.OPENROUTER_X_TITLE) {
+      headers['X-Title'] = process.env.OPENROUTER_X_TITLE;
+    }
+
+    return headers;
   }
 }

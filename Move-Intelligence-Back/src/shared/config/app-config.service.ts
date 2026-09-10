@@ -20,8 +20,8 @@ export class AppConfigService {
     if (!process.env.JWT_SECRET) {
       this.logger.warn('JWT_SECRET ausente; usando chave efêmera exclusiva de desenvolvimento.');
     }
-    if (!process.env.NVIDIA_API_KEY) {
-      this.logger.warn('NVIDIA_API_KEY ausente — recursos de IA ficarão indisponíveis.');
+    if (!process.env.OPENROUTER_API_KEY) {
+      this.logger.warn('OPENROUTER_API_KEY ausente — recursos de IA ficarão indisponíveis.');
     }
   }
 

@@ -4,7 +4,7 @@ import { ProductsService } from '../src/modules/products/products.service';
 import { TrendEngineService } from '../src/modules/trend-engine/trend-engine.service';
 import { OpportunityEngineService } from '../src/modules/opportunity-engine/opportunity-engine.service';
 import { BusinessRulesService } from '../src/shared/business-rules/business-rules.service';
-import { NvidiaService } from '../src/modules/ai-gateway/nvidia.service';
+import { OpenRouterService } from '../src/modules/ai-gateway/openrouter.service';
 import { PrismaService } from '../src/shared/database/prisma.service';
 
 const prisma = new PrismaClient();
@@ -1356,13 +1356,13 @@ async function main() {
     const rulesService = new BusinessRulesService();
     const trendEngine = new TrendEngineService(rulesService);
     const opportunityEngine = new OpportunityEngineService(rulesService);
-    const nvidiaService = new NvidiaService(prismaService);
+    const openRouterService = new OpenRouterService(prismaService);
 
     const productsService = new ProductsService(
       prismaService,
       trendEngine,
       opportunityEngine,
-      nvidiaService,
+      openRouterService,
     );
 
     const batchSummary = await productsService.simulateBatchForRanking(50);

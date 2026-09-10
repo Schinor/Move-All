@@ -1,14 +1,14 @@
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { CopilotService, compactToolOutputs, MAX_HISTORY_MESSAGES } from './copilot.service';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { NvidiaService } from '../ai-gateway/nvidia.service';
+import { OpenRouterService } from '../ai-gateway/openrouter.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
 
 describe('CopilotService', () => {
   let service: CopilotService;
   let mockPrisma: any;
-  let mockNvidia: any;
+  let mockOpenRouter: any;
   let mockTrendEngine: any;
   let mockOpportunityEngine: any;
 
@@ -42,7 +42,7 @@ describe('CopilotService', () => {
       },
     };
 
-    mockNvidia = {
+    mockOpenRouter = {
       isAvailable: true,
       chatCompletion: jest.fn(),
     };
@@ -57,14 +57,14 @@ describe('CopilotService', () => {
 
     service = new CopilotService(
       mockPrisma as unknown as PrismaService,
-      mockNvidia as unknown as NvidiaService,
+      mockOpenRouter as unknown as OpenRouterService,
       mockTrendEngine as unknown as TrendEngineService,
       mockOpportunityEngine as unknown as OpportunityEngineService,
     );
   });
 
-  it('deve lançar ServiceUnavailableException quando a chave NVIDIA não estiver configurada', async () => {
-    mockNvidia.isAvailable = false;
+  it('deve lançar ServiceUnavailableException quando a chave OPENROUTER não estiver configurada', async () => {
+    mockOpenRouter.isAvailable = false;
 
     await expect(
       service.chat({
@@ -74,10 +74,10 @@ describe('CopilotService', () => {
   });
 
   it('deve processar uma resposta direta do Copilot e salvar histórico', async () => {
-    mockNvidia.chatCompletion.mockResolvedValueOnce({
+    mockOpenRouter.chatCompletion.mockResolvedValueOnce({
       content: 'As melhores esteiras no catálogo possuem Opportunity Score acima de 80.',
       toolCalls: undefined,
-      model: 'z-ai/glm-5.2',
+      model: 'inclusionai/ling-3.0-flash-fin:free',
       latencyMs: 320,
     });
 
@@ -100,10 +100,10 @@ describe('CopilotService', () => {
       { role: 'assistant', content: 'A resposta anterior veio da base.' },
       { role: 'user', content: 'Qual é a tendência anterior?' },
     ]);
-    mockNvidia.chatCompletion.mockResolvedValueOnce({
+    mockOpenRouter.chatCompletion.mockResolvedValueOnce({
       content: 'Vou continuar a análise com esse contexto.',
       toolCalls: undefined,
-      model: 'z-ai/glm-5.2',
+      model: 'inclusionai/ling-3.0-flash-fin:free',
       latencyMs: 320,
     });
 
@@ -119,7 +119,7 @@ describe('CopilotService', () => {
       take: MAX_HISTORY_MESSAGES,
       select: { role: true, content: true },
     });
-    expect(mockNvidia.chatCompletion.mock.calls[0][0]).toEqual([
+    expect(mockOpenRouter.chatCompletion.mock.calls[0][0]).toEqual([
       expect.objectContaining({ role: 'system' }),
       { role: 'user', content: 'Qual é a tendência anterior?' },
       { role: 'assistant', content: 'A resposta anterior veio da base.' },
@@ -265,7 +265,7 @@ describe('CopilotService', () => {
     ]);
 
     // 1ª chamada: modelo decide chamar a ferramenta search_products
-    mockNvidia.chatCompletion.mockResolvedValueOnce({
+    mockOpenRouter.chatCompletion.mockResolvedValueOnce({
       content: null,
       toolCalls: [
         {
@@ -277,16 +277,16 @@ describe('CopilotService', () => {
           },
         },
       ],
-      model: 'z-ai/glm-5.2',
+      model: 'inclusionai/ling-3.0-flash-fin:free',
       latencyMs: 400,
     });
 
     // 2ª chamada: modelo recebe os dados e gera o parecer final
-    mockNvidia.chatCompletion.mockResolvedValueOnce({
+    mockOpenRouter.chatCompletion.mockResolvedValueOnce({
       content:
         'Encontrei a Esteira Ergométrica Dobrável Pro com risco baixo e preço médio de R$ 2.499 no Mercado Livre.',
       toolCalls: undefined,
-      model: 'z-ai/glm-5.2',
+      model: 'inclusionai/ling-3.0-flash-fin:free',
       latencyMs: 510,
     });
 

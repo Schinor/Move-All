@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { NvidiaService } from './nvidia.service';
+import { OpenRouterService } from './openrouter.service';
 import { DatabaseModule } from '../../shared/database/database.module';
 
 @Module({
   imports: [DatabaseModule],
-  providers: [NvidiaService],
-  exports: [NvidiaService],
+  providers: [OpenRouterService],
+  exports: [OpenRouterService],
 })
 export class AiGatewayModule {}

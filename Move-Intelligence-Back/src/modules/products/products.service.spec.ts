@@ -1,5 +1,5 @@
 import { PrismaService } from '../../shared/database/prisma.service';
-import { NvidiaService } from '../ai-gateway/nvidia.service';
+import { OpenRouterService } from '../ai-gateway/openrouter.service';
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { ProductsService } from './products.service';
@@ -26,7 +26,7 @@ function buildService(): ProductsService {
     {} as PrismaService,
     {} as TrendEngineService,
     {} as OpportunityEngineService,
-    {} as NvidiaService,
+    {} as OpenRouterService,
   );
 
   jest.spyOn(service, 'getUnitEconomicsDefaults').mockResolvedValue(DEFAULTS);

@@ -43,7 +43,11 @@ services:
       MOVE_ETL_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-move_intelligence}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET para producao}
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Defina OPENROUTER_API_KEY}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-inclusionai/ling-3.0-flash-fin:free}
+      OPENROUTER_API_URL: ${OPENROUTER_API_URL:-https://openrouter.ai/api/v1/chat/completions}
+      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-https://move.example.com}
+      OPENROUTER_X_TITLE: ${OPENROUTER_X_TITLE:-Move Intelligence}
       BRIGHTDATA_MCP_URL: ${BRIGHTDATA_MCP_URL:-}
     depends_on:
       postgres:
