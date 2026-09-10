@@ -1,12 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   Input,
   OnInit,
   inject,
   signal,
 } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { Subject, catchError, debounceTime, of, switchMap } from 'rxjs';
 import { TrendsService } from '../../../../core/services/trends.service';
 import { IconComponent } from '../../../ui/icon/icon.component';
 
@@ -20,6 +23,7 @@ import { IconComponent } from '../../../ui/icon/icon.component';
 })
 export class UnitEconomicsCalculatorComponent implements OnInit {
   private readonly trends = inject(TrendsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   @Input({ required: true }) productClusterId!: string;
 
@@ -39,60 +43,76 @@ export class UnitEconomicsCalculatorComponent implements OnInit {
   readonly elasticidadePreco = signal(-1.6);
   readonly volumeBaseMensal = signal(250);
 
+  private readonly recalculate$ = new Subject<void>();
+
+  constructor() {
+    this.recalculate$
+      .pipe(
+        debounceTime(120),
+        switchMap(() => {
+          const payload = {
+            precoVendaBrl: Number(this.precoVendaBrl()),
+            fobUsd: Number(this.fobUsd()),
+            cambioUsd: Number(this.cambioUsd()),
+            freteUnitarioUsd: Number(this.freteUnitarioUsd()),
+            impostoImportacaoPct: Number(this.impostoImportacaoPct()),
+            icmsPct: Number(this.icmsPct()),
+            comissaoMarketplacePct: Number(this.comissaoMarketplacePct()),
+            custoFulfillmentBrl: Number(this.custoFulfillmentBrl()),
+            custoFixoMensalBrl: Number(this.custoFixoMensalBrl()),
+            elasticidadePreco: Number(this.elasticidadePreco()),
+            volumeBaseMensal: Number(this.volumeBaseMensal()),
+          };
+
+          return this.trends.simulateUnitEconomics(this.productClusterId, payload).pipe(
+            catchError(() => of(null)),
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((res) => {
+        this.loading.set(false);
+        if (res !== null) {
+          this.result.set(res);
+        }
+      });
+  }
+
   ngOnInit(): void {
     this.loadDefaults();
   }
 
   loadDefaults(): void {
     this.loading.set(true);
-    this.trends.unitEconomicsDefaults(this.productClusterId).subscribe({
-      next: (defaults) => {
-        if (defaults) {
-          this.precoVendaBrl.set(defaults.precoVendaBrl ?? 599);
-          this.fobUsd.set(defaults.fobUsd ?? 28.0);
-          this.cambioUsd.set(defaults.cambioUsd ?? 5.45);
-          this.freteUnitarioUsd.set(defaults.freteUnitarioUsd ?? 6.5);
-          this.impostoImportacaoPct.set(defaults.impostoImportacaoPct ?? 35.0);
-          this.icmsPct.set(defaults.icmsPct ?? 18.0);
-          this.comissaoMarketplacePct.set(defaults.comissaoMarketplacePct ?? 16.0);
-          this.custoFulfillmentBrl.set(defaults.custoFulfillmentBrl ?? 32.0);
-          this.custoFixoMensalBrl.set(defaults.custoFixoMensalBrl ?? 4500.0);
-          this.elasticidadePreco.set(defaults.elasticidadePreco ?? -1.6);
-          this.volumeBaseMensal.set(defaults.volumeBaseMensal ?? 250);
-        }
-        this.recalculate();
-      },
-      error: () => {
-        this.recalculate();
-      },
-    });
+    this.trends
+      .unitEconomicsDefaults(this.productClusterId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (defaults) => {
+          if (defaults) {
+            this.precoVendaBrl.set(defaults.precoVendaBrl ?? 599);
+            this.fobUsd.set(defaults.fobUsd ?? 28.0);
+            this.cambioUsd.set(defaults.cambioUsd ?? 5.45);
+            this.freteUnitarioUsd.set(defaults.freteUnitarioUsd ?? 6.5);
+            this.impostoImportacaoPct.set(defaults.impostoImportacaoPct ?? 35.0);
+            this.icmsPct.set(defaults.icmsPct ?? 18.0);
+            this.comissaoMarketplacePct.set(defaults.comissaoMarketplacePct ?? 16.0);
+            this.custoFulfillmentBrl.set(defaults.custoFulfillmentBrl ?? 32.0);
+            this.custoFixoMensalBrl.set(defaults.custoFixoMensalBrl ?? 4500.0);
+            this.elasticidadePreco.set(defaults.elasticidadePreco ?? -1.6);
+            this.volumeBaseMensal.set(defaults.volumeBaseMensal ?? 250);
+          }
+          this.recalculate();
+        },
+        error: () => {
+          this.recalculate();
+        },
+      });
   }
 
   recalculate(): void {
     this.loading.set(true);
-    const payload = {
-      precoVendaBrl: Number(this.precoVendaBrl()),
-      fobUsd: Number(this.fobUsd()),
-      cambioUsd: Number(this.cambioUsd()),
-      freteUnitarioUsd: Number(this.freteUnitarioUsd()),
-      impostoImportacaoPct: Number(this.impostoImportacaoPct()),
-      icmsPct: Number(this.icmsPct()),
-      comissaoMarketplacePct: Number(this.comissaoMarketplacePct()),
-      custoFulfillmentBrl: Number(this.custoFulfillmentBrl()),
-      custoFixoMensalBrl: Number(this.custoFixoMensalBrl()),
-      elasticidadePreco: Number(this.elasticidadePreco()),
-      volumeBaseMensal: Number(this.volumeBaseMensal()),
-    };
-
-    this.trends.simulateUnitEconomics(this.productClusterId, payload).subscribe({
-      next: (res) => {
-        this.result.set(res);
-        this.loading.set(false);
-      },
-      error: () => {
-        this.loading.set(false);
-      },
-    });
+    this.recalculate$.next();
   }
 
   formatCurrency(value: number | null | undefined): string {
