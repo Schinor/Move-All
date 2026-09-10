@@ -50,6 +50,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-move_jwt_super_secret_key_change_in_production}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_MODEL: ${NVIDIA_MODEL:-meta/muse-glimmer-30b}
       BRIGHTDATA_MCP_URL: ${BRIGHTDATA_MCP_URL:-}
     depends_on:
       postgres:

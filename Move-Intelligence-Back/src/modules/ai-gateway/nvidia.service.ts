@@ -60,7 +60,7 @@ export interface NvidiaChatResponse {
 export class NvidiaService {
   private readonly logger = new Logger(NvidiaService.name);
   private readonly defaultApiUrl = 'https://integrate.api.nvidia.com/v1/chat/completions';
-  private readonly defaultModel = 'moonshotai/kimi-k3';
+  private readonly defaultModel = 'meta/muse-glimmer-30b';
 
   constructor(private readonly prisma: PrismaService) {}
 
