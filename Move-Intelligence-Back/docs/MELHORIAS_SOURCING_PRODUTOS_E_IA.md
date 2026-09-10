@@ -7,7 +7,7 @@ Este documento detalha a arquitetura, fórmulas matemáticas, configurações de
 ## 📑 Sumário
 
 1. [⭐ Sistema de Qualificação e Score de Fornecedores (0 a 5.0 Estrelas & Tiers)](#1--sistema-de-qualificação-e-score-de-fornecedores-0-a-50-estrelas--tiers)
-2. [🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Kimi-K3)](#2--arquitetura-gateway-e-configuração-da-inteligência-artificial-kimi-k3)
+2. [🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Muse Glimmer 30B)](#2--arquitetura-gateway-e-configuração-da-inteligência-artificial-muse-glimmer-30b)
 3. [🕸️ Motor de Sub-Sinais em 6 Dimensões & Explicabilidade do Score](#3-️-motor-de-sub-sinais-em-6-dimensões--explicabilidade-do-score)
 4. [📈 Normalização e Agregação das Séries Históricas de Produtos](#4--normalização-e-agregação-das-séries-históricas-de-produtos)
 5. [🧪 Guia Prático de Testes e Validação](#5--guia-prático-de-testes-e-validação)
@@ -48,7 +48,7 @@ $$\text{Rating Final} = (S_{\text{avaliações}} \times 0.35) + (S_{\text{vendas
 
 ---
 
-## 2. 🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Kimi-K3)
+## 2. 🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Muse Glimmer 30B)
 
 ### 🔌 Gateway de IA (`NvidiaService`):
 O backend do Move possui um gateway corporativo de IA implementado em `src/modules/ai-gateway/nvidia.service.ts`, equipado com:
@@ -62,10 +62,10 @@ No arquivo `Move-Intelligence-Back/.env`:
 
 ```env
 # Modelo Validado e Ativo:
-NVIDIA_MODEL=moonshotai/kimi-k3
+NVIDIA_MODEL=meta/muse-glimmer-30b
 
 # Chave de API:
-NVIDIA_API_KEY=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
+NVIDIA_API_KEY=nvapi-<sua-chave-aqui>
 
 # URL do Endpoint (Padrão NVIDIA NIM):
 # NVIDIA_API_URL=https://integrate.api.nvidia.com/v1/chat/completions
@@ -122,4 +122,4 @@ Reescrevemos o método `seriesPoints` no `ProductsService` com agregação consi
 
 ### C. Testar o Copilot de IA:
 1. Acesse o Copilot em: [http://localhost:4200/ai-copilot](http://localhost:4200/ai-copilot)
-2. Envie uma pergunta e observe a resposta fluida em streaming do modelo **Kimi-K3**.
+2. Envie uma pergunta e observe a resposta fluida em streaming do modelo **Muse Glimmer 30B**.

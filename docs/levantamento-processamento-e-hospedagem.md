@@ -199,7 +199,7 @@ JWT_SECRET=ChaveSuperSecretaDePeloMenos32Caracteres!
 # INTEGRAÇÕES DE DADOS & IA
 # ==========================================
 BRIGHTDATA_MCP_URL=https://sua-url-autenticada-brightdata-mcp.com
-NVIDIA_API_KEY=nvapi-... # ou OPENAI_API_KEY / GEMINI_API_KEY
+NVIDIA_API_KEY=nvapi-<sua-chave-aqui> # ou OPENAI_API_KEY / GEMINI_API_KEY
 
 # ==========================================
 # AGENDAMENTO DE COLETA (ETL)
