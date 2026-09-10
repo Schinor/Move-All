@@ -20,4 +20,53 @@ describe('renderCopilotMarkdown', () => {
     expect(result).toContain('<strong>seguro</strong>');
     expect(result).not.toContain('<script>');
   });
+
+  it('renderiza tabela Markdown como <table> em vez de texto com pipes', () => {
+    const result = renderCopilotMarkdown(
+      '| Produto | Score |\n|---|---|\n| Kit Super Bands | 65 |\n| Kettlebell 16kg | 52 |',
+    );
+
+    expect(result).toContain('<table>');
+    expect(result).toContain('<th>Produto</th>');
+    expect(result).toContain('<th>Score</th>');
+    expect(result).toContain('<td>Kit Super Bands</td>');
+    expect(result).toContain('<td>65</td>');
+    expect(result).not.toContain('|---|');
+    expect(result).not.toContain('<p>| Produto');
+  });
+
+  it('aplica formatacao inline dentro das celulas da tabela', () => {
+    const result = renderCopilotMarkdown('| Produto |\n| --- |\n| **Kit Super Bands** |');
+
+    expect(result).toContain('<td><strong>Kit Super Bands</strong></td>');
+    expect(result).not.toContain('**');
+  });
+
+  it('escapa HTML dentro das celulas da tabela', () => {
+    const result = renderCopilotMarkdown('| Coluna |\n| --- |\n| <img src=x onerror=y> |');
+
+    expect(result).toContain('&lt;img src=x onerror=y&gt;');
+    expect(result).not.toContain('<img');
+  });
+
+  it('trata linha isolada com pipe como paragrafo comum', () => {
+    const result = renderCopilotMarkdown('Use o filtro A | B para comparar');
+
+    expect(result).toContain('<p>Use o filtro A | B para comparar</p>');
+    expect(result).not.toContain('<table>');
+  });
+
+  it('preserva underscores de identificadores dentro de code spans', () => {
+    const result = renderCopilotMarkdown('A flag `monte_carlo_simulated` está como `true`.');
+
+    expect(result).toContain('<code>monte_carlo_simulated</code>');
+    expect(result).not.toContain('<em>');
+  });
+
+  it('nao aplica negrito ou italico dentro de code spans', () => {
+    const result = renderCopilotMarkdown('Use `**nao_negrito**` literalmente');
+
+    expect(result).toContain('<code>**nao_negrito**</code>');
+    expect(result).not.toContain('<strong>');
+  });
 });

@@ -9,11 +9,15 @@ import { PrismaService } from '../../shared/database/prisma.service';
 import { OpenRouterService, ChatMessage, ChatTool } from '../ai-gateway/openrouter.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
+import { DashboardApiService } from '../dashboard-api/dashboard-api.service';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
 import { UpdateCopilotConversationDto } from './dto/update-copilot-conversation.dto';
 
 export const MAX_HISTORY_MESSAGES = 20;
 const TOOL_OUTPUT_PREVIEW_CHARS = 400;
+
+/** Ordenações aceitas por `get_product_ranking`, espelhando /trends/products. */
+const RANKING_SORTS = ['trend_score', 'opportunity_score', 'growth', 'projected_revenue'];
 
 /**
  * Older tool dumps are JSON payloads that dominate token cost. Keep the latest
@@ -62,15 +66,50 @@ PRINCÍPIOS MANDATÓRIOS:
 1. A IA EXPLICA e CONTEXTUALIZA, mas NUNCA inventa métricas, preços, nomes de produtos ou scores.
 2. Quando o usuário fizer perguntas sobre catálogo, ranking, produtos, tendências, preços ou fornecedores, USE AS FERRAMENTAS (tool calls) para consultar a base de dados real do PostgreSQL/Prisma.
 3. Se nenhuma ferramenta retornar dados para a consulta, informe com transparência que não há registros correspondentes na base atual.
-4. Responda sempre em português claro, profissional, conciso e orientado a negócios.`;
+4. Responda sempre em português claro, profissional, conciso e orientado a negócios.
+
+VOCABULÁRIO DE SCORES (não confunda — são métricas distintas):
+- "score" sem qualificador, "ranking", "produto com maior score", "top produtos" => é o TREND SCORE (0-100), o mesmo número exibido na tela de Ranking. Obtenha-o SEMPRE com a ferramenta get_product_ranking, que já devolve a lista ordenada. NUNCA responda a essa pergunta com search_products, que não ordena por score.
+- "opportunity score" (0-100) => oportunidade combinando demanda e evidências; também vem de get_product_ranking.
+- "financial score" e "risco" => saída da simulação Monte Carlo. Guie-se pela flag monte_carlo_simulated: quando ela for false (score nulo), diga que o produto ainda NÃO foi simulado; quando for true, o número é real — inclusive um financial score 0, que significa resultado financeiro ruim e NÃO ausência de simulação. Jamais assuma um valor padrão nem trate nulo como empate entre produtos.
+
+FORMATO:
+- Use tabelas Markdown (com a linha separadora de hífens abaixo do cabeçalho) para comparar 3 ou mais produtos, com no máximo 4 colunas.
+- Sempre cite o número do score ao lado do nome do produto.`;
 
 const COPILOT_TOOLS: ChatTool[] = [
   {
     type: 'function',
     function: {
+      name: 'get_product_ranking',
+      description:
+        'Retorna o ranking de produtos já ordenado pelo score, com os MESMOS números exibidos na tela de Ranking (trend_score e opportunity_score, 0-100). Use SEMPRE que a pergunta envolver "maior score", "melhores produtos", "top N", "ranking" ou comparação de scores.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'number',
+            description: 'Quantos produtos retornar, do topo para baixo (padrão: 10, máximo: 50)',
+          },
+          sort: {
+            type: 'string',
+            enum: ['trend_score', 'opportunity_score', 'growth', 'projected_revenue'],
+            description: 'Critério de ordenação (padrão: trend_score, o score exibido no ranking)',
+          },
+          category: {
+            type: 'string',
+            description: 'Filtra por categoria fitness opcional (ex.: "resistance_bands")',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search_products',
       description:
-        'Busca produtos fitness no catálogo pelo nome ou categoria, retornando scores e preços reais.',
+        'Busca produtos fitness no catálogo POR NOME ou categoria. Não ordena por score — para ranking use get_product_ranking. O campo financial_score vem da simulação Monte Carlo e é null quando o produto ainda não foi simulado.',
       parameters: {
         type: 'object',
         properties: {
@@ -168,6 +207,7 @@ export class CopilotService {
     private readonly openRouter: OpenRouterService,
     private readonly trendEngine: TrendEngineService,
     private readonly opportunityEngine: OpportunityEngineService,
+    private readonly dashboard: DashboardApiService,
   ) {}
 
   async listConversations(clientId?: string) {
@@ -570,6 +610,48 @@ export class CopilotService {
   private async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     try {
       switch (name) {
+        case 'get_product_ranking': {
+          const limit =
+            typeof args.limit === 'number' && Number.isFinite(args.limit)
+              ? Math.min(Math.max(Math.trunc(args.limit), 1), 50)
+              : 10;
+          const sort = RANKING_SORTS.includes(String(args.sort))
+            ? String(args.sort)
+            : 'trend_score';
+          const category = typeof args.category === 'string' ? args.category.trim() : undefined;
+
+          const products = await this.dashboard.listTrendingProducts({
+            limit,
+            sort,
+            ...(category ? { category } : {}),
+          });
+
+          const rows = products.map((product, index) => ({
+            position: index + 1,
+            id: product.product_cluster_id,
+            name: product.canonical_name,
+            category: product.category,
+            trend_score: product.trend_score?.value ?? null,
+            opportunity_score: product.opportunity_score?.value ?? null,
+            growth_pct: product.growth_pct ?? null,
+            stage: product.stage ?? null,
+            risk: product.risk ?? null,
+            // Monte Carlo: distingue "score zero" (simulado, resultado ruim) de
+            // "ainda não simulado" — sem a flag a IA lê 0 como ausência de dado.
+            financial_score: product.financial_score ?? null,
+            monte_carlo_simulated:
+              product.financial_score !== null && product.financial_score !== undefined,
+          }));
+
+          return {
+            sorted_by: sort,
+            products: rows,
+            note: rows.length
+              ? `Ranking ordenado por ${sort}; os valores são os mesmos exibidos na tela de Ranking.`
+              : 'Nenhum produto no ranking para os filtros informados.',
+          };
+        }
+
         case 'search_products': {
           const query = typeof args.query === 'string' ? args.query.trim() : '';
           const category = typeof args.category === 'string' ? args.category.trim() : undefined;
@@ -587,12 +669,15 @@ export class CopilotService {
             orderBy: { createdAt: 'desc' },
           });
 
+          // `null` é informação: o cluster ainda não passou pelo Monte Carlo.
+          // Preencher com um padrão faria a IA reportar um score inexistente.
           return clusters.map((c) => ({
             id: c.id,
             name: c.canonicalName,
             category: c.category,
-            risk_level: c.riskLevel ?? 'medio',
-            financial_score: c.financialScore ?? 50,
+            risk_level: c.riskLevel ?? null,
+            financial_score: c.financialScore ?? null,
+            monte_carlo_simulated: c.financialScore !== null && c.financialScore !== undefined,
             latest_price: c.snapshots.at(0)?.priceMin ? Number(c.snapshots.at(0)?.priceMin) : null,
             marketplace: c.snapshots.at(0)?.marketplace ?? 'desconhecido',
           }));

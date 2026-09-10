@@ -4,6 +4,7 @@ import { PrismaService } from '../../shared/database/prisma.service';
 import { OpenRouterService } from '../ai-gateway/openrouter.service';
 import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
+import { DashboardApiService } from '../dashboard-api/dashboard-api.service';
 
 describe('CopilotService', () => {
   let service: CopilotService;
@@ -11,6 +12,7 @@ describe('CopilotService', () => {
   let mockOpenRouter: any;
   let mockTrendEngine: any;
   let mockOpportunityEngine: any;
+  let mockDashboard: any;
 
   beforeEach(() => {
     mockPrisma = {
@@ -55,11 +57,16 @@ describe('CopilotService', () => {
       calculate: jest.fn(),
     };
 
+    mockDashboard = {
+      listTrendingProducts: jest.fn().mockResolvedValue([]),
+    };
+
     service = new CopilotService(
       mockPrisma as unknown as PrismaService,
       mockOpenRouter as unknown as OpenRouterService,
       mockTrendEngine as unknown as TrendEngineService,
       mockOpportunityEngine as unknown as OpportunityEngineService,
+      mockDashboard as unknown as DashboardApiService,
     );
   });
 
@@ -322,6 +329,76 @@ describe('CopilotService', () => {
       role: 'tool',
       name: 'search_products',
       content: '{"ok":true}',
+    });
+  });
+
+  describe('ferramentas de score', () => {
+    it('não inventa financial_score 50 quando o cluster ainda não foi simulado', async () => {
+      mockPrisma.productCluster.findMany.mockResolvedValueOnce([
+        {
+          id: 'c1',
+          canonicalName: 'Kettlebell de Ferro Fundido 16kg',
+          category: 'kettlebells',
+          riskLevel: null,
+          financialScore: null,
+          snapshots: [{ priceMin: 17.59, marketplace: '1688' }],
+        },
+      ]);
+
+      const result: any = await (service as any).executeTool('search_products', {
+        query: 'kettlebell',
+      });
+
+      expect(result[0].financial_score).toBeNull();
+      expect(result[0].risk_level).toBeNull();
+      expect(result[0].financial_score).not.toBe(50);
+      expect(result[0].risk_level).not.toBe('medio');
+    });
+
+    it('expõe o ranking com o mesmo trend_score que a tela mostra', async () => {
+      mockDashboard.listTrendingProducts.mockResolvedValueOnce([
+        {
+          product_cluster_id: 'b6ee4262',
+          canonical_name: 'Kit Super Bands Elásticos de Resistência 4 Peças',
+          category: 'resistance_bands',
+          trend_score: { value: 65 },
+          opportunity_score: { value: 76 },
+          risk: 'alto',
+          financial_score: 0,
+          growth_pct: 12.5,
+          stage: 'rising',
+        },
+      ]);
+
+      const result: any = await (service as any).executeTool('get_product_ranking', { limit: 5 });
+
+      expect(mockDashboard.listTrendingProducts).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'trend_score', limit: 5 }),
+      );
+      expect(result.products[0]).toEqual(
+        expect.objectContaining({
+          name: 'Kit Super Bands Elásticos de Resistência 4 Peças',
+          trend_score: 65,
+          opportunity_score: 76,
+        }),
+      );
+    });
+
+    it('ordena o ranking por opportunity_score quando solicitado', async () => {
+      await (service as any).executeTool('get_product_ranking', { sort: 'opportunity_score' });
+
+      expect(mockDashboard.listTrendingProducts).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: 'opportunity_score' }),
+      );
+    });
+
+    it('informa quando o ranking está vazio em vez de devolver lista silenciosa', async () => {
+      mockDashboard.listTrendingProducts.mockResolvedValueOnce([]);
+
+      const result: any = await (service as any).executeTool('get_product_ranking', {});
+
+      expect(result.products).toEqual([]);
+      expect(String(result.note)).toMatch(/nenhum|sem/i);
     });
   });
 });

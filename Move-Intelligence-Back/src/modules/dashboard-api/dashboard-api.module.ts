@@ -8,5 +8,6 @@ import { DashboardApiService } from './dashboard-api.service';
   imports: [ConnectorsModule, TrendEngineModule],
   controllers: [DashboardApiController],
   providers: [DashboardApiService],
+  exports: [DashboardApiService],
 })
 export class DashboardApiModule {}

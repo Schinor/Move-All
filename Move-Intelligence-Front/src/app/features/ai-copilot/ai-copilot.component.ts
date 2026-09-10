@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injector,
   OnInit,
   ViewChild,
+  afterNextRender,
   computed,
   inject,
   signal,
@@ -27,6 +29,9 @@ interface SuggestionPrompt {
 
 const CONVERSATION_SIDEBAR_OPEN_KEY = 'move-intelligence:copilot-sidebar-open';
 
+/** Folga em px para considerar que o usuário ainda está acompanhando o fim da conversa. */
+const SCROLL_STICK_THRESHOLD_PX = 120;
+
 @Component({
   selector: 'app-ai-copilot',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -36,6 +41,7 @@ const CONVERSATION_SIDEBAR_OPEN_KEY = 'move-intelligence:copilot-sidebar-open';
 })
 export class AiCopilotComponent implements OnInit {
   private readonly copilot = inject(CopilotService);
+  private readonly injector = inject(Injector);
 
   @ViewChild('messagesContainer') private messagesContainer?: ElementRef<HTMLDivElement>;
 
@@ -101,7 +107,7 @@ export class AiCopilotComponent implements OnInit {
     const currentHistory = this.messages();
     this.messages.set([...currentHistory, userMessage]);
     this.isThinking.set(true);
-    this.scrollToBottom();
+    this.scrollToBottom(true);
 
     // Payload de mensagens históricas para manter contexto
     const messagesPayload = [...currentHistory, userMessage].map((m) => ({
@@ -157,7 +163,7 @@ export class AiCopilotComponent implements OnInit {
         'Não foi possível obter resposta do Move AI Copilot neste momento.';
       this.errorMessage.set(errorDetail);
       void this.refreshConversationList();
-      this.scrollToBottom();
+      this.scrollToBottom(true);
     }
   }
 
@@ -192,7 +198,7 @@ export class AiCopilotComponent implements OnInit {
       this.applyConversation(conversation);
       this.copilot.rememberConversation(id);
       this.errorMessage.set(null);
-      this.scrollToBottom();
+      this.scrollToBottom(true);
     } catch (err: any) {
       this.conversationError.set(this.readError(err, 'Não foi possível carregar esta conversa.'));
     } finally {
@@ -395,12 +401,28 @@ export class AiCopilotComponent implements OnInit {
     return Number.isNaN(timestamp) ? 0 : timestamp;
   }
 
-  private scrollToBottom(): void {
-    setTimeout(() => {
-      if (this.messagesContainer?.nativeElement) {
-        this.messagesContainer.nativeElement.scrollTop =
-          this.messagesContainer.nativeElement.scrollHeight;
-      }
-    }, 50);
+  /**
+   * Rola a lista para o fim depois que o Angular pinta o novo conteúdo.
+   * Durante o streaming isso roda a cada token, então respeita quem subiu para
+   * reler uma resposta anterior: só acompanha quem já estava no fim.
+   */
+  private scrollToBottom(force = false): void {
+    const element = this.messagesContainer?.nativeElement;
+    if (!element) return;
+    // A posição é lida antes do render: interessa se o usuário estava no fim
+    // quando o novo conteúdo chegou, não depois de ele ser pintado.
+    if (!force && !this.isPinnedToBottom(element)) return;
+
+    afterNextRender(
+      () => {
+        element.scrollTop = element.scrollHeight;
+      },
+      { injector: this.injector },
+    );
+  }
+
+  private isPinnedToBottom(element: HTMLElement): boolean {
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    return distanceFromBottom <= SCROLL_STICK_THRESHOLD_PX;
   }
 }

@@ -7,14 +7,55 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Um code span é literal: `monte_carlo_simulated` não pode virar
+ * `monte<em>carlo</em>simulated`. Por isso os trechos entre crases saem da
+ * string antes das demais regras e voltam já formatados no fim.
+ */
 function formatInlineMarkdown(value: string): string {
-  return value
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+  const codeSpans: string[] = [];
+  const withPlaceholders = value.replace(/`([^`\n]+)`/g, (_match, code: string) => {
+    codeSpans.push(code);
+    return `\u0000CODE${codeSpans.length - 1}\u0000`;
+  });
+
+  const formatted = withPlaceholders
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
     .replace(/__([^_\n]+)__/g, '<strong>$1</strong>')
     .replace(/~~([^~\n]+)~~/g, '<del>$1</del>')
     .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
     .replace(/_([^_\n]+)_/g, '<em>$1</em>');
+
+  return formatted.replace(
+    /\u0000CODE(\d+)\u0000/g,
+    (_match, index: string) => `<code>${codeSpans[Number(index)]}</code>`,
+  );
+}
+
+/** Divide a linha da tabela em células, ignorando os pipes das bordas. */
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').map((cell) => cell.trim());
+}
+
+/** Linha separadora do GFM: `|---|:---:|` logo abaixo do cabeçalho. */
+function isTableDelimiter(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.includes('|') || !trimmed.includes('-')) return false;
+  return splitTableRow(trimmed).every((cell) => /^:?-{1,}:?$/.test(cell));
+}
+
+/** Uma tabela precisa do cabeçalho com pipe seguido da linha separadora. */
+function isTableStart(line: string, nextLine: string | undefined): boolean {
+  return (
+    line.trim().includes('|') && nextLine !== undefined && isTableDelimiter(nextLine)
+  );
+}
+
+function renderTableCells(cells: string[], tag: 'th' | 'td'): string {
+  return cells
+    .map((cell) => `<${tag}>${formatInlineMarkdown(escapeHtml(cell))}</${tag}>`)
+    .join('');
 }
 
 /**
@@ -40,12 +81,39 @@ export function renderCopilotMarkdown(markdown: string): string {
     paragraphLines = [];
   };
 
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd();
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].trimEnd();
 
     if (!line.trim()) {
       flushParagraph();
       closeList();
+      continue;
+    }
+
+    if (isTableStart(line, lines[index + 1])) {
+      flushParagraph();
+      closeList();
+
+      const headerCells = splitTableRow(line);
+      const columnCount = headerCells.length;
+      const bodyRows: string[] = [];
+      index += 2; // consome cabeçalho e separador
+
+      while (index < lines.length && lines[index].trim().includes('|')) {
+        const cells = splitTableRow(lines[index]);
+        // Normaliza para o número de colunas do cabeçalho: sobras viram célula extra vazia.
+        while (cells.length < columnCount) cells.push('');
+        bodyRows.push(`<tr>${renderTableCells(cells.slice(0, columnCount), 'td')}</tr>`);
+        index++;
+      }
+      index--; // o for externo avança para a próxima linha não consumida
+
+      html.push(
+        '<div class="table-scroll">' +
+          `<table><thead><tr>${renderTableCells(headerCells, 'th')}</tr></thead>` +
+          (bodyRows.length ? `<tbody>${bodyRows.join('')}</tbody>` : '') +
+          '</table></div>',
+      );
       continue;
     }
 

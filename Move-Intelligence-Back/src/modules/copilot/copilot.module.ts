@@ -5,6 +5,7 @@ import { AiGatewayModule } from '../ai-gateway/ai-gateway.module';
 import { TrendEngineModule } from '../trend-engine/trend-engine.module';
 import { OpportunityEngineModule } from '../opportunity-engine/opportunity-engine.module';
 import { MarginEngineModule } from '../margin-engine/margin-engine.module';
+import { DashboardApiModule } from '../dashboard-api/dashboard-api.module';
 import { DatabaseModule } from '../../shared/database/database.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { DatabaseModule } from '../../shared/database/database.module';
     TrendEngineModule,
     OpportunityEngineModule,
     MarginEngineModule,
+    DashboardApiModule,
   ],
   controllers: [CopilotController],
   providers: [CopilotService],

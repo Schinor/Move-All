@@ -1,5 +1,7 @@
 :host {
   display: block;
+  /* Cabeçalho da página + respiro do shell descontados da viewport. */
+  --copilot-chrome-height: 260px;
 }
 
 .copilot-header-actions,
@@ -52,7 +54,10 @@
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: var(--sp-4);
-  min-height: 660px;
+  /* Altura limitada pela viewport: sem teto, o chat cresce com as mensagens e
+     quem rola passa a ser a página, não a lista. */
+  height: calc(100dvh - var(--copilot-chrome-height));
+  min-height: 480px;
 }
 
 .copilot-layout.conversation-sidebar-collapsed {
@@ -226,7 +231,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   min-width: 0;
-  min-height: 660px;
+  min-height: 0;
   overflow: hidden;
   border-radius: var(--r-md);
 }
@@ -234,6 +239,7 @@
 .messages {
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .welcome-screen {
@@ -459,6 +465,8 @@
   .copilot-layout,
   .copilot-layout.conversation-sidebar-collapsed {
     grid-template-columns: 1fr;
+    /* Empilhado, o histórico ocupa altura própria e a página volta a rolar. */
+    height: auto;
     min-height: 0;
   }
 
@@ -471,7 +479,8 @@
   }
 
   .chat {
-    min-height: 620px;
+    height: calc(100dvh - var(--copilot-chrome-height));
+    min-height: 420px;
   }
 }
 

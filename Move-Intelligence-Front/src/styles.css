@@ -340,3 +340,90 @@ button {
     min-height: 44px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Conteúdo Markdown do Copilot.
+ * As tags são inseridas via [innerHTML], que não recebe os atributos de
+ * encapsulação do Angular — por isso os estilos vivem aqui, no escopo global.
+ * ------------------------------------------------------------------------- */
+.markdown-content > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content p {
+  margin: 0 0 var(--sp-3);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0 0 var(--sp-3);
+  padding-left: var(--sp-5);
+}
+
+.markdown-content li {
+  margin-bottom: var(--sp-1);
+}
+
+.markdown-content blockquote {
+  margin: 0 0 var(--sp-3);
+  padding-left: var(--sp-3);
+  color: var(--text-2);
+  border-left: 3px solid var(--border-strong);
+}
+
+.markdown-content code {
+  padding: 1px 4px;
+  font-size: 0.9em;
+  background: var(--surface-3);
+  border-radius: var(--r-sm);
+}
+
+/* A tabela rola dentro da própria bolha: a mensagem nunca alarga o chat. */
+.markdown-content .table-scroll {
+  margin: 0 0 var(--sp-3);
+  overflow-x: auto;
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-label);
+  /* Sem quebra agressiva de palavra dentro das células estreitas. */
+  overflow-wrap: normal;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: var(--sp-2);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-content th {
+  color: var(--text-2);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.markdown-content tbody tr:last-child td {
+  border-bottom: none;
+}
