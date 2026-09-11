@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from '../api/api-client';
+import { environment } from '../../../environments/environment';
 import {
   CopilotChatRequest,
   CopilotChatResponse,
@@ -80,7 +81,7 @@ export class CopilotService {
     onToken: (token: string) => void,
     onConversationId?: (id: string) => void,
   ): Promise<string> {
-    const response = await fetch('/api/copilot/chat/stream', {
+    const response = await fetch(`${environment.apiBaseUrl}/copilot/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(this.withClientContext(request)),
