@@ -22,6 +22,8 @@ interface RedisConnectionOptions {
   username?: string;
   password?: string;
   db?: number;
+  family?: number;
+  tls?: Record<string, never>;
   maxRetriesPerRequest: null;
 }
 
@@ -30,6 +32,7 @@ function parseRedisUrl(redisUrl: string): RedisConnectionOptions {
   const opts: RedisConnectionOptions = {
     host: url.hostname || 'localhost',
     port: Number(url.port || 6379),
+    family: 0,
     maxRetriesPerRequest: null,
   };
   if (url.username) {
@@ -41,6 +44,9 @@ function parseRedisUrl(redisUrl: string): RedisConnectionOptions {
   const dbPath = url.pathname.replace(/^\//, '');
   if (dbPath) {
     opts.db = Number(dbPath);
+  }
+  if (url.protocol === 'rediss:') {
+    opts.tls = {};
   }
   return opts;
 }
