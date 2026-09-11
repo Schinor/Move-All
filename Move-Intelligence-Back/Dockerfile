@@ -22,4 +22,4 @@ COPY Move-Intelligence-Dados /app/data
 RUN pip3 install --break-system-packages --no-cache-dir -r /app/data/requirements.txt
 ENV NODE_ENV=production MOVE_INTELLIGENCE_DATA_DIR=/app/data PYTHON_BIN=python3
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node dist/main.js"]
+CMD ["sh", "-c", "if [ \"$RUN_DB_PUSH_ON_BOOT\" = \"true\" ]; then npx prisma db push; fi; exec node dist/main.js"]

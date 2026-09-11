@@ -45,6 +45,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
+      RUN_DB_PUSH_ON_BOOT: "true"
       DATABASE_URL: postgresql://${POSTGRES_USER:-move}:${POSTGRES_PASSWORD:-move}@postgres:5432/${POSTGRES_DB:-move_intelligence}?schema=public
       MOVE_ETL_DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-move}:${POSTGRES_PASSWORD:-move}@postgres:5432/${POSTGRES_DB:-move_intelligence}
       REDIS_URL: redis://redis:6379
