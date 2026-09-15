@@ -1,0 +1,26 @@
+{
+  "price": 559.55,
+  "currency": "BRL",
+  "rating": 5.0,
+  "reviews_count": 3,
+  "sold_count_raw": null,
+  "sold_count_lower": null,
+  "best_seller_rank": null,
+  "in_stock": true,
+  "scrape_status": "ok",
+  "parser_version": "amazon@2",
+  "title": "Halter Ajustável Até 24kg MKFIT Dumbbell Profissional com Anilhas, Barra e Travas de Segurança, Peso Regulável para Musculação, Treino em Casa, Academia, Fitness, Alta Durabilidade",
+  "seller": "MK FIT ECOMMERCE",
+  "rating_distribution": {
+    "1": 0.0,
+    "2": 0.0,
+    "3": 0.0,
+    "4": 0.0,
+    "5": 100.0
+  },
+  "supplier_name": null,
+  "supplier_years": null,
+  "supplier_verified": null,
+  "moq": null,
+  "price_tiers": null
+}

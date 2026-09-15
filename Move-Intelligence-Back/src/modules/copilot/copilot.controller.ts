@@ -1,11 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { Public } from '../auth/public.decorator';
 import { CopilotService } from './copilot.service';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
 import { UpdateCopilotConversationDto } from './dto/update-copilot-conversation.dto';
 
-@Public()
 @Controller('copilot')
 export class CopilotController {
   constructor(private readonly copilot: CopilotService) {}
@@ -58,23 +56,39 @@ export class CopilotController {
       res.header('X-Accel-Buffering', 'no');
     }
 
+    // P0-5: a resposta não depende da conexão — `close` só interrompe a
+    // escrita, nunca a geração (o service salva no finally).
+    let closed = false;
+    try {
+      raw?.on?.('close', () => {
+        closed = true;
+      });
+    } catch {
+      // Sem suporte a eventos: segue escrevendo com as guardas abaixo.
+    }
+    const safeWrite = (data: string): void => {
+      try {
+        if (closed || raw?.writableEnded || raw?.destroyed) return;
+        if (typeof raw?.write === 'function') raw.write(data);
+      } catch {
+        // Socket fechado: nunca lança.
+        closed = true;
+      }
+    };
+
     try {
       for await (const chunk of this.copilot.chatStream(dto)) {
-        if (typeof raw?.write === 'function') {
-          raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
-        }
+        safeWrite(`data: ${JSON.stringify(chunk)}\n\n`);
       }
-      if (typeof raw?.write === 'function') {
-        raw.write('data: [DONE]\n\n');
-      }
+      safeWrite('data: [DONE]\n\n');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      if (typeof raw?.write === 'function') {
-        raw.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
-      }
+      safeWrite(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
     } finally {
-      if (typeof raw?.end === 'function') {
-        raw.end();
+      try {
+        if (typeof raw?.end === 'function' && !raw?.writableEnded) raw.end();
+      } catch {
+        // Socket fechado: nunca lança.
       }
     }
   }

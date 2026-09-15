@@ -77,8 +77,9 @@ export function parseGoogleShopping(content: string): MarketplaceParseResult {
     const imageCount = parseJsonArray(record.images).length;
 
     rows.push({
-      naturalKey: `google-shopping|${productId}`,
-      marketplace: 'google-shopping',
+      // Fonte canônica com underscore (F1.8); ver comentário no tiktok-shop.
+      naturalKey: `google_shopping|${productId}`,
+      marketplace: 'google_shopping',
       externalProductId: productId,
       title,
       priceMin,

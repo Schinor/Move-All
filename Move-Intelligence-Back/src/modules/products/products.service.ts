@@ -7,10 +7,8 @@ import {
 } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
-import { TrendEngineService } from '../trend-engine/trend-engine.service';
-import { indicator, pendingIndicator } from '../../shared/contract/indicator';
 import {
   SupplierClusterRow,
   suppliersFromCluster,
@@ -23,11 +21,25 @@ import {
 } from './dto/run-monte-carlo.dto';
 import { MONTE_CARLO_ANALYST_SYSTEM_PROMPT } from './monte-carlo-ai.prompt';
 import { OpenRouterService } from '../ai-gateway/openrouter.service';
+import { DEFAULT_BUSINESS_RULES } from '../../shared/business-rules/business-rules.defaults';
+import { computeMomentum } from '../scoring/momentum';
+import { classifyQuadrant, scoreBandFromScore } from '../scoring/decision-quadrant';
+import { buildRiskExplanation } from '../scoring/risk-explanation';
+import {
+  ParsedRecommendation,
+  extractJsonObject,
+  fallbackRationale,
+  isQuadrantAction,
+  isRawRationale,
+  parseRecommendationPayload,
+} from './ai-recommendation-json';
 
 const WINDOW_MS: Record<string, number> = {
   '24h': 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
   '30d': 30 * 24 * 60 * 60 * 1000,
+  // C3 (decisão 9): janela 60d + comparação sobreposta com o período anterior.
+  '60d': 60 * 24 * 60 * 60 * 1000,
   '3m': 90 * 24 * 60 * 60 * 1000,
   '6m': 180 * 24 * 60 * 60 * 1000,
   '1y': 365 * 24 * 60 * 60 * 1000,
@@ -59,6 +71,8 @@ type ClusterForSimulation = {
     rating: unknown;
     moq: number | null;
     collectedAt: Date;
+    externalProductId?: string;
+    sellerName?: string | null;
   }[];
 };
 
@@ -78,13 +92,67 @@ export type MonteCarloBatchSummary = {
 };
 
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
+import { DEFAULT_FX_CNY_USD, DEFAULT_FX_USD_BRL } from '../../shared/fx/fx.constants';
+import {
+  HistoryObservation,
+  PREMISES_DATA_VERSION,
+  derivePremisesFromHistory,
+} from '../scoring/premises-from-history';
+import {
+  EMPTY_MOVE_SCORE,
+  loadLatestMoveScores,
+} from '../../shared/scoring/product-score-loader';
+import { includeSyntheticData, syntheticSnapshotWhere } from '../../shared/synthetic-data/synthetic-data.filter';
+import { buildReviewSentimentSeries } from '../../shared/scoring/review-sentiment';
 
-/** Cenários usados no batch: rápido o bastante para rodar em série após um import. */
-const BATCH_SCENARIO_COUNT = 2_000;
+/** Cenários do lote OFICIAL que grava o ProductScore (F2.4). */
+const OFFICIAL_SCENARIO_COUNT = 50_000;
+/** Seed fixa do lote oficial (reprodutibilidade). */
+const OFFICIAL_SEED = 7;
 /** Teto de clusters lidos por consulta ao procurar candidatos ao batch. */
 const BATCH_CANDIDATE_SCAN = 500;
-/** Universo varrido para ordenar candidatos pelo trend score (mesmo teto do ranking). */
+/** Universo varrido para candidatos ao lote (mesmo teto do ranking). */
 const BATCH_RANKING_SCAN = 20_000;
+
+/** Faixa configurável B1 (70/50) aplicada no backend; script só devolve métricas. */
+function localScoreBand(score: number): 'green' | 'yellow' | 'red' {
+  return scoreBandFromScore(score, DEFAULT_BUSINESS_RULES.moveScoreBands) ?? 'red';
+}
+
+function riskLevelFromScore(score: number): string {
+  const band = localScoreBand(score);
+  return band === 'green' ? 'baixo' : band === 'yellow' ? 'medio' : 'alto';
+}
+
+/** Decisão legada temporária (B1: 70/50); B3 substitui por action. */
+function decisionFromScore(score: number): string {
+  const band = localScoreBand(score);
+  return band === 'green' ? 'AVANCAR' : band === 'yellow' ? 'AVANCAR COM RESSALVAS' : 'REPROVAR';
+}
+
+/** Série semanal de vendas (últimas 8 semanas) para o momentum no lote (B2/B3). */
+function buildSalesWeekly(
+  snapshots: Array<{ salesSignalRaw: unknown; collectedAt: Date }>,
+): number[] {
+  const points = snapshots
+    .map((s) => ({
+      t: s.collectedAt instanceof Date ? s.collectedAt.getTime() : NaN,
+      v: Number(s.salesSignalRaw),
+    }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v) && p.v > 0)
+    .sort((a, b) => a.t - b.t);
+  if (points.length === 0) return [];
+  const WEEK = 7 * 86_400_000;
+  const end = points[points.length - 1].t;
+  const buckets = new Array(8).fill(0);
+  for (const p of points) {
+    const diff = end - p.t;
+    if (diff < 0 || diff >= 8 * WEEK) continue;
+    const idx = 7 - Math.floor(diff / WEEK);
+    buckets[idx] += p.v;
+  }
+  return buckets.filter((v) => v > 0).slice(-8);
+}
 
 @Injectable()
 export class ProductsService {
@@ -92,8 +160,6 @@ export class ProductsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly trendEngine: TrendEngineService,
-    private readonly opportunityEngine: OpportunityEngineService,
     private readonly openRouter: OpenRouterService,
     private readonly cache?: RedisCacheService,
   ) {}
@@ -104,8 +170,9 @@ export class ProductsService {
   }
 
   getSnapshots(productClusterId: string) {
+    // Com INCLUDE_SYNTHETIC_DATA=false, telas de detalhe não veem snapshots sintéticos.
     return this.prisma.productListingSnapshot.findMany({
-      where: { productClusterId },
+      where: { productClusterId, ...syntheticSnapshotWhere() },
       orderBy: { collectedAt: 'asc' },
       take: 5_000,
     });
@@ -130,7 +197,7 @@ export class ProductsService {
   }
 
   async runMonteCarloSimulation(productClusterId: string, dto: RunMonteCarloDto = {}) {
-    const hasOverrides = dto.premises && Object.keys(dto.premises).length > 0;
+    const hasOverrides = Boolean(dto.premises && Object.keys(dto.premises).length > 0);
     const compute = async () => {
       const cluster = await this.getSimulationCluster(productClusterId);
       const { premises, sources } = await this.defaultMonteCarloPremises(cluster);
@@ -149,12 +216,22 @@ export class ProductsService {
       };
 
       const result = await this.runMonteCarloPython(payload);
-      await this.persistSimulationOutcome(productClusterId, result);
+
+      // Só a simulação SEM overrides (e o lote, em simulateBatchForRanking)
+      // grava riskLevel/financialScore e vira o score oficial do ranking. Um
+      // cenário "e se" do usuário nunca sobrescreve o score oficial nem
+      // invalida o cache do ranking (ver RELATORIO_ANALISE_DADOS_E_SCORES.md
+      // seção 3.2 S7 — antes o ranking ficava não reprodutível).
+      if (!hasOverrides) {
+        await this.persistSimulationOutcome(productClusterId, result);
+        await this.cache?.delPattern('dashboard:trends:products:*');
+      }
 
       return {
         product_cluster_id: productClusterId,
         canonical_name: cluster.canonicalName,
         premise_sources: sources,
+        is_user_scenario: hasOverrides,
         ...result,
       };
     };
@@ -166,10 +243,11 @@ export class ProductsService {
   }
 
   /**
-   * Roda o Monte Carlo em lote (sequencialmente, um spawn por vez) para os
-   * clusters ainda sem simulação ou com simulação mais antiga que o último
-   * snapshot, persistindo `riskLevel`/`financialScore` para o ranking.
-   * Falha de um cluster não aborta os demais.
+   * Lote OFICIAL (F2.4): deriva premissas do histórico (F2.2), roda 50.000
+   * cenários com seed fixa e grava o `ProductScore` vigente por cluster
+   * (sequencialmente, um spawn por vez). Sem dados suficientes, grava só a
+   * confiança (`score` nulo, decisão `SEM_SCORE`). Os campos legados do
+   * cluster seguem gravados até F2.7. Falha de um cluster não aborta os demais.
    */
   async simulateBatchForRanking(limit = 50): Promise<MonteCarloBatchSummary> {
     const targets = await this.findClustersNeedingSimulation(limit);
@@ -182,18 +260,127 @@ export class ProductsService {
 
     for (const cluster of targets) {
       try {
-        const { premises } = await this.defaultMonteCarloPremises(cluster);
+        const observations = this.toHistoryObservations(cluster.snapshots);
+        const fxCnyUsd = await this.fxCnyUsd();
+        const { premises: derived, dataConfidence } = derivePremisesFromHistory(
+          observations,
+          { fxCnyUsd },
+        );
+        if (!derived) {
+          // Sem score: só a confiança, sem número (B3: ação DADOS_INSUFICIENTES).
+          await this.prisma.productScore.create({
+            data: {
+              productClusterId: cluster.id,
+              score: null,
+              decision: 'SEM_SCORE',
+              pVplPositivo: null,
+              cvar5: null,
+              vplMediano: null,
+              premises: {},
+              premisesHash: '',
+              dataVersion: PREMISES_DATA_VERSION,
+              dataConfidence,
+              scenarioCount: 0,
+              action: 'DADOS_INSUFICIENTES',
+              momentumDirection: 'estavel',
+              momentumGrowthPct: 0,
+              momentumConfidence: 'insuficiente',
+              scoreBand: null,
+            },
+          });
+          summary.simulated += 1;
+          continue;
+        }
+        // Parâmetros de negócio (D7 pendente: mantém os atuais) + derivação F2.2.
+        const { premises: base } = await this.defaultMonteCarloPremises(cluster);
+        const scriptPremises = {
+          ...base,
+          demanda_referencia: derived.demanda_referencia,
+          crescimento_demanda_mensal: derived.crescimento_demanda_mensal,
+          vol_crescimento: derived.incerteza_crescimento ?? 0,
+          vol_demanda: derived.vol_demanda,
+          vol_preco: derived.vol_preco,
+          preco_venda: derived.preco_venda,
+          preco_referencia: Math.round(derived.preco_venda * 0.95),
+          custo_usd: derived.custo_usd,
+        };
         const result = await this.runMonteCarloPython({
-          premises,
-          scenario_count: BATCH_SCENARIO_COUNT,
-          seed: 7,
+          premises: scriptPremises,
+          scenario_count: OFFICIAL_SCENARIO_COUNT,
+          seed: OFFICIAL_SEED,
           price_scan: false,
+          data_version: PREMISES_DATA_VERSION,
         });
         const outcome = await this.persistSimulationOutcome(cluster.id, result);
         if (!outcome) {
           summary.failed += 1;
           continue;
         }
+        const metrics = (result.metrics ?? {}) as Record<string, number>;
+        const decision =
+          typeof result.decision === 'string' ? result.decision : decisionFromScore(outcome.financialScore);
+        // B2/B3: momentum de vendas (sem busca no lote) + quadrante + faixa.
+        const salesWeekly = buildSalesWeekly(cluster.snapshots);
+        const momentumTuning = DEFAULT_BUSINESS_RULES.momentum;
+        const momentum = computeMomentum(
+          { salesWeekly, searchWeekly: [] },
+          {
+            salesWeight: momentumTuning.salesWeight,
+            searchWeight: momentumTuning.searchWeight,
+            upThresholdPct: momentumTuning.upThresholdPct,
+            downThresholdPct: momentumTuning.downThresholdPct,
+          },
+        );
+        const band = scoreBandFromScore(outcome.financialScore, DEFAULT_BUSINESS_RULES.moveScoreBands);
+        const action = classifyQuadrant({
+          score: outcome.financialScore,
+          scoreBand: band,
+          dataConfidence,
+          momentum,
+          financialThreshold: DEFAULT_BUSINESS_RULES.quadrant.financialThreshold,
+        });
+        // B4: drivers do Monte Carlo + causas estruturais → texto de tooltip.
+        const rawDrivers = Array.isArray((result as Record<string, unknown>).risk_drivers)
+          ? ((result as Record<string, unknown>).risk_drivers as Array<Record<string, unknown>>)
+          : [];
+        const drivers = rawDrivers
+          .filter((d) => typeof d?.factor === 'string' && Number.isFinite(Number(d?.share)))
+          .map((d) => ({ factor: String(d.factor), share: Number(d.share) }));
+        const riskTuning = DEFAULT_BUSINESS_RULES.riskCauses;
+        const risk = buildRiskExplanation({
+          riskLevel: outcome.riskLevel,
+          premises: (result.premises ?? scriptPremises ?? {}) as Record<string, number>,
+          drivers,
+          tuning: {
+            lowMarginPct: riskTuning.lowMarginPct,
+            highImportCostPct: riskTuning.highImportCostPct,
+            highInvestmentMonths:
+              (riskTuning as Record<string, number>).highInvestmentMonths ?? 2,
+          },
+        });
+        await this.prisma.productScore.create({
+          data: {
+            productClusterId: cluster.id,
+            score: outcome.financialScore,
+            decision,
+            action,
+            momentumDirection: momentum.direction,
+            momentumGrowthPct: momentum.growthPct,
+            momentumConfidence: momentum.confidence,
+            scoreBand: band,
+            riskExplanation: risk.text,
+            riskDrivers: drivers as unknown as Prisma.InputJsonValue,
+            pVplPositivo: Number.isFinite(metrics.p_vpl_positivo) ? metrics.p_vpl_positivo : null,
+            cvar5: Number.isFinite(metrics.cvar_5) ? metrics.cvar_5 : null,
+            vplMediano: Number.isFinite(metrics.vpl_mediano) ? metrics.vpl_mediano : null,
+            premises: JSON.parse(JSON.stringify(result.premises ?? {})) as Prisma.InputJsonValue,
+            premisesHash: typeof result.premises_hash === 'string' ? result.premises_hash : '',
+            dataVersion:
+              typeof result.data_version === 'string' ? result.data_version : PREMISES_DATA_VERSION,
+            dataConfidence,
+            scenarioCount: OFFICIAL_SCENARIO_COUNT,
+          },
+        });
         summary.simulated += 1;
         summary.results.push({
           product_cluster_id: cluster.id,
@@ -213,14 +400,53 @@ export class ProductsService {
     this.logger.log(
       `Monte Carlo em lote: ${summary.simulated} simulados, ${summary.failed} falhas, ${summary.candidates} candidatos.`,
     );
+    if (summary.simulated > 0) {
+      await this.cache?.delPattern('monte-carlo:*');
+      await this.cache?.delPattern('dashboard:trends:products:*');
+    }
     return summary;
   }
 
+  /** Snapshots do cluster no formato do módulo puro F2.2. */
+  private toHistoryObservations(
+    snapshots: ClusterForSimulation['snapshots'],
+  ): HistoryObservation[] {
+    return snapshots.map((snapshot) => ({
+      // Chave estável do anúncio (não da observação): o painel balanceado
+      // exige o mesmo anúncio nas duas metades da janela.
+      listingKey: `${snapshot.marketplace}:${snapshot.externalProductId ?? snapshot.sellerName ?? 'na'}`,
+      marketplace: snapshot.marketplace,
+      currency: snapshot.currency,
+      priceMin: this.toPositiveNumber(snapshot.priceMin),
+      salesSignal: this.toPositiveNumber(snapshot.salesSignalRaw),
+      collectedAt: snapshot.collectedAt,
+    }));
+  }
+
+  /** Paridade CNY→USD pela PTAX; fallback único documentado. */
+  private async fxCnyUsd(): Promise<number> {
+    const rows = await this.prisma.exchangeRate.findMany({
+      where: { quoteCurrency: 'BRL' },
+      orderBy: { capturedAt: 'desc' },
+      take: 10,
+    });
+    const rate = (base: string): number | null => {
+      const row = rows.find((item) => item.baseCurrency === base);
+      const value = row ? Number(row.rate) : NaN;
+      return Number.isFinite(value) && value > 0 ? value : null;
+    };
+    const cnyBrl = rate('CNY');
+    const usdBrl = rate('USD');
+    if (cnyBrl !== null && usdBrl !== null) {
+      return cnyBrl / usdBrl;
+    }
+    return DEFAULT_FX_CNY_USD;
+  }
+
   /**
-   * Clusters que precisam de simulação, priorizados pelo MESMO trend score do
-   * ranking (para a coluna Risco aparecer primeiro nos produtos do topo).
-   * Precisam de simulação: sem `simulatedAt` ou com simulação anterior ao
-   * último snapshot coletado.
+   * Clusters que precisam de simulação: sem `simulatedAt` ou com simulação
+   * anterior ao último snapshot coletado. Ordem estável por criação (o
+   * ranking agora ordena pelo Move Score oficial, sem Trend Engine).
    */
   private async findClustersNeedingSimulation(
     limit: number,
@@ -230,9 +456,14 @@ export class ProductsService {
       return [];
     }
 
+    // Com INCLUDE_SYNTHETIC_DATA=false (default), candidatos ao Monte Carlo em
+    // lote só consideram snapshots reais — senão o batch simula clusters cujo
+    // único histórico é a curva sintética do historical-collection.
     const clusters = (await this.prisma.productCluster.findMany({
-      where: { snapshots: { some: {} } },
-      include: { snapshots: { orderBy: { collectedAt: 'asc' }, take: 1_000 } },
+      where: { snapshots: { some: syntheticSnapshotWhere() } },
+      include: {
+        snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' }, take: 1_000 },
+      },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: BATCH_RANKING_SCAN,
     })) as unknown as ClusterForSimulation[];
@@ -246,44 +477,25 @@ export class ProductsService {
       );
     });
 
-    return needsSimulation
-      .map((cluster) => ({
-        cluster,
-        score: this.trendEngine.calculateFromSnapshots(
-          cluster.snapshots.map((s) => ({
-            marketplace: s.marketplace,
-            priceMin: s.priceMin === null ? null : Number(s.priceMin),
-            reviewCount: s.reviewCount,
-            salesSignalRaw:
-              s.salesSignalRaw === null ? null : Number(s.salesSignalRaw),
-            salesSignalType: s.salesSignalType as never,
-            rating: s.rating === null ? null : Number(s.rating),
-            collectedAt: s.collectedAt,
-          })),
-          cluster.category ?? undefined,
-        ).trendScore,
-      }))
-      .sort(
-        (a, b) =>
-          b.score - a.score ||
-          a.cluster.canonicalName.localeCompare(b.cluster.canonicalName),
-      )
-      .slice(0, take)
-      .map(({ cluster }) => cluster);
+    return needsSimulation.slice(0, take);
   }
 
-  /** Grava o resultado da simulação no cluster; retorna null se o payload não trouxer risco. */
+  /** Grava o resultado da simulação no cluster; deriva faixa/risco no backend (B1). */
   private async persistSimulationOutcome(
     productClusterId: string,
     result: Record<string, unknown>,
   ): Promise<{ riskLevel: string; financialScore: number } | null> {
-    const riskLevel = result.risk_level;
     const financialScore = Number(result.financial_score);
-    if (typeof riskLevel !== 'string' || !Number.isFinite(financialScore)) {
+    if (!Number.isFinite(financialScore)) {
       return null;
     }
-
-    const outcome = { riskLevel, financialScore: Math.round(financialScore) };
+    const rounded = Math.round(financialScore);
+    // B1: script devolve só métricas; faixa e risco aplicados aqui (70/50).
+    const riskLevel =
+      typeof result.risk_level === 'string'
+        ? result.risk_level
+        : riskLevelFromScore(rounded);
+    const outcome = { riskLevel, financialScore: rounded };
     await this.prisma.productCluster.update({
       where: { id: productClusterId },
       data: { ...outcome, simulatedAt: new Date() },
@@ -332,9 +544,11 @@ export class ProductsService {
   }
 
   private async getSimulationCluster(productClusterId: string): Promise<ClusterForSimulation> {
+    // Idem: premissas do Monte Carlo não podem se apoiar em snapshots
+    // sintéticos quando INCLUDE_SYNTHETIC_DATA=false.
     const cluster = (await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
-      include: { snapshots: { orderBy: { collectedAt: 'asc' } } },
+      include: { snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' } } },
     })) as unknown as ClusterForSimulation | null;
 
     if (!cluster || cluster.snapshots.length === 0) {
@@ -348,62 +562,167 @@ export class ProductsService {
   async getSuppliers(productClusterId: string) {
     const cluster = (await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
-      include: { snapshots: { orderBy: { collectedAt: 'desc' } } },
+      // Com INCLUDE_SYNTHETIC_DATA=false, fornecedores derivam só de snapshots reais.
+      include: { snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'desc' } } },
     })) as unknown as SupplierClusterRow | null;
 
     return cluster ? suppliersFromCluster(cluster) : [];
   }
 
   /** Série de preço no formato do contrato (Series { window, points }). */
-  async getPriceHistory(productClusterId: string, window = '30d') {
+  async getPriceHistory(productClusterId: string, window = '30d', compare?: string) {
+    if (compare === 'previous') {
+      const { current, previous } = await this.seriesPointsCompared(productClusterId, window, 'price');
+      return { window, points: current, current, previous };
+    }
     const points = await this.seriesPoints(productClusterId, window, 'price');
     return { window, points };
   }
 
   /** Série de reviews no formato do contrato. */
-  async getReviewHistory(productClusterId: string, window = '30d') {
+  async getReviewHistory(productClusterId: string, window = '30d', compare?: string) {
+    if (compare === 'previous') {
+      const { current, previous } = await this.seriesPointsCompared(productClusterId, window, 'reviews');
+      return { window, points: current, current, previous };
+    }
     const points = await this.seriesPoints(productClusterId, window, 'reviews');
     return { window, points };
   }
 
+  /**
+   * Avaliações positivas (4–5★), neutras (3★) e negativas (1–2★) por semana +
+   * nota média, lidas da distribuição de estrelas das observações dos anúncios
+   * do cluster (product_cluster_items → tracked_listings → listing_observations).
+   */
+  async getReviewSentiment(productClusterId: string, window = '6m') {
+    const windowMs = WINDOW_MS[window] ?? Number.MAX_SAFE_INTEGER;
+    const items = await this.prisma.productClusterItem.findMany({
+      where: { clusterId: productClusterId },
+      select: { marketplace: true, externalProductId: true },
+      take: 500,
+    });
+    if (items.length === 0) return { window, points: [], totals: null };
+    const listings = await this.prisma.trackedListing.findMany({
+      where: { OR: items.map((item) => ({ source: item.marketplace, nativeId: item.externalProductId })) },
+      select: { id: true },
+      take: 500,
+    });
+    if (listings.length === 0) return { window, points: [], totals: null };
+    const observations = await this.prisma.listingObservation.findMany({
+      where: {
+        listingId: { in: listings.map((listing) => listing.id) },
+        scrapeStatus: 'ok',
+        ...(includeSyntheticData() ? {} : { isSynthetic: false }),
+      },
+      orderBy: { observedAt: 'asc' },
+      select: { listingId: true, observedAt: true, rating: true, reviewsCount: true, ratingDistribution: true },
+      take: 50_000,
+    });
+    const series = buildReviewSentimentSeries(
+      observations.map((row) => ({
+        listingId: row.listingId,
+        observedAt: row.observedAt,
+        rating: row.rating === null ? null : Number(row.rating),
+        reviewsCount: row.reviewsCount,
+        distribution: row.ratingDistribution,
+      })),
+      windowMs,
+    );
+    return { window, ...series };
+  }
+
   /** Série de volume no formato do contrato (Series { window, points }). */
-  async getVolumeHistory(productClusterId: string, window = '30d') {
+  async getVolumeHistory(productClusterId: string, window = '30d', compare?: string) {
+    if (compare === 'previous') {
+      const { current, previous } = await this.seriesPointsCompared(productClusterId, window, 'volume');
+      return { window, points: current, current, previous };
+    }
     const points = await this.seriesPoints(productClusterId, window, 'volume');
     return { window, points };
   }
 
-  async getOpportunityScore(productClusterId: string) {
-    const snapshots = await this.getSnapshots(productClusterId);
-    const trend = this.trendEngine.calculateFromSnapshots(
-      snapshots.map((snapshot) => ({
-        marketplace: snapshot.marketplace,
-        priceMin: snapshot.priceMin ? Number(snapshot.priceMin) : null,
-        rating: snapshot.rating ? Number(snapshot.rating) : null,
-        reviewCount: snapshot.reviewCount,
-        salesSignalRaw: snapshot.salesSignalRaw ? Number(snapshot.salesSignalRaw) : null,
-        salesSignalType: snapshot.salesSignalType as never,
-        collectedAt: snapshot.collectedAt,
-      })),
-    );
-
-    const opportunity = this.opportunityEngine.calculate({
-      trendScore: trend.trendScore,
-      marginScore: 0,
-      westernSaturationScore: 0,
+  /** C3: período atual + anterior de mesmo tamanho (curva anterior tracejada). */
+  private async seriesPointsCompared(
+    productClusterId: string,
+    window: string,
+    metricType: 'volume' | 'price' | 'reviews' | 'general' = 'general',
+  ): Promise<{ current: Array<{ t: string; v: number }>; previous: Array<{ t: string; v: number }> }> {
+    const windowMs = WINDOW_MS[window] ?? Number.MAX_SAFE_INTEGER;
+    if (!Number.isFinite(windowMs) || windowMs === Number.MAX_SAFE_INTEGER) {
+      const current = await this.seriesPoints(productClusterId, window, metricType);
+      return { current, previous: [] };
+    }
+    // Sem cache aqui (combina dois intervalos); seriesPoints tem cache próprio.
+    const allSnapshots = await this.prisma.productListingSnapshot.findMany({
+      where: { productClusterId, ...syntheticSnapshotWhere() },
+      orderBy: { collectedAt: 'asc' },
+      take: 5_000,
     });
-
-    return {
-      opportunity_score: indicator(
-        Math.round(opportunity.opportunityScore * 100),
-        'Tendência × margem × (1 − saturação ocidental).',
-        { trend: trend.trendScore, margin: 0, saturation: 0 },
-        '30d',
-      ),
-      trend_score: indicator(Math.round(trend.trendScore * 100), null, null, '30d'),
-      margin_score: pendingIndicator(),
-      western_saturation_score: pendingIndicator(),
-    };
+    if (allSnapshots.length === 0) return { current: [], previous: [] };
+    const latestTime = allSnapshots[allSnapshots.length - 1].collectedAt.getTime();
+    const currentCutoff = latestTime - windowMs;
+    const previousCutoff = latestTime - 2 * windowMs;
+    const currentSnapshots = allSnapshots.filter((s) => s.collectedAt.getTime() >= currentCutoff);
+    const previousSnapshots = allSnapshots.filter(
+      (s) => s.collectedAt.getTime() >= previousCutoff && s.collectedAt.getTime() < currentCutoff,
+    );
+    const current = await this.pointsFromSnapshots(productClusterId, currentSnapshots, metricType);
+    const previous = await this.pointsFromSnapshots(productClusterId, previousSnapshots, metricType);
+    return { current, previous };
   }
+
+  private async pointsFromSnapshots(
+    _productClusterId: string,
+    filtered: Array<{
+      collectedAt: Date;
+      priceMin: unknown;
+      salesSignalRaw: unknown;
+      reviewCount: number | null;
+      currency?: string | null;
+      marketplace: string;
+    }>,
+    metricType: 'volume' | 'price' | 'reviews' | 'general' = 'general',
+  ): Promise<Array<{ t: string; v: number }>> {
+    const byDate = new Map<string, { snapshots: typeof filtered; rawDate: Date }>();
+    for (const snapshot of filtered) {
+      const dateKey = snapshot.collectedAt.toISOString().slice(0, 10);
+      const curr = byDate.get(dateKey) ?? { snapshots: [], rawDate: snapshot.collectedAt };
+      curr.snapshots.push(snapshot);
+      byDate.set(dateKey, curr);
+    }
+    const exchange = metricType === 'price' ? await this.usdBrlExchangeContext() : null;
+    const exchangeRate = exchange?.rate ?? DEFAULT_FX_USD_BRL;
+    const points: { t: string; v: number }[] = [];
+    for (const [, { snapshots, rawDate }] of [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      let val = 0;
+      if (metricType === 'volume') {
+        val = snapshots.reduce((acc, s) => {
+          const num = Number(s.salesSignalRaw);
+          return acc + (Number.isFinite(num) && num > 0 ? num : 0);
+        }, 0);
+      } else if (metricType === 'price') {
+        const validPrices = snapshots
+          .map((s) => {
+            const rawPrice = Number(s.priceMin);
+            if (!Number.isFinite(rawPrice) || rawPrice <= 0) return null;
+            const isUsd =
+              s.currency === 'USD' || s.marketplace === 'alibaba' || s.marketplace === 'aliexpress' || s.marketplace === '1688';
+            return isUsd ? rawPrice * exchangeRate : rawPrice;
+          })
+          .filter((p): p is number => p !== null && p > 0);
+        val = validPrices.length > 0 ? validPrices.reduce((a, b) => a + b, 0) / validPrices.length : 0;
+      } else if (metricType === 'reviews') {
+        val = snapshots.reduce((acc, s) => {
+          const num = Number(s.reviewCount);
+          return acc + (Number.isFinite(num) && num > 0 ? num : 0);
+        }, 0);
+      }
+      if (metricType === 'price' && val <= 0) continue;
+      points.push({ t: rawDate.toISOString(), v: Math.round(val * 100) / 100 });
+    }
+    return points;
+  }
+
 
   addToWatchlist(dto: CreateWatchlistItemDto) {
     return this.prisma.watchlistItem.upsert({
@@ -422,12 +741,12 @@ export class ProductsService {
     sources: Record<keyof MonteCarloPremises, PremiseSource>;
   }> {
     const usdPrices = cluster.snapshots
-      .filter((s) => s.currency === 'USD' || s.marketplace === 'alibaba' || s.marketplace === 'amazon')
+      .filter((s) => s.currency === 'USD' || s.marketplace === 'alibaba' || s.marketplace === 'aliexpress' || s.marketplace === 'amazon')
       .map((s) => this.toPositiveNumber(s.priceMin))
       .filter((v): v is number => v !== null);
 
     const brlPrices = cluster.snapshots
-      .filter((s) => s.currency === 'BRL' || s.marketplace.includes('_br') || s.marketplace === 'mercadolivre')
+      .filter((s) => s.currency === 'BRL' || s.marketplace.includes('_br') || s.marketplace === 'mercado_livre')
       .map((s) => this.toPositiveNumber(s.priceMin))
       .filter((v): v is number => v !== null);
 
@@ -614,7 +933,8 @@ export class ProductsService {
     const cluster = await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
       include: {
-        snapshots: { orderBy: { collectedAt: 'asc' } },
+        // Com INCLUDE_SYNTHETIC_DATA=false, a recomendação usa só snapshots reais.
+        snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' } },
         alerts: { orderBy: { createdAt: 'desc' }, take: 5 },
       },
     });
@@ -623,7 +943,8 @@ export class ProductsService {
       throw new NotFoundException(`Product cluster not found: ${productClusterId}`);
     }
 
-    // 1. Cache de 24h na tabela ai_recommendations
+    // 1. Cache de 24h na tabela ai_recommendations. Linhas inválidas
+    // (ação fora das 5 ou rationale cru com ```/{) são ignoradas e regeradas.
     const cached = await this.prisma.aiRecommendation.findFirst({
       where: {
         productClusterId,
@@ -632,40 +953,27 @@ export class ProductsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    if (cached) {
+    if (cached && isQuadrantAction(cached.action) && !isRawRationale(cached.rationale)) {
+      const reparsed = this.reparseGeneratedRecommendation(cached.generatedText);
       return {
         id: cached.id,
         product_cluster_id: productClusterId,
-        decision: cached.decision ?? cached.action ?? 'Monitorar',
-        action: cached.action ?? 'monitorar',
-        rationale: cached.rationale ?? cached.generatedText,
+        decision: cached.decision ?? cached.action,
+        action: cached.action,
+        rationale: cached.rationale as string,
         generated_text: cached.generatedText,
+        key_drivers: reparsed?.key_drivers ?? [],
+        recommended_next_step: reparsed?.recommended_next_step ?? null,
         model_version: cached.modelVersion,
         cached: true,
         created_at: cached.createdAt.toISOString(),
       };
     }
 
-    // 2. Calcular scores determinísticos reais
-    const trendBreakdown = this.trendEngine.calculateFromSnapshots(
-      cluster.snapshots.map((s) => ({
-        marketplace: s.marketplace,
-        category: cluster.category,
-        priceMin: s.priceMin ? Number(s.priceMin) : null,
-        rating: s.rating ? Number(s.rating) : null,
-        reviewCount: s.reviewCount,
-        salesSignalRaw: s.salesSignalRaw ? Number(s.salesSignalRaw) : null,
-        salesSignalType: s.salesSignalType as any,
-        collectedAt: s.collectedAt,
-      })),
-      cluster.category ?? undefined,
-    );
-
-    const opportunity = this.opportunityEngine.calculate({
-      trendScore: trendBreakdown.trendScore,
-      marginScore: (cluster.financialScore ?? 50) / 100,
-      westernSaturationScore: 0.2,
-    });
+    // 2. Move Score oficial como único contexto de score (F2.7): decisão,
+    // P(VPL>0), CVaR e premissas + origem. Sem score, só a confiança.
+    const scores = await loadLatestMoveScores(this.prisma, [productClusterId]);
+    const moveScore = scores.get(productClusterId) ?? EMPTY_MOVE_SCORE;
 
     const prices = cluster.snapshots
       .map((s) => Number(s.priceMin))
@@ -680,15 +988,21 @@ export class ProductsService {
         name: cluster.canonicalName,
         category: cluster.category,
         snapshots_count: cluster.snapshots.length,
-        risk_level: cluster.riskLevel ?? 'medio',
-        financial_score: cluster.financialScore ?? 50,
       },
-      deterministic_scores: {
-        opportunity_score: Math.round(opportunity.opportunityScore * 100),
-        trend_score: Math.round(trendBreakdown.trendScore * 100),
-        marketplace_growth: Math.round(trendBreakdown.marketplaceGrowthScore * 100),
-        review_velocity: Math.round(trendBreakdown.reviewVelocityScore * 100),
-        price_opportunity: Math.round(trendBreakdown.priceOpportunityScore * 100),
+      move_score: {
+        score: moveScore.moveScore,
+        action: moveScore.action,
+        score_band: moveScore.scoreBand,
+        data_confidence: moveScore.dataConfidence,
+        p_vpl_positivo: moveScore.pVplPositivo,
+        cvar5: moveScore.cvar5,
+        momentum: {
+          direction: moveScore.momentumDirection,
+          growth_pct: moveScore.momentumGrowthPct,
+          confidence: moveScore.momentumConfidence,
+        },
+        risk_explanation: moveScore.riskExplanation,
+        risk_drivers: moveScore.riskDrivers,
       },
       pricing: {
         avg_price_usd: avgPrice ? Math.round(avgPrice * 100) / 100 : null,
@@ -700,17 +1014,20 @@ export class ProductsService {
 
     const systemPrompt = `Você é o Move AI, especialista em inteligência de mercado fitness e tomada de decisão comercial de importação.
 Sua função é fornecer um parecer executivo rigoroso sobre a oportunidade comercial do produto analisado.
-PRINCÍPIO OBRIGATÓRIO: A IA explica e contextualiza, NÃO inventa métricas. Use estritamente os scores determinísticos fornecidos no contexto.
+PRINCÍPIO OBRIGATÓRIO: A IA explica e contextualiza, NÃO inventa métricas. As REGRAS classificam (ação por quadrante); use estritamente Move Score, ação, momentum, P(VPL>0), CVaR, causas do risco e premissas do contexto. Sem Move Score (data_confidence diferente de "suficiente") ou ação DADOS_INSUFICIENTES, recomende aguardar mais histórico em vez de chutar um número. Cite só produtos que existem nos dados.
 
 Responda APENAS um objeto JSON com o seguinte formato:
 {
-  "decision": "Lançar" | "Monitorar" | "Evitar" | "Negociar",
-  "action": "comprar" | "comprar_cautela" | "monitorar" | "negociar" | "bloquear",
-  "rationale": "Justificativa analítica concisa (2 a 4 frases) explicando a decisão com base nos scores de tendência, margem e risco.",
+  "action": "DECIDIR_AGORA" | "NEGOCIAR_CUSTO" | "TESTAR_DEMANDA" | "IGNORAR" | "DADOS_INSUFICIENTES",
+  "rationale": "Justificativa analítica concisa (2 a 4 frases) explicando a ação com base no Move Score, momentum, P(VPL>0), CVaR e causas do risco.",
   "key_drivers": ["principal fator positivo", "principal fator de atenção"],
   "recommended_next_step": "Ação operacional imediata sugerida para o time comercial."
 }`;
 
+    // A ação exibida é sempre a das regras (regras classificam, IA explica).
+    const rulesAction = isQuadrantAction(moveScore.action) ? moveScore.action : 'DADOS_INSUFICIENTES';
+
+    const callStarted = Date.now();
     const aiResponse = await this.openRouter.chatCompletion(
       [
         { role: 'system', content: systemPrompt },
@@ -725,43 +1042,47 @@ Responda APENAS um objeto JSON com o seguinte formato:
       ],
       {
         endpointName: 'ai_recommendation_card',
+        responseFormat: { type: 'json_object' },
         temperature: 0.2,
-        maxTokens: 1024,
+        maxTokens: 1500,
         metadata: { productClusterId },
       },
     );
 
-    let parsed: {
-      decision?: string;
-      action?: string;
-      rationale?: string;
-      key_drivers?: string[];
-      recommended_next_step?: string;
-    } = {};
-
-    try {
-      const text = aiResponse.content?.trim() ?? '{}';
-      const cleanJson = text.startsWith('```')
-        ? text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim()
-        : text;
-      parsed = JSON.parse(cleanJson);
-    } catch {
+    // Extração robusta: cercas em qualquer posição + recorte {…}. Se a IA
+    // divergir na ação, o campo dela é ignorado (vale a das regras).
+    let parsed = this.reparseGeneratedRecommendation(aiResponse.content ?? '');
+    let usedFallback = false;
+    if (!parsed) {
+      await this.logAiRecommendationRejection(
+        aiResponse.model,
+        callStarted,
+        aiResponse.content ?? '',
+        productClusterId,
+      );
       parsed = {
-        decision: opportunity.opportunityScore >= 0.6 ? 'Lançar' : 'Monitorar',
-        action: opportunity.opportunityScore >= 0.6 ? 'comprar' : 'monitorar',
-        rationale: aiResponse.content ?? 'Recomendação gerada com base nos sinais determinísticos.',
+        action: null,
+        rationale: fallbackRationale({
+          score: moveScore.moveScore,
+          scoreBand: moveScore.scoreBand,
+          action: rulesAction,
+          riskText: moveScore.riskExplanation,
+        }),
+        key_drivers: [],
+        recommended_next_step: null,
       };
+      usedFallback = true;
     }
 
     const saved = await this.prisma.aiRecommendation.create({
       data: {
         productClusterId,
-        decision: parsed.decision ?? 'Monitorar',
-        action: parsed.action ?? 'monitorar',
-        rationale: parsed.rationale ?? aiResponse.content ?? 'Análise concluída.',
+        decision: rulesAction,
+        action: rulesAction,
+        rationale: parsed.rationale as string,
         generatedText: aiResponse.content ?? '',
         modelVersion: aiResponse.model,
-        promptVersion: 'v1.0-fitness-grounded',
+        promptVersion: usedFallback ? 'v2.1-deterministic-fallback' : 'v2.1-rules-action',
         scoreSnapshotId: cluster.snapshots.at(-1)?.id ?? null,
       },
     });
@@ -779,6 +1100,41 @@ Responda APENAS um objeto JSON com o seguinte formato:
       cached: false,
       created_at: saved.createdAt.toISOString(),
     };
+  }
+
+  /** Re-parseia `generatedText` para devolver key_drivers/next_step no cache. */
+  private reparseGeneratedRecommendation(
+    generatedText: string | null | undefined,
+  ): ParsedRecommendation | null {
+    if (!generatedText) return null;
+    try {
+      return parseRecommendationPayload(extractJsonObject(generatedText));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Registra parse/validação rejeitada em ai_call_logs (best-effort). */
+  private async logAiRecommendationRejection(
+    model: string,
+    started: number,
+    content: string,
+    productClusterId: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.aiCallLog.create({
+        data: {
+          endpoint: 'ai_recommendation_card',
+          model,
+          latencyMs: Date.now() - started,
+          status: 'rejected_validation',
+          error: content.slice(0, 2000) || 'empty_response',
+          metadata: { productClusterId } as never,
+        },
+      });
+    } catch {
+      // Log é best-effort; nunca quebra o parecer.
+    }
   }
 
   private async callOpenRouterPremiseAnalyst(params: {
@@ -925,7 +1281,8 @@ Responda APENAS um objeto JSON com o seguinte formato:
       .map((row) => Number(row.rate))
       .filter((rate) => Number.isFinite(rate) && rate > 0);
     if (rates.length === 0) {
-      return { rate: 5.45, volatility: null, source: 'default' };
+      // Sem cotação: fallback único documentado (F1.7).
+      return { rate: DEFAULT_FX_USD_BRL, volatility: null, source: 'default' };
     }
 
     return {
@@ -992,8 +1349,9 @@ Responda APENAS um objeto JSON com o seguinte formato:
     metricType: 'volume' | 'price' | 'reviews' | 'general' = 'general',
   ) {
     return this.cached(`products:series:${productClusterId}:${window}:${metricType}`, 3600, async () => {
+      // Com INCLUDE_SYNTHETIC_DATA=false, as séries ignoram snapshots sintéticos.
       const allSnapshots = await this.prisma.productListingSnapshot.findMany({
-        where: { productClusterId },
+        where: { productClusterId, ...syntheticSnapshotWhere() },
         orderBy: { collectedAt: 'asc' },
         take: 5_000,
       });
@@ -1022,9 +1380,10 @@ Responda APENAS um objeto JSON com o seguinte formato:
       }
 
       const points: { t: string; v: number }[] = [];
-      // Taxa de câmbio dinâmica para a série de preço (fallback 5.5 se API indisponível)
+      // Taxa de câmbio da MESMA função do resto do backend (F1.7); sem
+      // cotação, o fallback único documentado.
       const exchange = metricType === 'price' ? await this.usdBrlExchangeContext() : null;
-      const exchangeRate = exchange?.rate ?? 5.5;
+      const exchangeRate = exchange?.rate ?? DEFAULT_FX_USD_BRL;
 
 
       for (const [, { snapshots, rawDate }] of [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b))) {
@@ -1042,7 +1401,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
             .map((s) => {
               const rawPrice = Number(s.priceMin);
               if (!Number.isFinite(rawPrice) || rawPrice <= 0) return null;
-              const isUsd = s.currency === 'USD' || s.marketplace === 'alibaba' || s.marketplace === '1688';
+              const isUsd = s.currency === 'USD' || s.marketplace === 'alibaba' || s.marketplace === 'aliexpress' || s.marketplace === '1688';
               return isUsd ? rawPrice * exchangeRate : rawPrice;
             })
             .filter((p): p is number => p !== null && p > 0);
@@ -1111,7 +1470,8 @@ Responda APENAS um objeto JSON com o seguinte formato:
     const cluster = await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
       include: {
-        snapshots: { orderBy: { collectedAt: 'asc' }, take: 1000 },
+        // Com INCLUDE_SYNTHETIC_DATA=false, o PDF usa só snapshots reais.
+        snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' }, take: 1000 },
       },
     });
 
@@ -1134,6 +1494,13 @@ Responda APENAS um objeto JSON com o seguinte formato:
               priceHistory.points.length,
           )
         : 0;
+    // Ausência de score/risco real vira "—"/"Não simulado" no PDF, nunca um
+    // número inventado (ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 4.1).
+    const riskLabel = cluster.riskLevel ?? '—';
+    const financialScoreLabel =
+      cluster.financialScore !== null && cluster.financialScore !== undefined
+        ? `${cluster.financialScore}/100`
+        : 'Não simulado';
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -1178,7 +1545,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
   <div class="title-section">
     <h1>${cluster.canonicalName}</h1>
     <span class="badge badge-cat">Categoria: ${cluster.category || 'Geral'}</span>
-    <span class="badge badge-growth">Crescimento: ${growth >= 0 ? '+' : ''}${growth}% (2 anos)</span>
+    <span class="badge badge-growth">Crescimento no período observado: ${growth >= 0 ? '+' : ''}${growth}%</span>
   </div>
 
   <div class="kpi-grid">
@@ -1192,11 +1559,11 @@ Responda APENAS um objeto JSON com o seguinte formato:
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Risco Financeiro</div>
-      <div class="kpi-val" style="text-transform: capitalize;">${cluster.riskLevel || 'Moderado'}</div>
+      <div class="kpi-val" style="text-transform: capitalize;">${riskLabel}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Score Financeiro</div>
-      <div class="kpi-val">${cluster.financialScore || 78}/100</div>
+      <div class="kpi-val">${financialScoreLabel}</div>
     </div>
   </div>
 
@@ -1208,7 +1575,6 @@ Responda APENAS um objeto JSON com o seguinte formato:
           <th>Data de Referência</th>
           <th>Volume Mensal (un)</th>
           <th>Preço Médio Registrado</th>
-          <th>Status de Demanda</th>
         </tr>
       </thead>
       <tbody>
@@ -1217,7 +1583,6 @@ Responda APENAS um objeto JSON com o seguinte formato:
             <td>${new Date(pt.t).toLocaleDateString('pt-BR')}</td>
             <td><strong>${new Intl.NumberFormat('pt-BR').format(pt.v)} un</strong></td>
             <td>R$ ${priceHistory.points[idx]?.v ? priceHistory.points[idx].v : avgPrice}</td>
-            <td><span style="color:#16a34a;">● Alta Tração</span></td>
           </tr>
         `).join('')}
       </tbody>
@@ -1239,11 +1604,11 @@ Responda APENAS um objeto JSON com o seguinte formato:
       <tbody>
         ${suppliers.slice(0, 5).map((sup) => `
           <tr>
-            <td><strong>${sup.name || 'Fabricante Homologado'}</strong></td>
-            <td>${sup.country || 'Internacional'} ${sup.flag || ''}</td>
-            <td>${sup.moq ?? 1} un</td>
+            <td><strong>${sup.name || 'Não identificado'}</strong></td>
+            <td>${sup.country || 'Não informado'} ${sup.flag || ''}</td>
+            <td>${sup.moq ?? '—'} un</td>
             <td>${sup.fob ? `USD ${sup.fob}` : 'Sob consulta'}</td>
-            <td>★ ${sup.score?.value ? (sup.score.value / 20).toFixed(1) : '4.8'}</td>
+            <td>${sup.score?.value ? `★ ${(sup.score.value / 20).toFixed(1)}` : '—'}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -1251,7 +1616,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
   </div>
 
   <div class="footer">
-    Move Intelligence Platform • Análise baseada em dados reais agregados de 6 marketplaces e registros aduaneiros.
+    Move Intelligence Platform • Dossiê gerado a partir dos dados coletados para este produto.
   </div>
 </body>
 </html>`;
@@ -1260,7 +1625,8 @@ Responda APENAS um objeto JSON com o seguinte formato:
   async getUnitEconomicsDefaults(productClusterId: string) {
     const cluster = await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
-      include: { snapshots: { orderBy: { collectedAt: 'desc' }, take: 50 } },
+      // Com INCLUDE_SYNTHETIC_DATA=false, os defaults usam só snapshots reais.
+      include: { snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'desc' }, take: 50 } },
     });
     if (!cluster) {
       throw new NotFoundException(`Produto não encontrado: ${productClusterId}`);
@@ -1279,12 +1645,16 @@ Responda APENAS um objeto JSON com o seguinte formato:
       .filter((v) => Number.isFinite(v) && v > 0);
     const latestVol = volumes.length > 0 ? Math.round(volumes[0]) : 200;
 
-    const fobUsd = Math.round((avgPriceBrl / 5.45) * 0.18 * 100) / 100 || 25.0;
+    // Câmbio da MESMA função do resto do backend (F1.7), não um fixo
+    // divergente. A fórmula do FOB (18% do preço) está mantida.
+    const exchange = await this.usdBrlExchangeContext();
+    const cambioUsd = exchange.rate;
+    const fobUsd = Math.round((avgPriceBrl / cambioUsd) * 0.18 * 100) / 100 || 25.0;
 
     return {
       precoVendaBrl: avgPriceBrl,
       fobUsd,
-      cambioUsd: 5.45,
+      cambioUsd,
       freteUnitarioUsd: 6.5,
       impostoImportacaoPct: 35.0,
       icmsPct: 18.0,
@@ -1293,6 +1663,14 @@ Responda APENAS um objeto JSON com o seguinte formato:
       custoFixoMensalBrl: 4500.0,
       elasticidadePreco: -1.6,
       volumeBaseMensal: latestVol,
+      // Origem explícita dos defaults (fórmulas mantidas): a calculadora exibe
+      // o que é observado e o que é estimativa/default.
+      premiseSources: {
+        precoVendaBrl: prices.length > 0 ? 'observado' : 'default',
+        fobUsd: 'estimativa_18pct_do_preco',
+        volumeBaseMensal: volumes.length > 0 ? 'observado' : 'default',
+        cambioUsd: exchange.source === 'exchange_rate' ? 'observado' : 'default',
+      },
     };
   }
 
@@ -1411,7 +1789,9 @@ Responda APENAS um objeto JSON com o seguinte formato:
     const cluster = await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
       include: {
+        // Com INCLUDE_SYNTHETIC_DATA=false, a matriz usa só snapshots reais.
         snapshots: {
+          where: syntheticSnapshotWhere(),
           orderBy: { collectedAt: 'desc' },
           take: 200,
         },
@@ -1424,7 +1804,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
     const bySeller = new Map<
       string,
       {
-        sellerName: string;
+        sellerName: string | null;
         marketplace: string;
         prices: number[];
         sales: number[];
@@ -1435,10 +1815,11 @@ Responda APENAS um objeto JSON com o seguinte formato:
     >();
 
     for (const s of cluster.snapshots) {
-      const name =
-        s.sellerName?.trim() ||
-        (s.marketplace.includes('mercadolivre') ? 'MercadoLíder Platinum Pro' : 'Amazon Store Oficial');
-      const key = `${s.marketplace}:${name}`;
+      // Nome real do vendedor quando existir; sem inventar "MercadoLíder
+      // Platinum Pro"/"Amazon Store Oficial". Snapshots sem vendedor
+      // identificado são agrupados por marketplace, mas o nome exibido fica null.
+      const name = s.sellerName?.trim() || null;
+      const key = `${s.marketplace}:${name ?? 'sem_vendedor_identificado'}`;
       const existing = bySeller.get(key) ?? {
         sellerName: name,
         marketplace: s.marketplace,
@@ -1455,69 +1836,49 @@ Responda APENAS um objeto JSON com o seguinte formato:
       bySeller.set(key, existing);
     }
 
-    const totalClusterSales =
-      [...bySeller.values()].reduce((sum, s) => sum + (s.sales[0] ?? 50), 0) || 1;
+    // Só entra no cálculo de market share quem realmente tem sinal de vendas;
+    // vendedor sem dado não pode ganhar uma fatia inventada (antes usava 50
+    // como default e distribuía o resto igualmente entre todos).
+    const sellersWithSales = [...bySeller.values()].filter((s) => s.sales.length > 0);
+    const totalClusterSales = sellersWithSales.reduce((sum, s) => sum + s.sales[0], 0);
 
     const competitors = [...bySeller.values()]
-      .map((s, index) => {
+      .map((s) => {
         const avgPrice =
           s.prices.length > 0
             ? Math.round(s.prices.reduce((a, b) => a + b, 0) / s.prices.length)
-            : 350;
-        const latestSales =
-          s.sales.length > 0
-            ? Math.round(s.sales[0])
-            : Math.round(totalClusterSales / (bySeller.size || 1));
-        const sharePct = Math.round((latestSales / totalClusterSales) * 1000) / 10;
+            : null;
+        const latestSales = s.sales.length > 0 ? Math.round(s.sales[0]) : null;
+        const sharePct =
+          latestSales !== null && totalClusterSales > 0
+            ? Math.round((latestSales / totalClusterSales) * 1000) / 10
+            : null;
         const rating =
           s.ratings.length > 0
-            ? (s.ratings.reduce((a, b) => a + b, 0) / s.ratings.length).toFixed(1)
-            : '4.8';
-        const reviews = s.reviewCounts.length > 0 ? Math.max(...s.reviewCounts) : 240;
-
-        const isMeli = s.marketplace.toLowerCase().includes('mercado');
-        const isAmazon = s.marketplace.toLowerCase().includes('amazon');
-
-        const reputation = isMeli
-          ? index === 0
-            ? 'MercadoLíder Platinum'
-            : index === 1
-              ? 'MercadoLíder Gold'
-              : 'Loja Oficial'
-          : isAmazon
-            ? index === 0
-              ? 'Amazon Choice'
-              : 'Top Rated Seller'
-            : 'Vendedor Verificado';
-
-        const fulfillment = isMeli
-          ? index < 3
-            ? 'Mercado Livre Full'
-            : 'Envio Flex'
-          : isAmazon
-            ? index < 3
-              ? 'Amazon FBA'
-              : 'FBA Onsite'
-            : 'Envio Próprio';
+            ? Math.round((s.ratings.reduce((a, b) => a + b, 0) / s.ratings.length) * 10) / 10
+            : null;
+        const reviews = s.reviewCounts.length > 0 ? Math.max(...s.reviewCounts) : null;
 
         return {
-          id: `${s.marketplace}_${index + 1}`,
+          id: `${s.marketplace}_${s.sellerName ?? 'sem_vendedor_identificado'}`,
           sellerName: s.sellerName,
           marketplace: s.marketplace,
-          reputation,
-          fulfillment,
+          // Reputação, fulfillment e "vencedor do buybox" não têm fonte real
+          // hoje (não vêm do scrape) — não inventar por posição na lista.
+          reputation: null,
+          fulfillment: null,
           avgPrice,
-          minPrice: s.prices.length > 0 ? Math.min(...s.prices) : avgPrice,
-          maxPrice: s.prices.length > 0 ? Math.max(...s.prices) : avgPrice,
+          minPrice: s.prices.length > 0 ? Math.min(...s.prices) : null,
+          maxPrice: s.prices.length > 0 ? Math.max(...s.prices) : null,
           monthlySalesEst: latestSales,
           marketSharePct: sharePct,
-          rating: Number(rating),
+          rating,
           reviewCount: reviews,
-          buyboxWinner: index === 0,
+          buyboxWinner: null,
           url: s.url,
         };
       })
-      .sort((a, b) => b.marketSharePct - a.marketSharePct)
+      .sort((a, b) => (b.marketSharePct ?? -1) - (a.marketSharePct ?? -1))
       .slice(0, 5);
 
     return {
@@ -1525,14 +1886,15 @@ Responda APENAS um objeto JSON com o seguinte formato:
       canonicalName: cluster.canonicalName,
       totalCompetitorsIdentified: bySeller.size,
       topCompetitors: competitors,
-      hhiIndex: competitors.reduce((acc, c) => acc + Math.pow(c.marketSharePct, 2), 0),
+      hhiIndex: competitors.reduce((acc, c) => acc + Math.pow(c.marketSharePct ?? 0, 2), 0),
     };
   }
 
   async getSeasonalityForecast(productClusterId: string) {
     const cluster = await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
-      include: { snapshots: { orderBy: { collectedAt: 'asc' }, take: 1000 } },
+      // Com INCLUDE_SYNTHETIC_DATA=false, a sazonalidade usa só snapshots reais.
+      include: { snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' }, take: 1000 } },
     });
     if (!cluster) {
       throw new NotFoundException(`Produto não encontrado: ${productClusterId}`);
@@ -1591,6 +1953,8 @@ Responda APENAS um objeto JSON com o seguinte formato:
       productClusterId,
       canonicalName: cluster.canonicalName,
       currentMonthlyVolume: currentVol,
+      // Fatores sazonais fixos e genéricos — não derivam do histórico do produto.
+      method: 'fatores_genericos_fixos',
       forecastNext6Months,
       optimalSourcingWindow: {
         targetPeakMonth: peak.monthName,
@@ -1624,9 +1988,15 @@ Responda APENAS um objeto JSON com o seguinte formato:
     const clusters = await this.prisma.productCluster.findMany({
       where: { id: { in: cleanIds } },
       include: {
-        snapshots: { orderBy: { collectedAt: 'asc' }, take: 1000 },
+        // Com INCLUDE_SYNTHETIC_DATA=false, o comparador usa só snapshots reais.
+        snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' }, take: 1000 },
       },
     });
+    // Move Score oficial (F2.5): uma query para os clusters comparados.
+    const scores = await loadLatestMoveScores(
+      this.prisma,
+      clusters.map((c) => c.id),
+    );
 
     return Promise.all(
       clusters.map(async (c) => {
@@ -1634,25 +2004,70 @@ Responda APENAS um objeto JSON com o seguinte formato:
         const price = await this.getPriceHistory(c.id, 'all');
         const econ = await this.simulateUnitEconomics(c.id);
         const suppliers = await this.getSuppliers(c.id);
+        const moveScore = scores.get(c.id) ?? EMPTY_MOVE_SCORE;
 
         const firstVol = vol.points[0]?.v ?? 0;
         const lastVol = vol.points.at(-1)?.v ?? 0;
         const growthPct =
           firstVol > 0 ? Math.round(((lastVol - firstVol) / firstVol) * 100) : 0;
 
+        // C1: review_summary por faixa (B5); distribuição via última observação quando houver.
+        let reviewSummary: { by_band: Record<string, unknown>; distribution: unknown } | null = null;
+        try {
+          const rows = await this.prisma.reviewSummary.findMany({
+            where: { productClusterId: c.id },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          });
+          const by_band: Record<string, unknown> = {};
+          for (const r of rows) {
+            if (!by_band[r.band]) {
+              by_band[r.band] = { summary: r.summary, top_reasons: r.topReasons, sample_size: r.sampleSize };
+            }
+          }
+          reviewSummary = { by_band, distribution: null };
+        } catch {
+          reviewSummary = null;
+        }
+
         return {
           id: c.id,
           canonicalName: c.canonicalName,
           category: c.category,
-          riskLevel: c.riskLevel || 'Moderado',
-          financialScore: c.financialScore || 75,
+          riskLevel: c.riskLevel ?? null,
+          // Move Score oficial (F2.7: único score do comparador).
+          moveScore: moveScore.moveScore,
+          decision: moveScore.decision,
+          dataConfidence: moveScore.dataConfidence,
+          pVplPositivo: moveScore.pVplPositivo,
+          cvar5: moveScore.cvar5,
+          // C1: contrato estendido.
+          action: moveScore.action ?? null,
+          score_band: moveScore.scoreBand ?? null,
+          momentum: {
+            direction: moveScore.momentumDirection ?? null,
+            growth_pct: moveScore.momentumGrowthPct ?? null,
+            confidence: moveScore.momentumConfidence ?? null,
+          },
+          risk_explanation:
+            moveScore.riskExplanation != null || moveScore.riskDrivers != null
+              ? { text: moveScore.riskExplanation ?? null, drivers: moveScore.riskDrivers ?? [] }
+              : null,
+          detected_on: [...new Set(c.snapshots.map((s) => s.marketplace))],
+          top_supplier: suppliers[0]
+            ? {
+                name: (suppliers[0] as Record<string, unknown>).name ?? null,
+                source: (suppliers[0] as Record<string, unknown>).marketplace ?? null,
+              }
+            : null,
+          review_summary: reviewSummary,
           growthPct,
           currentVolume: lastVol,
           avgPrice: econ.inputs.precoVendaBrl,
           margemPct: econ.metrics.margemContribuicaoPct,
           lucroMensalEst: econ.metrics.lucroLiquidoMensal,
           roiPct: econ.metrics.roiPct,
-          topSupplier: suppliers[0]?.name || 'Homologado TradeAtlas',
+          topSupplier: suppliers[0]?.name || null,
           volumeSeries: vol.points.slice(-24),
           priceSeries: price.points.slice(-24),
         };

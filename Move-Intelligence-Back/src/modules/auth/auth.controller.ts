@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -12,6 +12,11 @@ export class AuthController {
   @Public()
   @Post('register')
   register(@Body() dto: RegisterDto) {
+    // AUTH_ALLOW_REGISTRATION=false fecha o registro público (default true,
+    // sem mudança de comportamento). Ver .env.example e docs/production.md.
+    if (process.env.AUTH_ALLOW_REGISTRATION === 'false') {
+      throw new ForbiddenException('O registro está desativado neste ambiente.');
+    }
     return this.auth.register(dto);
   }
 

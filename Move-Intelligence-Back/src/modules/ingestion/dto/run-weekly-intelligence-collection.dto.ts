@@ -34,7 +34,7 @@ export const INTELLIGENCE_CLUSTERS = [
 export class RunWeeklyIntelligenceCollectionDto {
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(8)
+  @ArrayMaxSize(9)
   @IsIn(MARKETPLACE_SOURCES, { each: true })
   sources: string[] = [...MARKETPLACE_SOURCES];
 

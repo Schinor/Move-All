@@ -18,6 +18,7 @@ from typing import Iterator, Optional
 import yaml
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -65,6 +66,10 @@ class ProductSnapshotModel(ETLBase):
     supplier = Column(String)
     data_quality = Column(String, nullable=False)
     source_specific = Column(JSON_TYPE, nullable=False, default=dict)
+    # Marca registros gerados artificialmente (ex.: run_historical_collection.py)
+    # para que nunca sejam confundidos com coleta real no ranking, Monte Carlo,
+    # IA ou alertas. Espelha a coluna Prisma `is_synthetic` de `products`.
+    is_synthetic = Column(Boolean, nullable=False, default=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -87,6 +92,11 @@ class DemandSignalModel(ETLBase):
     trend_index = Column(Numeric, nullable=False)
     raw_value = Column(Numeric)
     captured_at = Column(Date, nullable=False)
+    # Contexto da observação (F1.6): identificam a requisição que torna
+    # execuções comparáveis. Espelham as colunas Prisma de `demand_signals`.
+    request_id = Column(String(36))
+    timeframe = Column(String(32))
+    anchor_keyword = Column(String(160))
 
     __table_args__ = (
         UniqueConstraint(
@@ -127,6 +137,148 @@ class ProductDemandLinkModel(ETLBase):
             "demand_signal_id",
             "keyword",
             name="uq_product_demand_link",
+        ),
+    )
+
+
+class TrackedListingModel(ETLBase):
+    """Anúncio acompanhado pelo loop de acompanhamento (Fase 1, F1.1).
+
+    Espelha o modelo Prisma ``TrackedListing`` (uma linha por
+    ``(source, native_id)``). A série histórica mora em
+    :class:`ListingObservationModel`.
+    """
+
+    __tablename__ = "tracked_listings"
+
+    id = Column(IDENTIFIER_TYPE, primary_key=True)
+    source = Column(String, nullable=False)
+    native_id = Column(String, nullable=False)
+    canonical_url = Column(String, nullable=False)
+    product_id = Column(IDENTIFIER_TYPE)
+    status = Column(String, nullable=False, default="CANDIDATE")
+    tier = Column(Integer, nullable=False, default=3)
+    discovered_by_term = Column(String)
+    first_seen_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    last_seen_at = Column(DateTime)
+    last_success_at = Column(DateTime)
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    # Contagem de reviews na última amostra de textos (A5).
+    reviews_count_at_sample = Column(Integer)
+    # Fornecedor de alto volume (A6, FK para suppliers).
+    supplier_id = Column(IDENTIFIER_TYPE)
+    next_due_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "native_id",
+            name="uq_tracked_listings_source_native",
+        ),
+    )
+
+
+class ListingObservationModel(ETLBase):
+    """Observação de anúncio acompanhado. APPEND-ONLY: nunca UPDATE."""
+
+    __tablename__ = "listing_observations"
+
+    id = Column(IDENTIFIER_TYPE, primary_key=True)
+    listing_id = Column(
+        IDENTIFIER_TYPE,
+        ForeignKey("tracked_listings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    observed_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    price = Column(Numeric)
+    currency = Column(String(12))
+    rating = Column(Numeric)
+    reviews_count = Column(Integer)
+    sold_count_raw = Column(String)
+    sold_count_lower = Column(Integer)
+    best_seller_rank = Column(Integer)
+    in_stock = Column(Boolean)
+    scrape_status = Column(String, nullable=False)
+    parser_version = Column(String, nullable=False)
+    content_hash = Column(String)
+    is_synthetic = Column(Boolean, nullable=False, default=False)
+    # Distribuição de estrelas 1–5 {"1": n1, ..., "5": n5} (A5).
+    rating_distribution = Column(JSON_TYPE)
+
+
+class ReviewSampleModel(ETLBase):
+    """Amostra de textos de avaliação (A5). Sem nome de quem avaliou."""
+
+    __tablename__ = "review_samples"
+
+    id = Column(IDENTIFIER_TYPE, primary_key=True)
+    listing_id = Column(
+        IDENTIFIER_TYPE,
+        ForeignKey("tracked_listings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    collected_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    stars = Column(Integer)
+    text = Column(String, nullable=False)
+    source_review_id = Column(String)
+    language = Column(String(16))
+
+
+class SupplierModel(ETLBase):
+    """Fornecedor B2B de alto volume (A6). Espelha o modelo Prisma `Supplier`."""
+
+    __tablename__ = "suppliers"
+
+    id = Column(IDENTIFIER_TYPE, primary_key=True)
+    source = Column(String, nullable=False)
+    native_supplier_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    years_on_platform = Column(Integer)
+    verified = Column(Boolean, nullable=False, default=False)
+    country = Column(String)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source",
+            "native_supplier_id",
+            name="uq_suppliers_source_native",
+        ),
+    )
+
+
+class ExchangeRateModel(ETLBase):
+    """Cotação diária (F1.7, job PTAX). Espelha a tabela Prisma `exchange_rates`."""
+
+    __tablename__ = "exchange_rates"
+
+    id = Column(IDENTIFIER_TYPE, primary_key=True)
+    base_currency = Column(String(8), nullable=False)
+    quote_currency = Column(String(8), nullable=False)
+    rate = Column(Numeric, nullable=False)
+    captured_at = Column(Date, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "base_currency",
+            "quote_currency",
+            "captured_at",
+            name="uq_exchange_rates_pair_day",
         ),
     )
 

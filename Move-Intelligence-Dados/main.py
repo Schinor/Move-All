@@ -16,15 +16,12 @@ logging.basicConfig(
 )
 
 from app.pipelines import (
-    run_api_collection,
-    run_scraping_collection,
-    run_etl,
-    run_metrics,
-    run_scores,
     run_intelligence_etl,
     run_live_intelligence,
     run_weekly_intelligence,
     run_historical_collection,
+    run_track_listings,
+    run_exchange_rates,
 )
 
 def main():
@@ -35,16 +32,12 @@ def main():
     parser.add_argument(
         "--pipeline", "-p",
         choices=[
-            "api",
-            "scraping",
-            "etl",
-            "metrics",
-            "scores",
-            "all",
             "intelligence-etl",
             "live-intelligence",
             "weekly-intelligence",
             "historical-collection",
+            "track-listings",
+            "exchange-rates",
         ],
         required=True,
         help="A pipeline de dados que deseja executar."
@@ -128,37 +121,32 @@ def main():
         type=int,
         help="Limita termos da coleta semanal para smoke test ou retomada controlada.",
     )
-    
+    parser.add_argument(
+        "--max-calls",
+        type=int,
+        help=(
+            "Teto de chamadas pagas por execução (DISCOVERY_MAX_CALLS na "
+            "descoberta, TRACK_LISTINGS_MAX_CALLS no acompanhamento)."
+        ),
+    )
+    parser.add_argument(
+        "--allow-synthetic",
+        action="store_true",
+        help=(
+            "Confirmação explícita e obrigatória para 'historical-collection': "
+            "essa pipeline GERA dados sintéticos de demonstração (não é coleta "
+            "real) e marca tudo com is_synthetic=true. Sem esta flag, a "
+            "pipeline aborta."
+        ),
+    )
+
     args = parser.parse_args()
     pipeline = args.pipeline
     
     logging.info(f"Executando o comando CLI com a pipeline selecionada: {pipeline}")
     
     try:
-        if pipeline == "api":
-            run_api_collection.run()
-        elif pipeline == "scraping":
-            run_scraping_collection.run()
-        elif pipeline == "etl":
-            run_etl.run()
-        elif pipeline == "metrics":
-            run_metrics.run()
-        elif pipeline == "scores":
-            run_scores.run()
-        elif pipeline == "all":
-            logging.info("Iniciando execução completa de ponta a ponta...")
-            logging.info("Passo 1: Coleta via APIs...")
-            run_api_collection.run()
-            logging.info("Passo 2: Coleta via Scrapers...")
-            run_scraping_collection.run()
-            logging.info("Passo 3: Transformação e normalização ETL...")
-            run_etl.run()
-            logging.info("Passo 4: Consolidação de Métricas...")
-            run_metrics.run()
-            logging.info("Passo 5: Análise de Pontuação e Monte Carlo...")
-            run_scores.run()
-            logging.info("Orquestração de todas as pipelines concluída com sucesso.")
-        elif pipeline == "intelligence-etl":
+        if pipeline == "intelligence-etl":
             run_intelligence_etl.run(
                 input_path=args.input_path or run_intelligence_etl.DEFAULT_PRODUCTS_INPUT,
                 demand_input_path=args.demand_input_path,
@@ -179,6 +167,7 @@ def main():
                 keyword_map_path=args.keyword_map_path,
                 dry_run=args.dry_run,
                 window_days=args.window_days,
+                max_calls=args.max_calls,
             )
             print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False))
         elif pipeline == "weekly-intelligence":
@@ -193,13 +182,34 @@ def main():
                 keyword_depth=args.keyword_depth,
                 window_days=args.window_days,
                 max_terms=args.max_terms,
+                max_calls=args.max_calls,
                 dry_run=args.dry_run,
             )
             print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False))
         elif pipeline == "historical-collection":
+            if not args.allow_synthetic:
+                parser.error(
+                    "historical-collection GERA DADOS SINTÉTICOS (não é coleta real) "
+                    "e não deve rodar sem confirmação explícita. Use --allow-synthetic "
+                    "para confirmar que você quer popular o banco com o catálogo de "
+                    "demonstração (is_synthetic=true)."
+                )
             result = run_historical_collection.run(
                 period_years=args.period_years,
                 weeks=args.period_weeks,
+                database_url=args.database_url,
+                dry_run=args.dry_run,
+            )
+            print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False))
+        elif pipeline == "track-listings":
+            result = run_track_listings.run(
+                database_url=args.database_url,
+                max_calls=args.max_calls,
+                dry_run=args.dry_run,
+            )
+            print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False))
+        elif pipeline == "exchange-rates":
+            result = run_exchange_rates.run(
                 database_url=args.database_url,
                 dry_run=args.dry_run,
             )

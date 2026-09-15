@@ -9,27 +9,29 @@ from app.etl.normalize_text import clean_text
 from app.etl.normalize_price import parse_price
 from app.etl.normalize_currency import convert_to_brl
 from app.etl.entity_resolution import calculate_jaccard_similarity, resolve_product
-from app.scoring.trend_score import calculate_trend_score
-from app.scoring.financial_score import calculate_financial_metrics
-from app.scoring.recommendation import generate_recommendation
-from app.scoring.monte_carlo import run_profitability_simulation
+
+# tests/test_marketplace_ids.py segue o padrão pytest (funções soltas, sem
+# unittest.TestCase) usado em tests/test_fitness_scope.py. Este runner não faz
+# descoberta automática de arquivos: só executa o que está definido/importado
+# neste módulo. Por isso os testes de identidade de anúncio (Shopee/Mercado
+# Livre) são importados e chamados explicitamente abaixo, dentro de
+# TestMarketplaceIds, para garantir que rodem via `python3 tests/run_tests.py`.
+from test_marketplace_ids import (
+    test_mercado_livre_catalog_url_matches_listing_id_format,
+    test_mercado_livre_extracts_id_with_querystring,
+    test_mercado_livre_is_stable_when_seller_edits_the_title,
+    test_mercado_livre_normalizes_listing_url_with_title_slug,
+    test_shopee_alternate_product_url_format,
+    test_shopee_distinguishes_products_from_the_same_shop,
+    test_shopee_extracts_item_id_not_shop_id,
+    test_shopee_extracts_item_id_with_querystring,
+)
 
 class TestETLAndScoring(unittest.TestCase):
-    
-    def test_monte_carlo_simulation(self):
-        sim = run_profitability_simulation(
-            unit_cost=100.0,
-            mean_sale_price=150.0,
-            price_std_dev=10.0,
-            mean_demand=50.0,
-            demand_std_dev=5.0,
-            simulations_count=100
-        )
-        self.assertIn("mean_profit", sim)
-        self.assertIn("loss_probability", sim)
-        self.assertGreater(sim["mean_profit"], 0.0)
+    # Nota F2.7: os testes do scoring legado (trend/financial/recommendation/
+    # monte_carlo em app/scoring) foram removidos junto com o código — o score
+    # oficial agora é o Move Score (lote Monte Carlo + ProductScore).
 
-    
     def test_clean_text(self):
         self.assertEqual(clean_text("   <b>Haltere</b> &amp; Barra   "), "haltere & barra")
         self.assertEqual(clean_text("<p>Esteira Ergométrica</p>", lowercase=False), "Esteira Ergométrica")
@@ -65,29 +67,24 @@ class TestETLAndScoring(unittest.TestCase):
         
         resolved_none = resolve_product("Bicicleta Spinning Speedo", existing, threshold=0.4)
         self.assertIsNone(resolved_none)
-        
-    def test_trend_score(self):
-        # Tendência de alta
-        up_trend = [{"value": 20 + i*5} for i in range(10)]
-        score_up = calculate_trend_score(up_trend)
-        self.assertGreater(score_up, 50.0)
-        
-        # Tendência de queda
-        down_trend = [{"value": 80 - i*6} for i in range(10)]
-        score_down = calculate_trend_score(down_trend)
-        self.assertLess(score_down, 50.0)
-        
-    def test_financial_score(self):
-        metrics = calculate_financial_metrics(100.0, 70.0) # Margem = 30%, ROI = 42.8%
-        self.assertGreater(metrics["financial_score"], 60.0)
-        self.assertAlmostEqual(metrics["gross_margin"], 30.0)
-        
-    def test_recommendation(self):
-        rec = generate_recommendation(80.0, 75.0, 5.0)
-        self.assertEqual(rec["decision"], "Comprar")
-        
-        rec_discard = generate_recommendation(20.0, 30.0, 45.0)
-        self.assertEqual(rec_discard["decision"], "Descartar")
+
+
+class TestMarketplaceIds(unittest.TestCase):
+    """Regressão do ID instável de anúncio (Shopee/Mercado Livre) -- ver
+    RELATORIO_ANALISE_DADOS_E_SCORES.md, seção 2.1 A3."""
+
+    def test_shopee_id_extraction(self):
+        test_shopee_extracts_item_id_not_shop_id()
+        test_shopee_distinguishes_products_from_the_same_shop()
+        test_shopee_extracts_item_id_with_querystring()
+        test_shopee_alternate_product_url_format()
+
+    def test_mercado_livre_id_extraction(self):
+        test_mercado_livre_normalizes_listing_url_with_title_slug()
+        test_mercado_livre_is_stable_when_seller_edits_the_title()
+        test_mercado_livre_catalog_url_matches_listing_id_format()
+        test_mercado_livre_extracts_id_with_querystring()
+
 
 if __name__ == '__main__':
     unittest.main()

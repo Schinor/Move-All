@@ -133,17 +133,16 @@ export class ProductMatchingService {
       }
     }
 
-    // Check if an existing productCluster exists by canonical name or category
+    // Só reaproveita um cluster existente quando o nome canônico bater exatamente.
+    // O fallback antigo por `category: product.cluster` juntava produtos diferentes
+    // no mesmo cluster (categoria virava agrupamento) e ignorava os vetos de
+    // kg/marca/preço já aplicados acima — um candidato vetado nunca deve resultar
+    // em anexação. Ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 2.1 A4.
     const existingCluster = await this.prisma.productCluster.findFirst({
-      where: {
-        OR: [
-          { canonicalName: canonicalTitle },
-          ...(product.cluster ? [{ category: product.cluster }] : []),
-        ],
-      },
+      where: { canonicalName: canonicalTitle },
     });
     if (existingCluster) {
-      await this.attach(existingCluster.id, product.source, product.recordId, 1, 'category_match');
+      await this.attach(existingCluster.id, product.source, product.recordId, 1, 'canonical_name_match');
       return existingCluster.id;
     }
 

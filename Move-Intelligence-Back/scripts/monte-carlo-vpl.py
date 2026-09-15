@@ -14,11 +14,17 @@ Retorna JSON no stdout. Sem input interativo e sem gráficos.
 """
 
 from dataclasses import dataclass, replace
-from typing import Dict, List, Tuple
+from typing import Dict, List, Mapping, Tuple
+import hashlib
 import json
+import math
 import sys
 
 import numpy as np
+
+
+DATA_VERSION = "premises@1"
+COST_CURRENCIES = ("USD", "CNY")
 
 
 @dataclass
@@ -37,6 +43,10 @@ class Premissas:
     imposto_importacao: float = 0.35
     cambio_base: float = 5.0
     marketing_inicial: float = 5000.0
+    # Moeda do custo (F2.3): 'USD' usa custo_usd direto; 'CNY' converte por
+    # cambio_cny_usd. Default preserva o comportamento anterior.
+    moeda_custo: str = "USD"
+    cambio_cny_usd: float = 1.0
 
     comissao_marketplace: float = 0.16
     imposto_venda: float = 0.08
@@ -52,6 +62,10 @@ class Premissas:
     vol_demanda: float = 0.15
     vol_lead: float = 0.20
     corr_cambio_lead: float = 0.35
+    # Crescimento da demanda (F2.3): demanda do mês m = dem × exp((g + σg·z)·m)
+    # antes da curva de rampa. Zero por padrão (resultado idêntico ao anterior).
+    crescimento_demanda_mensal: float = 0.0
+    vol_crescimento: float = 0.0
 
     def __post_init__(self):
         h = int(max(1, self.horizonte_meses))
@@ -67,10 +81,12 @@ class Premissas:
 
 
 class ResultadoSimulacao:
-    def __init__(self, vpl: np.ndarray, il: np.ndarray, roi: np.ndarray):
+    def __init__(self, vpl: np.ndarray, il: np.ndarray, roi: np.ndarray, choques=None):
         self.vpl = vpl
         self.il = il
         self.roi = roi
+        # Choques amostrados por fator (B4): {cambio, lead_time, preco, demanda, crescimento}
+        self.choques = choques or {}
 
     def metricas(self) -> Dict[str, float]:
         v = np.sort(self.vpl)
@@ -106,9 +122,12 @@ class SimuladorVPL:
         l = np.linalg.cholesky(corr)
         z = rng.standard_normal((2, n))
         z_corr = l @ z
+        # z_crescimento SEMPRE por último: com crescimento zerado, os sorteios
+        # anteriores (e o resultado) são idênticos aos da versão anterior.
         return (
             z_corr[0],
             z_corr[1],
+            rng.standard_normal(n),
             rng.standard_normal(n),
             rng.standard_normal(n),
         )
@@ -134,19 +153,33 @@ class SimuladorVPL:
     def simular(self, n_cenarios: int = 1000000, semente: int | None = None) -> ResultadoSimulacao:
         p = self.p
         rng = np.random.default_rng(semente)
-        z_cambio, z_lead, z_preco, z_demanda = self._amostrar_choques(n_cenarios, rng)
+        z_cambio, z_lead, z_preco, z_demanda, z_crescimento = self._amostrar_choques(n_cenarios, rng)
 
         cambio = np.maximum(p.cambio_base * (1 + p.vol_cambio * z_cambio), 0.1)
         preco = np.maximum(p.preco_venda * (1 + p.vol_preco * z_preco), 1.0)
         lead = np.maximum(p.lead_time_dias * (1 + p.vol_lead * z_lead), 1.0)
 
         dem_esperada = p.demanda_referencia * (p.preco_referencia / preco) ** p.elasticidade
-        demanda = np.maximum(dem_esperada * (1 + p.vol_demanda * z_demanda), 0.0)
+        # Crescimento mensal antes da rampa: mês m pesa dem × exp((g + σg·z)·m).
+        # Atalho exato com g = σg = 0: resultado bit-idêntico à versão anterior.
+        if p.crescimento_demanda_mensal == 0 and p.vol_crescimento == 0:
+            dem_crescimento = dem_esperada
+        else:
+            meses = np.arange(1, p.horizonte_meses + 1)
+            rampa = np.array(p.curva_rampa)
+            participacao = rampa / (rampa.sum() or 1.0)
+            fator_mes = np.exp(
+                (p.crescimento_demanda_mensal + p.vol_crescimento * z_crescimento)[:, None]
+                * meses[None, :]
+            )
+            dem_crescimento = dem_esperada * (fator_mes * participacao[None, :]).sum(axis=1)
+        demanda = np.maximum(dem_crescimento * (1 + p.vol_demanda * z_demanda), 0.0)
 
         dem_planejada = p.demanda_referencia * (p.preco_referencia / p.preco_venda) ** p.elasticidade
         qty = np.round(dem_planejada * (1 + p.folga_estoque))
 
-        custo_unit = p.custo_usd * cambio
+        custo_usd_efetivo = p.custo_usd * (p.cambio_cny_usd if p.moeda_custo == "CNY" else 1.0)
+        custo_unit = custo_usd_efetivo * cambio
         landed = custo_unit * (1 + p.imposto_importacao) + p.frete_usd_unidade * cambio
         investimento_inicial = qty * landed + p.marketing_inicial
 
@@ -163,7 +196,14 @@ class SimuladorVPL:
         vpl = -investimento_inicial + pv_inflows
         il = pv_inflows / investimento_inicial
         roi = vpl / investimento_inicial
-        return ResultadoSimulacao(vpl, il, roi)
+        choques = {
+            "cambio": z_cambio,
+            "lead_time": z_lead,
+            "preco": z_preco,
+            "demanda": z_demanda,
+            "crescimento": z_crescimento,
+        }
+        return ResultadoSimulacao(vpl, il, roi, choques)
 
     def preco_otimo(self, faixa, passo: int, n_cenarios: int, semente: int):
         curva: List[Tuple[float, float]] = []
@@ -180,41 +220,143 @@ class SimuladorVPL:
         return melhor, curva
 
 
-def risco(p_vpl_positivo: float) -> str:
-    if p_vpl_positivo > 0.85:
-        return "baixo"
-    if p_vpl_positivo > 0.70:
-        return "medio"
-    return "alto"
+NUMERIC_PREMISES = (
+    "preco_venda", "tma_mensal", "folga_estoque", "preco_referencia",
+    "demanda_referencia", "elasticidade", "custo_usd", "frete_usd_unidade",
+    "imposto_importacao", "cambio_base", "marketing_inicial",
+    "comissao_marketplace", "imposto_venda", "frete_cliente",
+    "custo_fixo_mensal", "lead_time_dias", "fracao_salvage", "vol_cambio",
+    "vol_preco", "vol_demanda", "vol_lead", "corr_cambio_lead",
+    "cambio_cny_usd", "crescimento_demanda_mensal", "vol_crescimento",
+)
 
 
-def decisao(p_vpl_positivo: float) -> str:
-    if p_vpl_positivo > 0.85:
-        return "AVANCAR"
-    if p_vpl_positivo > 0.70:
-        return "AVANCAR COM RESSALVAS"
-    return "REPROVAR"
+def validar_premissas(premissas: Premissas) -> None:
+    """Validação de entradas com erro claro (sem NaN/negativos inválidos)."""
+    for campo in NUMERIC_PREMISES:
+        valor = getattr(premissas, campo)
+        if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+            raise ValueError(f"Premissa {campo!r} precisa ser numérica (recebido {valor!r})")
+        if not math.isfinite(valor):
+            raise ValueError(f"Premissa {campo!r} inválida (NaN ou infinita)")
+    for campo in (
+        "preco_venda", "preco_referencia", "demanda_referencia", "custo_usd",
+        "cambio_base", "cambio_cny_usd", "vol_crescimento",
+    ):
+        if getattr(premissas, campo) < 0:
+            raise ValueError(f"Premissa {campo!r} não pode ser negativa")
+    if premissas.moeda_custo not in COST_CURRENCIES:
+        raise ValueError(f"moeda_custo precisa ser uma de {COST_CURRENCIES}")
+    if premissas.horizonte_meses < 1:
+        raise ValueError("horizonte_meses precisa ser >= 1")
+
+
+def premises_dict(premissas: Premissas) -> Dict[str, object]:
+    """Premissas efetivas como dict JSON-estável (listas, sem tuplas)."""
+    data = dict(premissas.__dict__)
+    data["curva_rampa"] = list(premissas.curva_rampa)
+    return data
+
+
+def premises_hash(payload: Mapping[str, object] | Dict[str, object]) -> str:
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+    ).hexdigest()
+
+
+def _rank(a: np.ndarray) -> np.ndarray:
+    order = np.argsort(a, kind="mergesort")
+    ranks = np.empty_like(order, dtype=float)
+    ranks[order] = np.arange(len(a), dtype=float)
+    # Média de empates: implementa rank médio sem scipy.
+    _, inv, counts = np.unique(a, return_inverse=True, return_counts=True)
+    sums = np.bincount(inv, weights=ranks)
+    avg = sums / counts
+    return avg[inv]
+
+
+def _spearman(x: np.ndarray, y: np.ndarray) -> float:
+    if len(x) < 3 or len(y) < 3 or len(x) != len(y):
+        return 0.0
+    rx = _rank(x.astype(float))
+    ry = _rank(y.astype(float))
+    rx = rx - rx.mean()
+    ry = ry - ry.mean()
+    denom = float(np.sqrt((rx * rx).sum() * (ry * ry).sum()))
+    if not (denom > 0) or not math.isfinite(denom):
+        return 0.0
+    corr = float((rx * ry).sum() / denom)
+    return corr if math.isfinite(corr) else 0.0
+
+
+def risk_drivers(vpl: np.ndarray, choques: Dict[str, np.ndarray]) -> List[Dict[str, object]]:
+    """B4: contribuição de cada choque para a variância do VPL.
+
+    Correlação de Spearman ao quadrado, normalizada para somar 100%.
+    Campos adicionais — com a mesma seed, as métricas não mudam.
+    """
+    scores: Dict[str, float] = {}
+    for factor in ("cambio", "lead_time", "preco", "demanda", "crescimento"):
+        z = choques.get(factor)
+        if z is None:
+            scores[factor] = 0.0
+            continue
+        try:
+            corr = _spearman(np.asarray(z).ravel(), np.asarray(vpl).ravel())
+            scores[factor] = corr * corr
+        except Exception:
+            scores[factor] = 0.0
+    total = sum(scores.values())
+    if not (total > 0):
+        return [{"factor": k, "share": 0.0} for k in ("cambio", "lead_time", "preco", "demanda", "crescimento")]
+    return [
+        {"factor": k, "share": round(scores[k] / total * 100, 1)}
+        for k in ("cambio", "lead_time", "preco", "demanda", "crescimento")
+    ]
 
 
 def main():
-    payload = json.load(sys.stdin)
-    premissas = Premissas(**payload.get("premises", {}))
-    scenario_count = int(payload.get("scenario_count") or 1000000)
-    seed = payload.get("seed", 7)
-    price_scan = bool(payload.get("price_scan", True))
-    price_scan_scenarios = int(payload.get("price_scan_scenarios") or 4000)
+    try:
+        payload = json.load(sys.stdin)
+        premissas = Premissas(**payload.get("premises", {}))
+        validar_premissas(premissas)
+        scenario_count = int(payload.get("scenario_count") or 1000000)
+        if scenario_count < 100:
+            raise ValueError("scenario_count precisa ser >= 100")
+        seed = payload.get("seed", 7)
+        price_scan = bool(payload.get("price_scan", True))
+        price_scan_scenarios = int(payload.get("price_scan_scenarios") or 4000)
+        data_version = str(payload.get("data_version") or DATA_VERSION)
+    except Exception as error:
+        print(json.dumps({"error": f"Entrada inválida: {error}"}, ensure_ascii=False))
+        sys.exit(1)
+        return
 
-    sim = SimuladorVPL(premissas)
-    resultado = sim.simular(n_cenarios=scenario_count, semente=seed)
-    metricas = resultado.metricas()
-    risk_level = risco(metricas["p_vpl_positivo"])
+    try:
+        sim = SimuladorVPL(premissas)
+        resultado = sim.simular(n_cenarios=scenario_count, semente=seed)
+        metricas = resultado.metricas()
+    except Exception as error:
+        print(json.dumps({"error": f"Falha na simulação: {error}"}, ensure_ascii=False))
+        sys.exit(1)
+        return
 
+    effective = premises_dict(premissas)
+    try:
+        drivers = risk_drivers(resultado.vpl, resultado.choques)
+    except Exception:
+        drivers = []
     response = {
-        "premises": premissas.__dict__,
+        "premises": effective,
+        "premises_hash": premises_hash(effective),
+        "data_version": data_version,
         "metrics": metricas,
+        # B1: Move Score = P(VPL>0)*100. Faixa (green/yellow/red, 70/50) é
+        # aplicada no backend via business-rules (nunca 85/70 aqui).
         "financial_score": round(metricas["p_vpl_positivo"] * 100),
-        "risk_level": risk_level,
-        "decision": decisao(metricas["p_vpl_positivo"]),
+        # B4: contribuição de cada choque para a variância do VPL (adicional;
+        # com a mesma seed, as métricas não mudam).
+        "risk_drivers": drivers,
         "histogram": resultado.histograma(),
         "price_curve": [],
         "optimal_price": None,

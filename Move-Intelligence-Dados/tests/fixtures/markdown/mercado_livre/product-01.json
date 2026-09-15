@@ -1,0 +1,20 @@
+{
+  "price": 778.9,
+  "currency": "BRL",
+  "rating": 4.7,
+  "reviews_count": 47,
+  "sold_count_raw": "+500 vendidos",
+  "sold_count_lower": 500,
+  "best_seller_rank": null,
+  "in_stock": true,
+  "scrape_status": "ok",
+  "parser_version": "mercado_livre@2",
+  "title": "Halter Regulável 24kg Anilha Dumbbell Ajustável - Odin Fit",
+  "seller": "Odin Fit",
+  "rating_distribution": null,
+  "supplier_name": null,
+  "supplier_years": null,
+  "supplier_verified": null,
+  "moq": null,
+  "price_tiers": null
+}

@@ -40,6 +40,8 @@ const COUNTRY_BY_NAME: Record<string, CountryMeta> = {
 export type SupplierContract = {
   id: string;
   name: string;
+  // D5: fonte do anúncio (canal vs B2B); nunca canal como fornecedor.
+  source: string | null;
   country: string | null;
   country_code: string | null;
   flag: string | null;
@@ -49,7 +51,8 @@ export type SupplierContract = {
   rating_stars: number;
   tier: 'Diamante' | 'Ouro' | 'Prata' | 'Bronze';
   total_products: number;
-  total_monthly_sales: number;
+  // Vendas mensais desconhecidas viram null (front exibe "—"), nunca um múltiplo inventado.
+  total_monthly_sales: number | null;
   confidence: number | null;
   moq: number | null;
   fob: number | null;
@@ -96,9 +99,14 @@ export function suppliersFromCluster(
       return {
         id: `${cluster.id}:${key}`,
         name: latest.sellerName ?? latest.sellerId ?? latest.marketplace,
-        country: country?.country ?? 'China',
-        country_code: country?.country_code ?? 'CN',
-        flag: country?.flag ?? '🇨🇳',
+        // D5: fonte real do anúncio; retail (Amazon/ML) é canal, B2B (Alibaba/1688/AliExpress) é fornecedor.
+        source: latest.marketplace ?? null,
+        // País, prazo de entrega, frete e certificações não têm fonte real no
+        // snapshot hoje — sem inventar "China", lead_time 45, shipping 8.5 ou
+        // ISO 9001/BSCI. Ausência de dado vira null/[] (ver relatório seção 4.1).
+        country: country?.country ?? null,
+        country_code: country?.country_code ?? null,
+        flag: country?.flag ?? null,
         city: null,
         category: cluster.category,
         score: score.indicator,
@@ -107,17 +115,15 @@ export function suppliersFromCluster(
         total_products: score.totalProducts,
         total_monthly_sales: score.totalMonthlySales,
         confidence: score.confidence,
-        moq: latest.moq ?? 1,
+        // Sem MOQ no snapshot, o campo fica null (front exibe "—"), nunca 1 inventado.
+        moq: latest.moq ?? null,
         fob: latestPrice(ordered),
-        lead_time: 45,
-        shipping: 8.5,
+        lead_time: null,
+        shipping: null,
         quality: score.ratingStars,
         margin: pendingIndicator(),
         risk: score.tier === 'Diamante' ? 'LOW' : score.tier === 'Ouro' ? 'LOW' : 'MEDIUM',
-        certifications: [
-          'ISO 9001',
-          score.ratingStars >= 4.0 ? 'Certificado BSCI' : 'Verificado Gold',
-        ],
+        certifications: [],
       };
     })
     .sort((a, b) => b.rating_stars - a.rating_stars);

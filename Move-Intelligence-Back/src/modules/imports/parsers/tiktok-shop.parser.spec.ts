@@ -26,8 +26,8 @@ describe('parseTiktokShop', () => {
       (r) => r.externalProductId === '1729864276706495330',
     );
     expect(listing).toBeDefined();
-    expect(listing?.naturalKey).toBe('tiktok-shop|1729864276706495330');
-    expect(listing?.marketplace).toBe('tiktok-shop');
+    expect(listing?.naturalKey).toBe('tiktok_shop|1729864276706495330');
+    expect(listing?.marketplace).toBe('tiktok_shop');
     expect(listing?.title).toContain('Đồng Hồ Đeo Tay M3');
     expect(listing?.priceMin).toBe(42.873);
     expect(listing?.priceMax).toBe(42.873);

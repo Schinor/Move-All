@@ -3,6 +3,9 @@ import { dirname } from 'node:path';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ImportSourceType, ImportStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { RedisCacheService } from '../../shared/redis/redis-cache.service';
+import { CanonicalProductListing } from '../../shared/types/marketplace.types';
+import { ProductMatchingService } from '../product-matching/product-matching.service';
 import { ProductsService } from '../products/products.service';
 import { parseComex } from './parsers/comex.parser';
 import { parseTradeAtlas } from './parsers/trade-atlas.parser';
@@ -15,7 +18,6 @@ import { parseTiktokShop } from './parsers/tiktok-shop.parser';
 import { xlsxToText } from './parsers/xlsx.parser';
 import {
   MarketplaceParseResult,
-  ParsedMarketplaceListing,
   RowError,
 } from './parsers/parser.types';
 import { detectSourceType, isXlsx } from './source-detector';
@@ -47,6 +49,8 @@ export class ImportsProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly products: ProductsService,
+    private readonly matching: ProductMatchingService,
+    private readonly cache?: RedisCacheService,
   ) {}
 
   /**
@@ -143,6 +147,7 @@ export class ImportsProcessor {
       );
 
       if (isMarketplaceImport && rowsImported > 0) {
+        await this.cache?.delPattern('dashboard:trends:products:*');
         this.scheduleRankingSimulation(jobId);
       }
     } catch (error) {
@@ -271,8 +276,17 @@ export class ImportsProcessor {
     for (const batch of chunk(result.rows, UPSERT_CONCURRENCY)) {
       await Promise.all(
         batch.map(async (listing) => {
-          const productClusterId =
-            await this.findOrCreateTrivialCluster(listing);
+          // Matching unificado (F1.8): o mesmo serviço do restante do backend.
+          const productClusterId = await this.matching.findOrCreateTrivialCluster({
+            marketplace: listing.marketplace,
+            sourceType: 'marketplace',
+            externalProductId: listing.externalProductId,
+            titleOriginal: listing.title,
+            titleNormalized: listing.title,
+            categoryNormalized: listing.category ?? undefined,
+            collectedAt: new Date(),
+            imageUrls: [],
+          } as CanonicalProductListing);
           await this.prisma.productListingSnapshot.create({
             data: {
               marketplace: listing.marketplace,
@@ -316,43 +330,6 @@ export class ImportsProcessor {
     }
 
     return imported;
-  }
-
-  /**
-   * Encontra (ou cria) o cluster trivial de um anúncio — mesma lógica de
-   * `ProductMatchingService.findOrCreateTrivialCluster`, aqui via `this.prisma`
-   * para não acoplar o módulo de imports ao de product-matching.
-   */
-  private async findOrCreateTrivialCluster(
-    listing: ParsedMarketplaceListing,
-  ): Promise<string> {
-    const existing = await this.prisma.productClusterItem.findUnique({
-      where: {
-        marketplace_externalProductId: {
-          marketplace: listing.marketplace,
-          externalProductId: listing.externalProductId,
-        },
-      },
-    });
-    if (existing) {
-      return existing.clusterId;
-    }
-
-    const cluster = await this.prisma.productCluster.create({
-      data: {
-        canonicalName: listing.title.trim().toLowerCase(),
-        category: listing.category,
-        confidenceScore: 1,
-        items: {
-          create: {
-            marketplace: listing.marketplace,
-            externalProductId: listing.externalProductId,
-            similarityScore: 1,
-          },
-        },
-      },
-    });
-    return cluster.id;
   }
 
   private buildErrorSummary(errors: RowError[]): Prisma.InputJsonValue {

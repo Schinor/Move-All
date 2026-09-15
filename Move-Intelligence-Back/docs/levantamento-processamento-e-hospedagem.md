@@ -26,7 +26,7 @@ A plataforma é composta por 4 módulos principais operando de forma integrada:
                                        ▼                 ▼                    ▼                 ▼
                               ┌────────────────┐ ┌────────────────┐  ┌────────────────┐ ┌────────────────┐
                               │ PostgreSQL 16  │ │  Redis 7 (AOF) │  │ Bright Data    │ │  LLM API       │
-                              │ (pg_trgm/UUID) │ │ (Cache/Filas)  │  │ (Scraper/Prox) │ │ (NVIDIA/Gemini)│
+                              │ (pg_trgm/UUID) │ │ (Cache/Filas)  │  │ (Scraper/Prox) │ │ (OpenRouter)   │
                               └────────────────┘ └────────────────┘  └────────────────┘ └────────────────┘
 ```
 
@@ -103,7 +103,7 @@ O motor consolida **6 sub-sinais estratégicos** com pesos paramétricos de neg�
 ---
 
 ### 2.7. Camada de IA & LLM Copilot
-- Auditoria de premissas financeiras do Monte Carlo com modelos LLM (NVIDIA NIM / Gemini / OpenAI).
+- Auditoria de premissas financeiras do Monte Carlo com modelos LLM via OpenRouter.
 - Síntese executiva automatizada com recomendações estratégicas, identificação de gargalos de fornecimento e alertas de concorrência.
 
 ---
@@ -199,7 +199,8 @@ JWT_SECRET=ChaveSuperSecretaDePeloMenos32Caracteres!
 # INTEGRAÇÕES DE DADOS & IA
 # ==========================================
 BRIGHTDATA_MCP_URL=https://sua-url-autenticada-brightdata-mcp.com
-NVIDIA_API_KEY=nvapi-<sua-chave-aqui> # ou OPENAI_API_KEY / GEMINI_API_KEY
+OPENROUTER_API_KEY=sk-or-<sua-chave-aqui>
+OPENROUTER_MODEL=inclusionai/ling-3.0-flash-fin:free
 
 # ==========================================
 # AGENDAMENTO DE COLETA (ETL)

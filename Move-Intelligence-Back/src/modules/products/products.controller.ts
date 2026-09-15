@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { Public } from '../auth/public.decorator';
 import { CreateWatchlistItemDto } from './dto/create-watchlist-item.dto';
 import {
   FillMonteCarloPremisesWithAiDto,
@@ -8,7 +7,6 @@ import {
 } from './dto/run-monte-carlo.dto';
 import { ProductsService } from './products.service';
 
-@Public()
 @Controller('products')
 export class ProductsController {
   constructor(private readonly products: ProductsService) {}
@@ -30,23 +28,36 @@ export class ProductsController {
   }
 
   @Get(':id/price-history')
-  getPriceHistory(@Param('id') id: string, @Query('window') window?: string) {
-    return this.products.getPriceHistory(id, window ?? '30d');
+  getPriceHistory(
+    @Param('id') id: string,
+    @Query('window') window?: string,
+    @Query('compare') compare?: string,
+  ) {
+    return this.products.getPriceHistory(id, window ?? '30d', compare);
   }
 
   @Get(':id/review-history')
-  getReviewHistory(@Param('id') id: string, @Query('window') window?: string) {
-    return this.products.getReviewHistory(id, window ?? '30d');
+  getReviewHistory(
+    @Param('id') id: string,
+    @Query('window') window?: string,
+    @Query('compare') compare?: string,
+  ) {
+    return this.products.getReviewHistory(id, window ?? '30d', compare);
+  }
+
+  /** Avaliações positivas/neutras/negativas por semana + nota média. */
+  @Get(':id/review-sentiment')
+  getReviewSentiment(@Param('id') id: string, @Query('window') window?: string) {
+    return this.products.getReviewSentiment(id, window ?? '6m');
   }
 
   @Get(':id/volume-history')
-  getVolumeHistory(@Param('id') id: string, @Query('window') window?: string) {
-    return this.products.getVolumeHistory(id, window ?? '30d');
-  }
-
-  @Get(':id/opportunity-score')
-  getOpportunityScore(@Param('id') id: string) {
-    return this.products.getOpportunityScore(id);
+  getVolumeHistory(
+    @Param('id') id: string,
+    @Query('window') window?: string,
+    @Query('compare') compare?: string,
+  ) {
+    return this.products.getVolumeHistory(id, window ?? '30d', compare);
   }
 
   @Get(':id/monte-carlo/defaults')

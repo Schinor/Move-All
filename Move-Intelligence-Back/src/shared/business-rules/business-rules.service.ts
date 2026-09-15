@@ -24,6 +24,50 @@ export class BusinessRulesService {
     return DEFAULT_BUSINESS_RULES.alertThresholds;
   }
 
+  getDiscoveryMaxCalls(): number {
+    return DEFAULT_BUSINESS_RULES.discovery.maxCalls;
+  }
+
+  getTrackingTuning(): { notFoundAfterFailures: number; priceDeviationPct: number } {
+    return { ...DEFAULT_BUSINESS_RULES.tracking };
+  }
+
+  getSocialSourceStatus(source: string): 'available' | 'unavailable' | 'unknown' {
+    const table = DEFAULT_BUSINESS_RULES.socialSourcesStatus as Record<string, string>;
+    const status = table[source];
+    return status === 'unavailable' ? 'unavailable' : status === 'available' ? 'available' : 'unknown';
+  }
+
+  getMoveScoreBands(): { green: number; yellow: number } {
+    return { ...DEFAULT_BUSINESS_RULES.moveScoreBands };
+  }
+
+  /** Faixa pronta para a API (B1, decisão 5): green > 70, yellow 50–70, red ≤ 50. */
+  getScoreBand(score: number | null | undefined): 'green' | 'yellow' | 'red' | null {
+    if (score === null || score === undefined || !Number.isFinite(score)) return null;
+    const bands = DEFAULT_BUSINESS_RULES.moveScoreBands;
+    if (score > bands.green) return 'green';
+    if (score > bands.yellow) return 'yellow';
+    return 'red';
+  }
+
+  getMomentumTuning(): {
+    salesWeight: number;
+    searchWeight: number;
+    upThresholdPct: number;
+    downThresholdPct: number;
+  } {
+    return { ...DEFAULT_BUSINESS_RULES.momentum };
+  }
+
+  getQuadrantFinancialThreshold(): string {
+    return DEFAULT_BUSINESS_RULES.quadrant.financialThreshold;
+  }
+
+  getRiskCausesTuning(): { lowMarginPct: number; highImportCostPct: number; highInvestmentMonths: number } {
+    return { ...DEFAULT_BUSINESS_RULES.riskCauses };
+  }
+
   normalizeSalesSignal(
     rawValue: number | null | undefined,
     type: SalesSignalType | null | undefined,

@@ -6,18 +6,76 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { syntheticSnapshotWhere } from '../../shared/synthetic-data/synthetic-data.filter';
 import { OpenRouterService, ChatMessage, ChatTool } from '../ai-gateway/openrouter.service';
-import { TrendEngineService } from '../trend-engine/trend-engine.service';
-import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
 import { DashboardApiService } from '../dashboard-api/dashboard-api.service';
+import { loadLatestMoveScores } from '../../shared/scoring/product-score-loader';
+import type { Prisma } from '@prisma/client';
+import { extractTextToolCalls, stripTextToolCalls } from './text-tool-calls';
+import { expandSearchQuery, normalizeSearchText } from '../../shared/search/search-expansion';
+import {
+  PROMISE_FALLBACK_SUFFIX,
+  PROMISE_NUDGE,
+  chunkReply,
+  finalizeReply,
+  hasUnfulfilledPromise,
+} from './reply-guard';
 import { CopilotChatDto } from './dto/copilot-chat.dto';
 import { UpdateCopilotConversationDto } from './dto/update-copilot-conversation.dto';
 
 export const MAX_HISTORY_MESSAGES = 20;
+/** Resposta amigável quando a consulta aos dados falha ou o modelo insiste em markup. */
+export const COPILOT_UNAVAILABLE_REPLY =
+  'Não consegui consultar os dados agora. Tente reformular a pergunta.';
+// P0-3: trocado pelo Raul apenas por modelo com tool calling nativo (pode ter custo).
+const TOOL_CALL_RETRY_MESSAGE =
+  'Use apenas as ferramentas disponíveis via function calling e nunca escreva chamadas de ferramenta em texto.';
 const TOOL_OUTPUT_PREVIEW_CHARS = 400;
+/** Rodadas de ferramentas antes da resposta (busca vazia → busca ampliada → resposta). */
+const MAX_TOOL_ROUNDS = 4;
 
-/** Ordenações aceitas por `get_product_ranking`, espelhando /trends/products. */
-const RANKING_SORTS = ['trend_score', 'opportunity_score', 'growth', 'projected_revenue'];
+/** Ordenações aceitas por `get_product_ranking`, espelhando /trends/products (C2). */
+const RANKING_SORTS = [
+  'move_score',
+  'growth',
+  'projected_revenue',
+  'momentum',
+  'price',
+  'reviews',
+  'action',
+  'name',
+];
+
+/** Extrai UUIDs citados no texto (para pós-validação C7). */
+export function extractMentionedIds(text: string): string[] {
+  return text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [];
+}
+
+/** IDs e nomes devolvidos pelas ferramentas na conversa (base para validar grounding). */
+export function collectToolProductRefs(messages: ChatMessage[]): { ids: Set<string>; names: Set<string> } {
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  for (const m of messages) {
+    if (m.role !== 'tool' || !m.content) continue;
+    try {
+      const data = JSON.parse(m.content) as unknown;
+      const list = Array.isArray((data as { products?: unknown }).products)
+        ? ((data as { products: Array<Record<string, unknown>> }).products)
+        : Array.isArray(data)
+          ? (data as Array<Record<string, unknown>>)
+          : [];
+      for (const p of list) {
+        if (typeof p.id === 'string') ids.add(p.id);
+        if (typeof p.product_cluster_id === 'string') ids.add(p.product_cluster_id as string);
+        if (typeof p.name === 'string') names.add((p.name as string).toLowerCase());
+        if (typeof p.canonical_name === 'string') names.add((p.canonical_name as string).toLowerCase());
+      }
+    } catch {
+      continue;
+    }
+  }
+  return { ids, names };
+}
 
 /**
  * Older tool dumps are JSON payloads that dominate token cost. Keep the latest
@@ -67,15 +125,21 @@ PRINCÍPIOS MANDATÓRIOS:
 2. Quando o usuário fizer perguntas sobre catálogo, ranking, produtos, tendências, preços ou fornecedores, USE AS FERRAMENTAS (tool calls) para consultar a base de dados real do PostgreSQL/Prisma.
 3. Se nenhuma ferramenta retornar dados para a consulta, informe com transparência que não há registros correspondentes na base atual.
 4. Responda sempre em português claro, profissional, conciso e orientado a negócios.
+5. NUNCA anuncie que vai buscar, consultar ou ampliar algo depois: chame a ferramenta nesta mesma resposta ou responda com o que já tem. Se search_products vier vazio, tente de novo com o tipo de equipamento ou uma categoria de available_categories antes de responder.
 
-VOCABULÁRIO DE SCORES (não confunda — são métricas distintas):
-- "score" sem qualificador, "ranking", "produto com maior score", "top produtos" => é o TREND SCORE (0-100), o mesmo número exibido na tela de Ranking. Obtenha-o SEMPRE com a ferramenta get_product_ranking, que já devolve a lista ordenada. NUNCA responda a essa pergunta com search_products, que não ordena por score.
-- "opportunity score" (0-100) => oportunidade combinando demanda e evidências; também vem de get_product_ranking.
-- "financial score" e "risco" => saída da simulação Monte Carlo. Guie-se pela flag monte_carlo_simulated: quando ela for false (score nulo), diga que o produto ainda NÃO foi simulado; quando for true, o número é real — inclusive um financial score 0, que significa resultado financeiro ruim e NÃO ausência de simulação. Jamais assuma um valor padrão nem trate nulo como empate entre produtos.
+VOCABULÁRIO ÚNICO — MOVE SCORE + AÇÃO (regras classificam, IA explica):
+- Existe UM único score: o MOVE SCORE (0-100), oficial, calculado por Monte Carlo sobre o histórico real. O mesmo número aparece na tela de Ranking.
+- "score" sem qualificador, "ranking", "produto com maior score", "top produtos" => é o MOVE SCORE. Obtenha-o SEMPRE com a ferramenta get_product_ranking, que já devolve a lista ordenada. NUNCA responda a essa pergunta com search_products, que não ordena por score.
+- Ação oficial por quadrante (B3, decisões 2-3): DECIDIR_AGORA (sobe + faixa verde) · NEGOCIAR_CUSTO (sobe + fora do verde) · TESTAR_DEMANDA (estável/cai + verde) · IGNORAR (demais) · DADOS_INSUFICIENTES (sem histórico mínimo). Rótulos: Decidir agora, Negociar custo, Testar demanda, Ignorar, Dados insuficientes. Faixa verde > 70, amarela 50–70 (move_score_bands, padrão 70/50).
+- Tendência é momentum (sobe/estável/cai, sem nota 0–100). Cite growth_pct só no detalhe.
+- Sem Move Score (move_score nulo) ou ação DADOS_INSUFICIENTES, diga que o produto ainda NÃO tem histórico suficiente — e mostre o rótulo de confiança (data_confidence), nunca um número. Jamais assuma valor padrão nem trate nulo como empate.
+- Contexto permitido além do score: ação, momentum, P(VPL>0), CVaR, causas do risco, premissas e origem — tudo vindo das ferramentas. Cite SÓ produtos que existem nos dados consultados.
+- Risco: descreva o que está causando o risco alto (margem, drivers da simulação). Sem riscos operacionais.
 
 FORMATO:
+- Resposta "Recomendado + alternativas": o recomendado é o maior Move Score entre DECIDIR_AGORA (regras escolhem); alternativas são os próximos.
 - Use tabelas Markdown (com a linha separadora de hífens abaixo do cabeçalho) para comparar 3 ou mais produtos, com no máximo 4 colunas.
-- Sempre cite o número do score ao lado do nome do produto.`;
+- Sempre cite Move Score + ação ao lado do nome do produto. Proibido citar produto que não veio de ferramenta.`;
 
 const COPILOT_TOOLS: ChatTool[] = [
   {
@@ -83,22 +147,27 @@ const COPILOT_TOOLS: ChatTool[] = [
     function: {
       name: 'get_product_ranking',
       description:
-        'Retorna o ranking de produtos já ordenado pelo score, com os MESMOS números exibidos na tela de Ranking (trend_score e opportunity_score, 0-100). Use SEMPRE que a pergunta envolver "maior score", "melhores produtos", "top N", "ranking" ou comparação de scores.',
+        'Retorna o ranking de produtos já ordenado (move_score, ação por quadrante, momentum, faixa), com os MESMOS números da tela de Ranking. Pagina o banco inteiro (sem teto de 50) e aceita filtro por ação. Use SEMPRE que a pergunta envolver "maior score", "melhores produtos", "top N", "ranking" ou comparação.',
       parameters: {
         type: 'object',
         properties: {
           limit: {
             type: 'number',
-            description: 'Quantos produtos retornar, do topo para baixo (padrão: 10, máximo: 50)',
+            description: 'Quantos produtos retornar, do topo para baixo (padrão: 10, máximo: 200)',
           },
           sort: {
             type: 'string',
-            enum: ['trend_score', 'opportunity_score', 'growth', 'projected_revenue'],
-            description: 'Critério de ordenação (padrão: trend_score, o score exibido no ranking)',
+            enum: ['move_score', 'growth', 'projected_revenue', 'momentum', 'price', 'reviews', 'action', 'name'],
+            description: 'Critério de ordenação (padrão: move_score, o score oficial)',
           },
           category: {
             type: 'string',
             description: 'Filtra por categoria fitness opcional (ex.: "resistance_bands")',
+          },
+          action: {
+            type: 'string',
+            enum: ['DECIDIR_AGORA', 'NEGOCIAR_CUSTO', 'TESTAR_DEMANDA', 'IGNORAR', 'DADOS_INSUFICIENTES'],
+            description: 'Filtra pela ação do quadrante (C2)',
           },
         },
       },
@@ -109,7 +178,7 @@ const COPILOT_TOOLS: ChatTool[] = [
     function: {
       name: 'search_products',
       description:
-        'Busca produtos fitness no catálogo POR NOME ou categoria. Não ordena por score — para ranking use get_product_ranking. O campo financial_score vem da simulação Monte Carlo e é null quando o produto ainda não foi simulado.',
+        'Busca produtos fitness no catálogo por nome, categoria, grupo muscular ou objetivo (ex.: "pernas", "abdômen", "cardio"): expande sinônimos e faz busca aproximada. Não ordena por score — para ranking use get_product_ranking. Traz o Move Score oficial (null sem histórico suficiente). Sem resultado, devolve available_categories para sugerir.',
       parameters: {
         type: 'object',
         properties: {
@@ -135,7 +204,7 @@ const COPILOT_TOOLS: ChatTool[] = [
     function: {
       name: 'get_product_details',
       description:
-        'Obtém detalhes analíticos aprofundados de um produto específico pelo seu ID (scores, histórico de preços, risco Monte Carlo).',
+        'Obtém detalhes analíticos aprofundados de um produto específico pelo seu ID (Move Score, decisão, P(VPL>0), CVaR, premissas e histórico de preços).',
       parameters: {
         type: 'object',
         properties: {
@@ -205,8 +274,6 @@ export class CopilotService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly openRouter: OpenRouterService,
-    private readonly trendEngine: TrendEngineService,
-    private readonly opportunityEngine: OpportunityEngineService,
     private readonly dashboard: DashboardApiService,
   ) {}
 
@@ -324,60 +391,13 @@ export class CopilotService {
     const conversationId = prepared.conversationId;
     const messages = prepared.messages;
 
-    let toolCallsCount = 0;
-    const maxToolIterations = 3;
-    let finalReply = '';
+    // (1) Até MAX_TOOL_ROUNDS rodadas de ferramentas; (3) promessa sem ação é cobrada no loop.
+    const loop = await this.runToolLoop(messages, conversationId, 'copilot_chat');
+    const toolCallsCount = loop.toolCallsCount;
+    let finalReply = loop.draft;
 
-    for (let iteration = 0; iteration < maxToolIterations; iteration++) {
-      const response = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
-        endpointName: 'copilot_chat',
-        tools: COPILOT_TOOLS,
-        toolChoice: 'auto',
-        temperature: 0.2,
-        maxTokens: 2048,
-        metadata: {
-          conversationId,
-          historyMessages: messages.length,
-        },
-      });
-
-      if (response.toolCalls && response.toolCalls.length > 0) {
-        toolCallsCount += response.toolCalls.length;
-        // Adiciona a mensagem do assistente contendo os tool calls
-        messages.push({
-          role: 'assistant',
-          content: response.content ?? '',
-          tool_calls: response.toolCalls,
-        });
-
-        // Executa cada ferramenta
-        for (const toolCall of response.toolCalls) {
-          const fnName = toolCall.function.name;
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments || '{}');
-          } catch {
-            args = {};
-          }
-
-          const toolResult = await this.executeTool(fnName, args);
-
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            name: fnName,
-            content: JSON.stringify(toolResult),
-          });
-        }
-      } else {
-        // Modelo retornou a resposta final em texto
-        finalReply = response.content ?? 'Não foi possível gerar uma resposta.';
-        break;
-      }
-    }
-
-    if (!finalReply) {
-      // Se estourou as iterações sem texto, faz uma chamada final sem ferramentas
+    if (loop.exhausted) {
+      // Rodadas esgotadas sem texto: chamada final sem ferramentas.
       const fallbackResponse = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
         endpointName: 'copilot_chat_summary',
         temperature: 0.2,
@@ -388,7 +408,16 @@ export class CopilotService {
         },
       });
       finalReply = fallbackResponse.content ?? 'Análise concluída com base nos dados obtidos.';
+    } else if (!finalReply) {
+      finalReply = 'Não foi possível gerar uma resposta.';
     }
+
+    // C7: pós-validação — nenhum ID fora das ferramentas pode aparecer. Refaz uma
+    // vez; se persistir, anexa aviso (caso da reunião: recomendado fora da lista).
+    // P0-3: sanitização final — markup remanescente nunca é salvo nem exibido.
+    // (3) Nunca termina em promessa: sem rodada restante, vira resposta honesta.
+    finalReply = finalizeReply(finalReply) || COPILOT_UNAVAILABLE_REPLY;
+    finalReply = await this.validateGroundedReply(messages, finalReply, conversationId);
 
     // 4. Salvar resposta do assistente no banco
     await this.prisma.aiMessage.create({
@@ -421,71 +450,164 @@ export class CopilotService {
     const conversationId = prepared.conversationId;
     const messages = prepared.messages;
 
-    // Verifica se ferramentas são necessárias antes de gerar o stream final
-    const toolCheckResponse = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
-      endpointName: 'copilot_tool_check',
-      tools: COPILOT_TOOLS,
-      toolChoice: 'auto',
-      temperature: 0.2,
-      maxTokens: 1024,
-      metadata: {
-        conversationId,
-        historyMessages: messages.length,
+    // (1) Até MAX_TOOL_ROUNDS rodadas de ferramentas antes de responder: uma busca
+    // vazia pode virar busca ampliada em vez de a conversa parar numa promessa.
+    // As rodadas podem levar mais que o timeout de inatividade do front (60 s):
+    // enquanto não terminam, manda um batimento { conversation_id } periódico.
+    const loopPromise = this.runToolLoop(messages, conversationId, 'copilot_tool_check');
+    const heartbeatMs = Number(process.env.COPILOT_STREAM_HEARTBEAT_MS ?? 15_000);
+    let loopSettled = false;
+    const loopDone = loopPromise.then(
+      () => {
+        loopSettled = true;
       },
-    });
-
-    if (toolCheckResponse.toolCalls && toolCheckResponse.toolCalls.length > 0) {
-      messages.push({
-        role: 'assistant',
-        content: toolCheckResponse.content ?? '',
-        tool_calls: toolCheckResponse.toolCalls,
+      () => {
+        loopSettled = true;
+      },
+    );
+    while (!loopSettled) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const tick = new Promise<'tick'>((resolve) => {
+        timer = setTimeout(() => resolve('tick'), heartbeatMs);
       });
+      const outcome = await Promise.race([loopDone.then(() => 'done' as const), tick]);
+      clearTimeout(timer);
+      if (outcome === 'tick' && !loopSettled) {
+        yield { conversation_id: conversationId };
+      }
+    }
+    const loop = await loopPromise;
 
-      for (const toolCall of toolCheckResponse.toolCalls) {
-        const fnName = toolCall.function.name;
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(toolCall.function.arguments || '{}');
-        } catch {
-          args = {};
+    if (loop.draft.trim()) {
+      // O rascunho final já veio do modelo: valida ANTES de enviar — (3) promessa
+      // sem ação e C7 grounding — e só então transmite em pedaços.
+      let reply = finalizeReply(loop.draft) || COPILOT_UNAVAILABLE_REPLY;
+      try {
+        reply = await this.validateGroundedReply(messages, reply, conversationId);
+      } catch {
+        // Validação é best-effort; a resposta sanitizada segue.
+      }
+      try {
+        for (const chunk of chunkReply(reply)) {
+          yield { token: chunk, conversation_id: conversationId };
         }
+      } finally {
+        // P0-5: salva mesmo se o cliente desconectar no meio.
+        try {
+          await this.prisma.aiMessage.create({
+            data: { conversationId, role: 'assistant', content: reply.trim() },
+          });
+          await this.touchConversation(conversationId);
+        } catch {
+          // Salvamento é best-effort no caminho do stream.
+        }
+      }
+      yield { done: true, conversation_id: conversationId };
+      return;
+    }
 
-        const toolResult = await this.executeTool(fnName, args);
-        messages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: fnName,
-          content: JSON.stringify(toolResult),
+    // P0-3/P0-5: o stream sempre fecha com done; vazio vira erro amigável.
+    // P0-5: a resposta não depende da conexão — o finally salva a mensagem do
+    // assistente sempre, inclusive se o cliente desconectar no meio (o break do
+    // consumidor completa o gerador via return, mas o finally executa antes).
+    let fullReply = '';
+    let streamError: string | null = null;
+    let promiseNotice: string | null = null;
+    try {
+      for await (const token of this.streamWithTimeout(
+        this.openRouter.chatStream(compactToolOutputs(messages), {
+          endpointName: 'copilot_chat_stream',
+          temperature: 0.2,
+          maxTokens: 2048,
+          metadata: {
+            conversationId,
+            historyMessages: messages.length,
+          },
+        }),
+      )) {
+        fullReply += token;
+        yield { token, conversation_id: conversationId };
+      }
+    } catch (err) {
+      streamError = err instanceof Error ? err.message : String(err);
+    } finally {
+      fullReply = stripTextToolCalls(fullReply);
+      // (3) O texto já saiu em stream: se terminou prometendo, complementa com aviso honesto.
+      if (hasUnfulfilledPromise(fullReply)) {
+        promiseNotice = PROMISE_FALLBACK_SUFFIX;
+        fullReply = `${fullReply.trim()}\n\n${promiseNotice}`;
+      }
+      if (!fullReply.trim()) {
+        fullReply = streamError ?? COPILOT_UNAVAILABLE_REPLY;
+      }
+      try {
+        await this.prisma.aiMessage.create({
+          data: {
+            conversationId,
+            role: 'assistant',
+            content: fullReply.trim(),
+          },
         });
+        await this.touchConversation(conversationId);
+      } catch {
+        // Salvamento é best-effort no caminho do stream.
       }
     }
 
-    let fullReply = '';
-    for await (const token of this.openRouter.chatStream(compactToolOutputs(messages), {
-      endpointName: 'copilot_chat_stream',
-      temperature: 0.2,
-      maxTokens: 2048,
-      metadata: {
-        conversationId,
-        historyMessages: messages.length,
-      },
-    })) {
-      fullReply += token;
-      yield { token, conversation_id: conversationId };
+    if (promiseNotice) {
+      yield { token: `\n\n${promiseNotice}`, conversation_id: conversationId };
     }
-
-    if (fullReply.trim()) {
-      await this.prisma.aiMessage.create({
-        data: {
-          conversationId,
-          role: 'assistant',
-          content: fullReply.trim(),
-        },
-      });
-      await this.touchConversation(conversationId);
-    }
-
     yield { done: true, conversation_id: conversationId };
+  }
+
+  /**
+   * P0-3: consome o gerador de tokens com timeout total configurável
+   * (`COPILOT_STREAM_TIMEOUT_MS`, padrão 60 s). Estouro vira erro amigável
+   * em vez de travar o front esperando para sempre.
+   */
+  private async *streamWithTimeout(
+    source: AsyncGenerator<string, void, unknown>,
+    timeoutMs?: number,
+  ): AsyncGenerator<string, void, unknown> {
+    const totalMs =
+      timeoutMs ?? Number(process.env.COPILOT_STREAM_TIMEOUT_MS ?? 60_000);
+    const deadline = Date.now() + totalMs;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+      while (true) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+          throw new Error(COPILOT_UNAVAILABLE_REPLY);
+        }
+        let timedOut = false;
+        const timeout = new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            timedOut = true;
+            reject(new Error(COPILOT_UNAVAILABLE_REPLY));
+          }, remaining);
+        });
+        try {
+          const next = (await Promise.race([source.next(), timeout])) as
+            | IteratorResult<string, void>
+            | never;
+          if (timedOut) break;
+          if (next.done) return;
+          yield next.value;
+        } finally {
+          if (timer) clearTimeout(timer);
+          timer = null;
+        }
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
+      // Abandona sem await: num gerador suspenso num await que nunca resolve,
+      // o return() também nunca assentaria e travaria o stream.
+      try {
+        void source.return?.(undefined)?.catch?.(() => undefined);
+      } catch {
+        // Fechamento é best-effort.
+      }
+    }
   }
 
   private async prepareConversation(dto: CopilotChatDto): Promise<{
@@ -600,6 +722,41 @@ export class CopilotService {
     return normalized ? normalized : undefined;
   }
 
+  /** C7: confere IDs citados contra as ferramentas; refaz uma vez ou anexa aviso. */
+  async validateGroundedReply(
+    messages: ChatMessage[],
+    reply: string,
+    conversationId: string,
+  ): Promise<string> {
+    const refs = collectToolProductRefs(messages);
+    if (refs.ids.size === 0) return reply;
+    const mentioned = extractMentionedIds(reply).filter((id) => !refs.ids.has(id));
+    if (mentioned.length === 0) return reply;
+    try {
+      const retry = await this.openRouter.chatCompletion(
+        [
+          ...compactToolOutputs(messages),
+          {
+            role: 'user',
+            content: `Corrija a resposta anterior: cite SÓ produtos retornados pelas ferramentas (${[...refs.ids].slice(0, 20).join(', ')}). Nunca invente ID ou nome. Reescreva sem os IDs inválidos: ${mentioned.join(', ')}.`,
+          },
+        ],
+        {
+          endpointName: 'copilot_chat_grounding_fix',
+          temperature: 0.2,
+          maxTokens: 1024,
+          metadata: { conversationId, invalidIds: mentioned },
+        },
+      );
+      const fixed = retry.content ?? reply;
+      const stillBad = extractMentionedIds(fixed).filter((id) => !refs.ids.has(id));
+      if (stillBad.length === 0) return fixed;
+      return `${fixed}\n\nAviso: a resposta menciona produto fora da base consultada (${stillBad.join(', ')}).`;
+    } catch {
+      return `${reply}\n\nAviso: a resposta menciona produto fora da base consultada (${mentioned.join(', ')}).`;
+    }
+  }
+
   private toChatRole(role: string): ChatMessage['role'] {
     if (role === 'user' || role === 'assistant' || role === 'system' || role === 'tool') {
       return role;
@@ -607,40 +764,326 @@ export class CopilotService {
     return 'assistant';
   }
 
+  /** P0-3: nomes aceitos pelo function calling nativo. `exec`/SQL livre nunca executa. */
+  /**
+   * (1) Rodadas de ferramentas compartilhadas por chat e stream. O modelo pode
+   * encadear chamadas (busca vazia → sinônimos/categoria) até MAX_TOOL_ROUNDS.
+   * (3) Texto que anuncia consulta sem chamar ferramenta é cobrado enquanto
+   * houver rodada. Devolve o rascunho final (vazio sem texto) e se esgotou.
+   */
+  private async runToolLoop(
+    messages: ChatMessage[],
+    conversationId: string,
+    endpointName: string,
+  ): Promise<{ draft: string; toolCallsCount: number; exhausted: boolean }> {
+    let toolCallsCount = 0;
+    let textToolRetryUsed = false;
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const response = await this.openRouter.chatCompletion(compactToolOutputs(messages), {
+        endpointName,
+        tools: COPILOT_TOOLS,
+        toolChoice: 'auto',
+        temperature: 0.2,
+        maxTokens: 2048,
+        metadata: {
+          conversationId,
+          historyMessages: messages.length,
+          round,
+        },
+      });
+
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        toolCallsCount += response.toolCalls.length;
+        messages.push({
+          role: 'assistant',
+          content: response.content ?? '',
+          tool_calls: response.toolCalls,
+        });
+        for (const toolCall of response.toolCalls) {
+          const fnName = toolCall.function.name;
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments || '{}');
+          } catch {
+            args = {};
+          }
+          const toolResult = await this.executeTool(fnName, args);
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: fnName,
+            content: JSON.stringify(toolResult),
+          });
+        }
+        continue;
+      }
+
+      // P0-3: o modelo sem tool calling nativo escreve pseudo-calls em texto.
+      const { calls, cleanText } = extractTextToolCalls(response.content ?? '');
+      const known = calls.filter((call) => this.isKnownTool(call.name));
+      const unknown = calls.filter((call) => !this.isKnownTool(call.name));
+      if (known.length > 0) {
+        toolCallsCount += known.length;
+        messages.push({ role: 'assistant', content: cleanText });
+        for (const [index, call] of known.entries()) {
+          const toolResult = await this.executeTool(call.name, call.args);
+          messages.push({
+            role: 'tool',
+            tool_call_id: `text-${round}-${index}`,
+            name: call.name,
+            content: JSON.stringify(toolResult),
+          });
+        }
+        continue;
+      }
+      if (unknown.length > 0) {
+        for (const call of unknown) {
+          await this.logRejectedTextTool(conversationId, call.name, response.content ?? '');
+        }
+        if (!textToolRetryUsed) {
+          textToolRetryUsed = true;
+          messages.push({ role: 'assistant', content: cleanText });
+          messages.push({
+            role: 'system',
+            content: `${TOOL_CALL_RETRY_MESSAGE} Ferramentas: ${this.availableToolNames()}.`,
+          });
+          continue;
+        }
+        return { draft: COPILOT_UNAVAILABLE_REPLY, toolCallsCount, exhausted: false };
+      }
+
+      // (3) Anunciou nova consulta sem chamar ferramenta: cobra a chamada.
+      if (hasUnfulfilledPromise(cleanText) && round < MAX_TOOL_ROUNDS - 1) {
+        messages.push({ role: 'assistant', content: cleanText });
+        messages.push({
+          role: 'system',
+          content: `${PROMISE_NUDGE} Ferramentas: ${this.availableToolNames()}.`,
+        });
+        continue;
+      }
+
+      return { draft: cleanText, toolCallsCount, exhausted: false };
+    }
+
+    return { draft: '', toolCallsCount, exhausted: true };
+  }
+
+  /**
+   * (2) Busca que entende a intenção: nome literal → palavras → sinônimos do
+   * grupo muscular/objetivo → busca aproximada (pg_trgm). Sem resultado,
+   * devolve as categorias disponíveis para a IA sugerir em vez de prometer.
+   */
+  private async searchProducts(args: Record<string, unknown>) {
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
+    const category =
+      typeof args.category === 'string' && args.category.trim() ? args.category.trim() : undefined;
+    const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(args.limit, 20)) : 8;
+    const expansion = expandSearchQuery(query);
+
+    const find = (where: Prisma.ProductClusterWhereInput) =>
+      this.prisma.productCluster.findMany({
+        where: { ...where, ...(category ? { category } : {}) },
+        include: {
+          // Com INCLUDE_SYNTHETIC_DATA=false, o copilot não deve citar
+          // preço/marketplace tirado de um snapshot sintético.
+          snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'desc' }, take: 1 },
+        },
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      });
+    const nameOrCategory = (terms: string[]): Prisma.ProductClusterWhereInput[] =>
+      terms.flatMap((term) => [
+        { canonicalName: { contains: term, mode: 'insensitive' } },
+        { category: { contains: term.replace(/\s+/g, '_'), mode: 'insensitive' } },
+      ]);
+
+    let clusters: Awaited<ReturnType<typeof find>> = [];
+    let matchedBy = 'nome';
+    let searchedTerms: string[] = query ? [query] : [];
+
+    if (!query) {
+      clusters = await find({});
+      matchedBy = category ? 'categoria' : 'catalogo';
+    } else {
+      clusters = await find({ OR: nameOrCategory([query]) });
+
+      if (clusters.length === 0 && expansion.tokens.length > 0 && expansion.tokens.join(' ') !== normalizeSearchText(query)) {
+        searchedTerms = expansion.tokens;
+        clusters = await find({ OR: nameOrCategory(expansion.tokens) });
+        matchedBy = 'palavras';
+      }
+
+      if (clusters.length === 0 && (expansion.terms.length > 0 || expansion.categories.length > 0)) {
+        searchedTerms = [...expansion.terms, ...expansion.categories];
+        clusters = await find({
+          OR: [
+            ...nameOrCategory(expansion.terms),
+            ...(expansion.categories.length > 0 ? [{ category: { in: expansion.categories } }] : []),
+          ],
+        });
+        matchedBy = 'sinonimos';
+      }
+
+      if (clusters.length === 0) {
+        const ids = await this.fuzzyClusterIds([query, ...expansion.tokens]);
+        if (ids.length > 0) {
+          clusters = await find({ id: { in: ids } });
+          matchedBy = 'aproximada';
+        }
+      }
+    }
+
+    if (clusters.length === 0) {
+      return {
+        products: [],
+        matched_by: 'nenhum',
+        searched_terms: searchedTerms,
+        available_categories: await this.availableCategories(),
+        note: 'Nenhum produto encontrado para esses termos (nome, palavras, sinônimos e busca aproximada). Informe isso ao usuário com transparência e sugira categorias de available_categories. Não prometa nova busca.',
+      };
+    }
+
+    // `null` é informação: sem Move Score não há número — a IA usa o
+    // rótulo de confiança. Preencher com padrão faria a IA reportar um
+    // score inexistente.
+    const scores = await loadLatestMoveScores(
+      this.prisma,
+      clusters.map((c) => c.id),
+    );
+    return {
+      products: clusters.map((c) => {
+        const moveScore = scores.get(c.id);
+        return {
+          id: c.id,
+          name: c.canonicalName,
+          category: c.category,
+          move_score: moveScore?.moveScore ?? null,
+          decision: moveScore?.decision ?? null,
+          data_confidence: moveScore?.dataConfidence ?? null,
+          p_vpl_positivo: moveScore?.pVplPositivo ?? null,
+          latest_price: c.snapshots.at(0)?.priceMin ? Number(c.snapshots.at(0)?.priceMin) : null,
+          marketplace: c.snapshots.at(0)?.marketplace ?? 'desconhecido',
+        };
+      }),
+      matched_by: matchedBy,
+      searched_terms: searchedTerms,
+      ...(matchedBy === 'sinonimos' ? { interpreted_as: expansion.topics } : {}),
+    };
+  }
+
+  /** Busca aproximada (pg_trgm) reaproveitando /search; sem extensão/migração, segue vazia. */
+  private async fuzzyClusterIds(terms: string[]): Promise<string[]> {
+    const ids = new Set<string>();
+    const unique = [...new Set(terms.map((term) => term.trim()).filter((term) => term.length >= 3))];
+    for (const term of unique.slice(0, 4)) {
+      try {
+        const result = await this.dashboard.search(term, 10);
+        for (const product of result?.products ?? []) {
+          if (product?.id) ids.add(product.id);
+        }
+      } catch {
+        // Sem busca aproximada disponível: segue sem ela.
+      }
+      if (ids.size > 0) break;
+    }
+    return [...ids];
+  }
+
+  /** Categorias existentes no catálogo, para a IA sugerir quando a busca vier vazia. */
+  private async availableCategories(): Promise<string[]> {
+    try {
+      const rows = await this.prisma.productCluster.findMany({
+        select: { category: true },
+        distinct: ['category'],
+        take: 50,
+      });
+      return rows
+        .map((row) => row.category)
+        .filter((value): value is string => Boolean(value))
+        .sort();
+    } catch {
+      return [];
+    }
+  }
+
+  private isKnownTool(name: string): boolean {
+    return COPILOT_TOOLS.some((tool) => tool.function.name === name);
+  }
+
+  private availableToolNames(): string {
+    return COPILOT_TOOLS.map((tool) => tool.function.name).join(', ');
+  }
+
+  /** P0-3: registra pseudo-tool-call rejeitada (best-effort, nunca quebra o chat). */
+  private async logRejectedTextTool(
+    conversationId: string,
+    toolName: string,
+    excerpt: string,
+  ): Promise<void> {
+    try {
+      await this.prisma.aiCallLog.create({
+        data: {
+          endpoint: 'copilot_chat',
+          model: process.env.OPENROUTER_MODEL ?? 'default',
+          latencyMs: 0,
+          status: 'rejected_tool',
+          error: `text_tool_call:${toolName || 'empty'}:${excerpt.slice(0, 500)}`,
+          metadata: { conversationId, toolName } as never,
+        },
+      });
+    } catch {
+      // Log é best-effort.
+    }
+  }
+
   private async executeTool(name: string, args: Record<string, unknown>): Promise<unknown> {
     try {
       switch (name) {
         case 'get_product_ranking': {
+          // C7: pagina o banco inteiro, filtro por action, sem teto de 50 (até 200).
           const limit =
             typeof args.limit === 'number' && Number.isFinite(args.limit)
-              ? Math.min(Math.max(Math.trunc(args.limit), 1), 50)
+              ? Math.min(Math.max(Math.trunc(args.limit), 1), 200)
               : 10;
           const sort = RANKING_SORTS.includes(String(args.sort))
             ? String(args.sort)
-            : 'trend_score';
+            : 'move_score';
           const category = typeof args.category === 'string' ? args.category.trim() : undefined;
+          const action =
+            typeof args.action === 'string' && args.action.trim() ? args.action.trim().toUpperCase() : undefined;
 
-          const products = await this.dashboard.listTrendingProducts({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const raw = (await this.dashboard.listTrendingProducts({
             limit,
             sort,
             ...(category ? { category } : {}),
-          });
+            ...(action ? { action, page: 1, pageSize: limit } : {}),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          })) as any;
+          const products: Array<Record<string, unknown>> = Array.isArray(raw) ? raw : (raw?.items ?? []);
 
-          const rows = products.map((product, index) => ({
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rows = products.map((product: any, index: number) => ({
             position: index + 1,
             id: product.product_cluster_id,
             name: product.canonical_name,
             category: product.category,
-            trend_score: product.trend_score?.value ?? null,
-            opportunity_score: product.opportunity_score?.value ?? null,
+            // B3: Move Score + ação por quadrante, momentum, faixa e risco.
+            // Sem score, o rótulo de confiança — nunca número.
+            move_score: product.move_score ?? null,
+            decision: product.decision ?? null,
+            action: (product as Record<string, unknown>).action ?? null,
+            action_label: (product as Record<string, unknown>).action_label ?? null,
+            score_band: (product as Record<string, unknown>).score_band ?? null,
+            momentum: (product as Record<string, unknown>).momentum ?? null,
+            data_confidence: product.data_confidence ?? null,
+            p_vpl_positivo: product.p_vpl_positivo ?? null,
+            cvar5: product.cvar5 ?? null,
+            risk_explanation: (product as Record<string, unknown>).risk_explanation ?? null,
             growth_pct: product.growth_pct ?? null,
             stage: product.stage ?? null,
             risk: product.risk ?? null,
-            // Monte Carlo: distingue "score zero" (simulado, resultado ruim) de
-            // "ainda não simulado" — sem a flag a IA lê 0 como ausência de dado.
-            financial_score: product.financial_score ?? null,
-            monte_carlo_simulated:
-              product.financial_score !== null && product.financial_score !== undefined,
           }));
 
           return {
@@ -652,43 +1095,15 @@ export class CopilotService {
           };
         }
 
-        case 'search_products': {
-          const query = typeof args.query === 'string' ? args.query.trim() : '';
-          const category = typeof args.category === 'string' ? args.category.trim() : undefined;
-          const limit = typeof args.limit === 'number' ? Math.min(args.limit, 20) : 8;
-
-          const clusters = await this.prisma.productCluster.findMany({
-            where: {
-              ...(query ? { canonicalName: { contains: query, mode: 'insensitive' } } : {}),
-              ...(category ? { category } : {}),
-            },
-            include: {
-              snapshots: { orderBy: { collectedAt: 'desc' }, take: 1 },
-            },
-            take: limit,
-            orderBy: { createdAt: 'desc' },
-          });
-
-          // `null` é informação: o cluster ainda não passou pelo Monte Carlo.
-          // Preencher com um padrão faria a IA reportar um score inexistente.
-          return clusters.map((c) => ({
-            id: c.id,
-            name: c.canonicalName,
-            category: c.category,
-            risk_level: c.riskLevel ?? null,
-            financial_score: c.financialScore ?? null,
-            monte_carlo_simulated: c.financialScore !== null && c.financialScore !== undefined,
-            latest_price: c.snapshots.at(0)?.priceMin ? Number(c.snapshots.at(0)?.priceMin) : null,
-            marketplace: c.snapshots.at(0)?.marketplace ?? 'desconhecido',
-          }));
-        }
+        case 'search_products':
+          return this.searchProducts(args);
 
         case 'get_product_details': {
           const id = String(args.product_cluster_id);
           const cluster = await this.prisma.productCluster.findUnique({
             where: { id },
             include: {
-              snapshots: { orderBy: { collectedAt: 'asc' }, take: 50 },
+              snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' }, take: 50 },
               alerts: { orderBy: { createdAt: 'desc' }, take: 3 },
             },
           });
@@ -697,25 +1112,16 @@ export class CopilotService {
             return { error: `Produto com id ${id} não encontrado.` };
           }
 
-          const trend = this.trendEngine.calculateFromSnapshots(
-            cluster.snapshots.map((s) => ({
-              marketplace: s.marketplace,
-              category: cluster.category,
-              priceMin: s.priceMin ? Number(s.priceMin) : null,
-              rating: s.rating ? Number(s.rating) : null,
-              reviewCount: s.reviewCount,
-              salesSignalRaw: s.salesSignalRaw ? Number(s.salesSignalRaw) : null,
-              salesSignalType: s.salesSignalType as any,
-              collectedAt: s.collectedAt,
-            })),
-            cluster.category ?? undefined,
-          );
-
-          const opp = this.opportunityEngine.calculate({
-            trendScore: trend.trendScore,
-            marginScore: (cluster.financialScore ?? 50) / 100,
-            westernSaturationScore: 0.2,
-          });
+          // Contexto só com Move Score, decisão, P(VPL>0), CVaR e premissas +
+          // origem (F2.7). Sem score, só a confiança.
+          const latestScores = await loadLatestMoveScores(this.prisma, [cluster.id]);
+          const latest = latestScores.get(cluster.id);
+          const latestScore = latest
+            ? await this.prisma.productScore.findFirst({
+                where: { productClusterId: cluster.id },
+                orderBy: { computedAt: 'desc' },
+              })
+            : null;
 
           const prices = cluster.snapshots.map((s) => Number(s.priceMin)).filter((p) => p > 0);
 
@@ -723,13 +1129,14 @@ export class CopilotService {
             id: cluster.id,
             name: cluster.canonicalName,
             category: cluster.category,
-            risk: cluster.riskLevel ?? 'medio',
-            scores: {
-              opportunity_score: Math.round(opp.opportunityScore * 100),
-              trend_score: Math.round(trend.trendScore * 100),
-              growth_score: Math.round(trend.marketplaceGrowthScore * 100),
-              review_velocity: Math.round(trend.reviewVelocityScore * 100),
-            },
+            move_score: latest?.moveScore ?? null,
+            decision: latest?.decision ?? null,
+            data_confidence: latest?.dataConfidence ?? null,
+            p_vpl_positivo: latest?.pVplPositivo ?? null,
+            cvar5: latest?.cvar5 ?? null,
+            premises: latestScore?.premises ?? null,
+            premises_hash: latestScore?.premisesHash ?? null,
+            data_version: latestScore?.dataVersion ?? null,
             price_stats: {
               min_usd: prices.length ? Math.min(...prices) : null,
               max_usd: prices.length ? Math.max(...prices) : null,

@@ -45,7 +45,11 @@ signal.signal(signal.SIGTERM, _signal_handler)
 
 def main():
     interval_hours = float(os.getenv("SCHEDULE_INTERVAL_HOURS", "168"))  # padrão: 7 dias (168h)
-    run_on_startup = os.getenv("RUN_INIT_ON_STARTUP", "true").lower() in ("true", "1", "yes")
+    # Default false: a coleta inicial de run_historical_collection.run() GERA
+    # DADOS SINTÉTICOS (catálogo de demonstração), não coleta real. Ver Fase 0
+    # do RELATORIO_ANALISE_DADOS_E_SCORES.md.
+    run_on_startup = os.getenv("RUN_INIT_ON_STARTUP", "false").lower() in ("true", "1", "yes")
+    allow_synthetic = os.getenv("ALLOW_SYNTHETIC_DATA", "false").lower() in ("true", "1", "yes")
     period_years = int(os.getenv("COLLECTION_PERIOD_YEARS", "2"))
     database_url = os.getenv("MOVE_ETL_DATABASE_URL") or os.getenv("DATABASE_URL")
 
@@ -56,15 +60,27 @@ def main():
     LOGGER.info("=" * 60)
 
     if run_on_startup:
-        LOGGER.info("Iniciando coleta inicial pré-formatada de %d anos...", period_years)
-        try:
-            res = run_historical_collection.run(
-                period_years=period_years,
-                database_url=database_url,
+        if not allow_synthetic:
+            LOGGER.error(
+                "RUN_INIT_ON_STARTUP=true, mas ALLOW_SYNTHETIC_DATA não está 'true'. "
+                "run_historical_collection.run() GERA DADOS SINTÉTICOS (não é coleta "
+                "real) e não vai rodar sem essa confirmação explícita. Pulando a "
+                "coleta inicial."
             )
-            LOGGER.info("Coleta inicial concluída com sucesso: %s", res)
-        except Exception as err:
-            LOGGER.error("Erro na coleta inicial: %s", err, exc_info=True)
+        else:
+            LOGGER.warning(
+                "Iniciando coleta inicial SINTÉTICA de %d anos (dados de demonstração, "
+                "marcados com is_synthetic=true; não é coleta real)...",
+                period_years,
+            )
+            try:
+                res = run_historical_collection.run(
+                    period_years=period_years,
+                    database_url=database_url,
+                )
+                LOGGER.info("Coleta inicial sintética concluída com sucesso: %s", res)
+            except Exception as err:
+                LOGGER.error("Erro na coleta inicial: %s", err, exc_info=True)
 
     interval_seconds = int(interval_hours * 3600)
     last_run = time.time()

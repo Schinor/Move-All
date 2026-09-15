@@ -1,0 +1,41 @@
+{
+  "price": null,
+  "currency": "EUR",
+  "rating": 5.0,
+  "reviews_count": 266,
+  "sold_count_raw": null,
+  "sold_count_lower": null,
+  "best_seller_rank": null,
+  "in_stock": null,
+  "scrape_status": "ok",
+  "parser_version": "alibaba@1",
+  "title": "Groothandelsprijs Achthoekige Verstelbare Halter Voor Optimale Trainingen Eenvoudig Aan Te Passen Gewicht 50 Lbs 80 Lbs Met Stappen Van 5 Lbs - Buy Product on Alibaba.com",
+  "seller": "SHANDONG AOCHUANG FITNESS EQUIPMENT CO., LTD",
+  "rating_distribution": null,
+  "supplier_name": "SHANDONG AOCHUANG FITNESS EQUIPMENT CO., LTD",
+  "supplier_years": 9,
+  "supplier_verified": null,
+  "moq": 30,
+  "price_tiers": [
+    {
+      "min_qty": 1,
+      "max_qty": 20,
+      "price": null
+    },
+    {
+      "min_qty": 21,
+      "max_qty": 100,
+      "price": null
+    },
+    {
+      "min_qty": 101,
+      "max_qty": 500,
+      "price": null
+    },
+    {
+      "min_qty": 500,
+      "max_qty": null,
+      "price": null
+    }
+  ]
+}

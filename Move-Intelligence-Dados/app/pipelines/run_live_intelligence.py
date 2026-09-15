@@ -9,7 +9,9 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 import time
+import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta, timezone
@@ -20,9 +22,10 @@ from sqlalchemy.exc import OperationalError
 from app.etl.extract.demand_signal.google_trends import GoogleTrendsExtractor
 from app.etl.extract.demand_signal.tiktok_search import TikTokSearchExtractor
 from app.etl.extract.marketplace.alibaba import AlibabaExtractor
+from app.etl.extract.marketplace.aliexpress import AliExpressExtractor
 from app.etl.extract.marketplace.amazon import AmazonExtractor
 from app.etl.extract.marketplace.amazon_br import AmazonBRExtractor
-from app.etl.extract.marketplace.common import BrightDataClient
+from app.etl.extract.marketplace.common import BrightDataClient, extract_native_id
 from app.etl.extract.marketplace.mercado_livre import MercadoLivreExtractor
 from app.etl.extract.marketplace.shopee_br import ShopeeBRExtractor
 from app.etl.extract.marketplace.taobao import TaobaoExtractor
@@ -31,6 +34,7 @@ from app.etl.load.database import get_session
 from app.etl.load.demand_snapshots import upsert_demand_signals
 from app.etl.load.product_demand_link import upsert_product_demand_links
 from app.etl.load.products import upsert_products
+from app.etl.load.tracked import candidate_url, load_tracked_keys, register_new_listings
 from app.etl.transform.correlate import build_product_demand_links, load_keyword_map
 from app.etl.transform.normalize_demand import normalize_demand_records
 from app.etl.transform.normalize_product import canonical_cluster, normalize_products
@@ -40,6 +44,8 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_SOURCES = ("amazon_br", "mercado_livre", "shopee_br")
 SUPPORTED_SOURCES = (
     "alibaba",
+    # A4: fonte de sourcing/custo (nunca preço de venda BR).
+    "aliexpress",
     "amazon",
     "amazon_br",
     "mercado_livre",
@@ -50,6 +56,23 @@ SUPPORTED_SOURCES = (
 )
 BR_SOURCES = {"amazon_br", "mercado_livre", "shopee_br"}
 
+# Teto de chamadas na descoberta (A3.5, configurável): por execução, contando
+# busca (1 por fonte) + raspagens (até o limite por fonte). Default 300.
+DISCOVERY_MAX_CALLS_DEFAULT = 300
+
+
+def resolve_discovery_budget(max_calls: Optional[int] = None) -> int:
+    """Orçamento de chamadas da execução (`DISCOVERY_MAX_CALLS`, default 300)."""
+    if max_calls is not None:
+        try:
+            return max(1, int(max_calls))
+        except (TypeError, ValueError):
+            pass
+    try:
+        return max(1, int(os.getenv("DISCOVERY_MAX_CALLS", str(DISCOVERY_MAX_CALLS_DEFAULT))))
+    except ValueError:
+        return DISCOVERY_MAX_CALLS_DEFAULT
+
 
 def _extractor_registry() -> dict[str, type]:
     supplier_1688 = importlib.import_module(
@@ -57,6 +80,7 @@ def _extractor_registry() -> dict[str, type]:
     ).Supplier1688Extractor
     return {
         "alibaba": AlibabaExtractor,
+        "aliexpress": AliExpressExtractor,
         "amazon": AmazonExtractor,
         "amazon_br": AmazonBRExtractor,
         "mercado_livre": MercadoLivreExtractor,
@@ -174,6 +198,7 @@ def run(
     dry_run: bool = False,
     window_days: int = 7,
     keyword_variant: Optional[int] = None,
+    max_calls: Optional[int] = None,
 ) -> dict[str, Any]:
     requested_term = term.strip()
     if not requested_term:
@@ -191,6 +216,11 @@ def run(
         geo_list = ["BR"]
 
     bounded_limit = max(1, min(int(limit), 10))
+    # A3.5: o teto vale para a execução inteira (buscas + raspagens). Com o
+    # default de 300, o comportamento típico (8 fontes × 10) não muda.
+    discovery_budget = resolve_discovery_budget(max_calls)
+    per_source_scrapes = max(1, (discovery_budget - len(source_list)) // max(1, len(source_list)))
+    bounded_limit = min(bounded_limit, per_source_scrapes)
     active_client = client or BrightDataClient()
     base_keyword_map = load_keyword_map(keyword_map_path)
     cluster = _resolve_cluster(requested_term, base_keyword_map)
@@ -204,6 +234,22 @@ def run(
     window_start = window_end - timedelta(days=bounded_window_days - 1)
     registry = _extractor_registry()
 
+    # Dedup da descoberta (F1.4): URLs cujo (source, native_id) já está em
+    # tracked_listings não são raspadas. Só consulta o banco fora de dry_run.
+    tracked_keys: set[tuple[str, str]] = set()
+    if not dry_run:
+        key_session = get_session(database_url)
+        try:
+            tracked_keys = load_tracked_keys(key_session, source_list)
+        finally:
+            key_session.close()
+
+    def _keep_candidate(source: str, candidate: Mapping[str, Any]) -> bool:
+        url = candidate_url(candidate)
+        if not url:
+            return True
+        return (source, extract_native_id(url, source)) not in tracked_keys
+
     raw_products: list[dict[str, Any]] = []
     raw_demand: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
@@ -216,6 +262,7 @@ def run(
                 query,
                 limit=bounded_limit,
                 concurrency=min(5, bounded_limit),
+                candidate_filter=(lambda candidate, _source=source: _keep_candidate(_source, candidate)),
             )
             records = result["records"]
             for record in records:
@@ -261,9 +308,20 @@ def run(
 
     used_keywords: dict[str, str] = {}
     if include_demand:
+        # F1.6: janela longa com âncora fixa por geo. O Google Trends já é
+        # 0–100 por requisição; a âncora (termo canônico do cluster) e o
+        # request_id gravados em cada linha tornam execuções comparáveis sem
+        # reescalar. O TikTok guarda a contagem bruta (snapshot semanal).
+        # A3.8: a âncora passa a ser um termo fixo enviado na MESMA requisição
+        # do Trends (TRENDS_ANCHOR_KEYWORD, default "academia"); a série da
+        # âncora é persistida junto (mesmo request_id) para encadear execuções.
+        demand_timeframe = "today 12-m"
+        demand_request_id = uuid.uuid4().hex
+        demand_anchor = os.getenv("TRENDS_ANCHOR_KEYWORD", "academia").strip() or "academia"
+        demand_cutoff = window_end - timedelta(days=370)
         trends = GoogleTrendsExtractor(
             client=active_client,
-            timeframe=f"now {bounded_window_days}-d",
+            timeframe=demand_timeframe,
         )
         tiktok = TikTokSearchExtractor(client=active_client)
         demand_jobs: list[tuple[str, str, str]] = []
@@ -282,8 +340,8 @@ def run(
                 if source == "google_trends":
                     records = [
                         record
-                        for record in trends.extract([keyword], [geo])
-                        if _in_window(record, window_start, window_end)
+                        for record in trends.extract([keyword], [geo], anchor_keyword=demand_anchor)
+                        if _in_window(record, demand_cutoff, window_end)
                     ]
                 else:
                     records = tiktok.extract_snapshot([keyword], [geo])
@@ -301,10 +359,22 @@ def run(
 
     products = normalize_products(raw_products)
     demand = normalize_demand_records(raw_demand) if raw_demand else []
+    if include_demand:
+        for record in demand:
+            record.setdefault("request_id", demand_request_id)
+            record.setdefault("timeframe", demand_timeframe)
+            record.setdefault("anchor_keyword", cluster)
     correlation_map = _dynamic_keyword_map(
         base_keyword_map, cluster, used_keywords
     )
     links = build_product_demand_links(products, demand, correlation_map)
+    tracked_skipped = sum(int(stats.get("tracked_skipped", 0) or 0) for stats in source_stats)
+    # Chamadas pagas reais da execução: 1 busca por fonte + 1 raspagem por
+    # registro/erro de detalhe (A3.5).
+    discovery_calls = len(source_list) + sum(
+        int(stats.get("records_count", 0) or 0) + int(stats.get("errors_count", 0) or 0)
+        for stats in source_stats
+    )
 
     summary: dict[str, Any] = {
         "term": requested_term,
@@ -327,10 +397,18 @@ def run(
         "demand_signal_ids": [item["id"] for item in demand],
         "sources": source_stats,
         "failures": failures,
+        "tracked_skipped": tracked_skipped,
+        "tracked_new": 0,
         "dry_run": dry_run,
+        "discovery_max_calls": discovery_budget,
+        "discovery_calls": discovery_calls,
     }
 
     if not products and not demand:
+        if tracked_skipped > 0:
+            # Tudo já estava em tracked_listings: sucesso vazio, sem falha.
+            LOGGER.info("Descoberta sem novidades: %d candidatos já acompanhados", tracked_skipped)
+            return summary
         messages = "; ".join(item["message"] for item in failures[:3])
         raise RuntimeError(f"A coleta não retornou dados. {messages}".strip())
 
@@ -345,7 +423,11 @@ def run(
             upsert_demand_signals(demand, session=session)
             session.flush()
             upsert_product_demand_links(links, session=session)
+            # Descoberta (F1.4): candidatos novos aprovados viram CANDIDATE/tier 3.
+            tracked = register_new_listings(session, products, term=requested_term)
             session.commit()
+            summary["tracked_new"] = tracked["tracked_new"]
+            summary["tracked_observation_ids"] = tracked["tracked_observation_ids"]
             break
         except OperationalError:
             session.rollback()

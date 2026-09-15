@@ -49,9 +49,9 @@ describe('parseGoogleShopping', () => {
       (r) => r.externalProductId === 'catalogid:12094172361112023352',
     );
     expect(listing).toBeDefined();
-    expect(listing?.marketplace).toBe('google-shopping');
+    expect(listing?.marketplace).toBe('google_shopping');
     expect(listing?.naturalKey).toBe(
-      'google-shopping|catalogid:12094172361112023352',
+      'google_shopping|catalogid:12094172361112023352',
     );
     expect(listing?.title).toBe('Eaton 7513W-BOX Rocker Switch');
     expect(listing?.priceMin).toBe(15.38);

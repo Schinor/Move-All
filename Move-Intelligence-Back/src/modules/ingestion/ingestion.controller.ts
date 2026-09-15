@@ -1,6 +1,7 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { RunIntelligenceCollectionDto } from './dto/run-intelligence-collection.dto';
+import { RunTrackListingsDto } from './dto/run-track-listings.dto';
 import { RunWeeklyIntelligenceCollectionDto } from './dto/run-weekly-intelligence-collection.dto';
 import { RunCollectionDto } from './dto/run-collection.dto';
 import { IngestionService } from './ingestion.service';
@@ -30,6 +31,13 @@ export class IngestionController {
   @HttpCode(202)
   runWeeklyIntelligenceCollection(@Body() dto: RunWeeklyIntelligenceCollectionDto) {
     return this.intelligence.startWeekly(dto);
+  }
+
+  @Post('intelligence/track-listings')
+  @Throttle({ default: { limit: 2, ttl: 60_000 } })
+  @HttpCode(202)
+  runTrackListings(@Body() dto: RunTrackListingsDto) {
+    return this.intelligence.startTrackListings(dto);
   }
 
   @Get('jobs')

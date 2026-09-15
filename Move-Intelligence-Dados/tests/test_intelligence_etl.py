@@ -60,7 +60,9 @@ def test_entity_identity_normalizes_synonyms_units_and_identifiers():
     assert normalized["attrs"]["kg"] == "20"
 
 
-def test_demand_uses_min_max_across_keywords_in_same_comparison_set():
+def test_demand_keeps_raw_values_without_rescaling():
+    # F1.6: sem min-max por execução — trend_index = raw_value, para que
+    # execuções diferentes sejam comparáveis e o histórico não seja reescrito.
     signals = normalize_demand_records(
         [
             {"keyword": "resistance bands", "geo": "US", "source": "google_trends", "week_start": "2026-08-03", "raw_value": 10, "captured_at": "2026-08-08"},
@@ -69,7 +71,7 @@ def test_demand_uses_min_max_across_keywords_in_same_comparison_set():
         ]
     )
     by_keyword = {item["keyword"]: item["trend_index"] for item in signals}
-    assert by_keyword == {"resistance bands": 0.0, "dumbbells": 50.0, "walking pad": 100.0}
+    assert by_keyword == {"resistance bands": 10.0, "dumbbells": 20.0, "walking pad": 30.0}
 
 
 def test_cluster_map_creates_auditable_links():
@@ -130,6 +132,50 @@ def test_bright_data_trends_parser_reads_timeline_data():
         ["resistance bands"], ["US"]
     )
     assert len(extracted) == 1
+
+
+def test_trends_anchor_vai_na_mesma_requisicao_com_serie_propria():
+    """A3.8: keyword + âncora na mesma requisição; âncora vira série própria."""
+
+    class FakeAnchor:
+        def __init__(self):
+            self.urls: list[str] = []
+
+        def google_trends(self, url):
+            self.urls.append(url)
+            return {
+                "timelineData": [
+                    {"time": "2026-08-03", "value": [20, 80]},
+                    {"time": "2026-08-10", "value": [40, 90]},
+                ]
+            }
+
+    client = FakeAnchor()
+    extracted = GoogleTrendsExtractor(client=client).extract(
+        ["haltere"], ["BR"], anchor_keyword="academia"
+    )
+
+    # Uma única requisição com os dois termos.
+    assert len(client.urls) == 1
+    assert "academia" in client.urls[0]
+    keywords = sorted(record["keyword"] for record in extracted)
+    assert keywords == ["academia", "academia", "haltere", "haltere"]
+    assert {record["anchor_keyword"] for record in extracted} == {"academia"}
+
+
+def test_trends_sem_serie_da_ancora_mantem_so_a_keyword():
+    """A3.8: Bright Data sem a série da âncora → só crescimento por keyword."""
+
+    class FakeSingle:
+        def google_trends(self, url):
+            return {"timelineData": [{"time": "2026-08-03", "value": [20]}]}
+
+    extracted = GoogleTrendsExtractor(client=FakeSingle()).extract(
+        ["haltere"], ["BR"], anchor_keyword="academia"
+    )
+
+    assert [record["keyword"] for record in extracted] == ["haltere"]
+    assert extracted[0]["anchor_keyword"] == "academia"
 
 
 def test_tiktok_search_is_separate_from_tiktok_shop():
@@ -322,13 +368,16 @@ def test_weekly_pipeline_walks_keyword_variants_and_upserts(tmp_path):
 
     assert result["terms_requested"] == 2
     assert result["terms_completed"] == 2
-    assert result["products"] == 2
+    # F1.4: a 2ª variante encontra o mesmo anúncio já registrado pela 1ª e não
+    # raspa de novo (dedup por tracked_listings) — por isso 1 produto, não 2.
+    assert result["products"] == 1
     assert result["unique_products"] == 1
     session = get_session(database_url)
     try:
         assert session.query(ProductSnapshotModel).count() == 1
         stored = session.query(ProductSnapshotModel).one()
-        assert stored.source_specific["keyword_variant"] == 1
+        # F1.4: a variante 1 foi dedupada (não persistiu), então vale a 0.
+        assert stored.source_specific["keyword_variant"] == 0
         assert stored.source_specific["collection_window_start"]
     finally:
         session.close()
@@ -340,7 +389,7 @@ class TestIntelligenceETL(unittest.TestCase):
     def test_contracts_without_pytest(self):
         test_product_normalization_preserves_native_evidence()
         test_entity_identity_normalizes_synonyms_units_and_identifiers()
-        test_demand_uses_min_max_across_keywords_in_same_comparison_set()
+        test_demand_keeps_raw_values_without_rescaling()
         test_cluster_map_creates_auditable_links()
         test_bright_data_trends_parser_reads_timeline_data()
         test_tiktok_search_is_separate_from_tiktok_shop()

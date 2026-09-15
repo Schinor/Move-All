@@ -36,14 +36,19 @@ def upsert_demand_signals(
                 "trend_index": record["trend_index"],
                 "raw_value": record.get("raw_value"),
                 "captured_at": record["captured_at"],
+                "request_id": record.get("request_id"),
+                "timeframe": record.get("timeframe"),
+                "anchor_keyword": record.get("anchor_keyword"),
             }
             if row is None:
                 row = DemandSignalModel(**values)
                 db.add(row)
-            else:
+            elif row.trend_index is None or row.raw_value is None:
+                # Semana ainda sem dado completo: só preenche o que estava nulo.
                 for field, value in values.items():
                     if field != "id":
                         setattr(row, field, value)
+            # Semana já observada com dado completo: nunca sobrescreve (F1.6).
             ids.append(str(row.id or record["id"]))
 
         if owns_session:

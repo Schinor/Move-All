@@ -15,8 +15,10 @@ MODE="${1:-2y}"
 
 case "$MODE" in
   2y|historical)
+    echo "[Move Intelligence] AVISO: isto GERA DADOS SINTÉTICOS (catálogo de demonstração," \
+         "não é coleta real) e marca tudo com is_synthetic=true."
     echo "[Move Intelligence] Disparando coleta histórica pré-formatada de 2 anos..."
-    python3 main.py --pipeline historical-collection --period-years 2
+    python3 main.py --pipeline historical-collection --period-years 2 --allow-synthetic
     ;;
   weekly)
     echo "[Move Intelligence] Disparando varredura semanal de catálogo..."

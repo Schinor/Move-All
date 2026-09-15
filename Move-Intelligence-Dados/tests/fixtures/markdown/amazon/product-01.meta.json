@@ -1,0 +1,10 @@
+{
+  "source": "amazon",
+  "url": "https://www.amazon.com/dp/B0G7KD6Z8F",
+  "discovery": "url-direta",
+  "discovery_url": "https://www.amazon.com/s?k=adjustable+dumbbell+52.5",
+  "captured_at": "2026-09-14T23:54:17.711800+00:00",
+  "chars": 165351,
+  "redactions": 0,
+  "candidates": 1
+}

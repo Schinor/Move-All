@@ -15,6 +15,8 @@ import {
 
 const MARKETPLACE_SOURCES = [
   'alibaba',
+  // A4: fonte de sourcing/custo (nunca preço de venda BR).
+  'aliexpress',
   'amazon',
   'amazon_br',
   'mercado_livre',
@@ -31,7 +33,7 @@ export class RunIntelligenceCollectionDto {
 
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(8)
+  @ArrayMaxSize(9)
   @IsIn(MARKETPLACE_SOURCES, { each: true })
   sources!: string[];
 

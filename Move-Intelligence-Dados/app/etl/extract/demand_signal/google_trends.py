@@ -8,12 +8,16 @@ que o dado não seja substituído por uma simulação.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import date, datetime, timezone
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 from urllib.parse import quote, urlencode
 
 from ..marketplace.common import BrightDataClient
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _as_number(value: Any) -> Optional[float]:
@@ -132,21 +136,35 @@ def parse_bright_data_response(
     keyword: str,
     geo: str,
     captured_at: Optional[date] = None,
+    *,
+    keyword_index: int = 0,
+    anchor_keyword: Optional[str] = None,
+    anchor_index: Optional[int] = None,
 ) -> list[dict[str, Any]]:
-    """Converte ``timelineData`` do Bright Data em registros brutos do ETL."""
+    """Converte ``timelineData`` do Bright Data em registros brutos do ETL.
+
+    Com âncora (A3.8), a requisição traz uma série por termo: ``keyword_index``
+    é a posição da keyword e ``anchor_index`` a da âncora. A série da âncora
+    vira linhas próprias (mesmo ``request_id``/timeframe a jusante), para que
+    execuções diferentes sejam encadeadas sem reescalar o histórico.
+    """
 
     captured = captured_at or datetime.now(timezone.utc).date()
+
+    def _at(values: Any, index: int) -> Optional[float]:
+        if isinstance(values, list):
+            return _as_number(values[index]) if len(values) > index else None
+        return _as_number(values) if index == 0 else None
+
     rows: list[dict[str, Any]] = []
     for item in _timeline_rows(response):
         observed_date = _date_from_value(
             item.get("time") or item.get("date") or item.get("week_start")
         )
         values = item.get("value")
-        if isinstance(values, list):
-            value = values[0] if values else None
-        else:
-            value = values or item.get("raw_value") or item.get("interest_value")
-        number = _as_number(value)
+        if values is None:
+            values = item.get("raw_value") or item.get("interest_value")
+        number = _at(values, keyword_index)
         if observed_date is None or number is None:
             continue
         rows.append(
@@ -157,8 +175,23 @@ def parse_bright_data_response(
                 "week_start": observed_date.isoformat(),
                 "raw_value": number,
                 "captured_at": captured.isoformat(),
+                "anchor_keyword": anchor_keyword,
             }
         )
+        if anchor_keyword and anchor_index is not None:
+            anchor_number = _at(values, anchor_index)
+            if anchor_number is not None:
+                rows.append(
+                    {
+                        "keyword": anchor_keyword,
+                        "geo": geo,
+                        "source": "google_trends",
+                        "week_start": observed_date.isoformat(),
+                        "raw_value": anchor_number,
+                        "captured_at": captured.isoformat(),
+                        "anchor_keyword": anchor_keyword,
+                    }
+                )
     if not rows:
         raise ValueError(f"Bright Data não retornou timelineData para {keyword!r}/{geo}")
     return rows
@@ -177,16 +210,19 @@ class GoogleTrendsExtractor:
         self.timeframe = timeframe
         self.base_url = base_url
 
-    def build_url(self, keyword: str, geo: str) -> str:
-        params = {
-            "date": self.timeframe,
-            "q": keyword,
-            "brd_trends": "timeseries",
-            "brd_json": "1",
-        }
+    def build_url(self, keywords: Sequence[str] | str, geo: str) -> str:
+        terms = [keywords] if isinstance(keywords, str) else [term for term in keywords if str(term).strip()]
+        if not terms:
+            raise ValueError("Google Trends exige ao menos 1 termo")
+        params = [
+            ("date", self.timeframe),
+            *[("q", term) for term in terms],
+            ("brd_trends", "timeseries"),
+            ("brd_json", "1"),
+        ]
         if geo.upper() != "GLOBAL":
-            params["geo"] = geo.lower()
-        return f"{self.base_url}?{urlencode(params, quote_via=quote)}"
+            params.append(("geo", geo.lower()))
+        return f"{self.base_url}?{urlencode(params, quote_via=quote, doseq=True)}"
 
     def extract(
         self,
@@ -195,13 +231,51 @@ class GoogleTrendsExtractor:
         *,
         client: Optional[BrightDataClient] = None,
         captured_at: Optional[date] = None,
+        anchor_keyword: Optional[str] = None,
     ) -> list[dict[str, Any]]:
+        """Coleta a janela; com âncora, keyword + âncora na MESMA requisição.
+
+        A3.8: a âncora (ex.: "academia") torna execuções comparáveis sem
+        reescalar. Se a Bright Data não aceitar múltiplos termos, registra o
+        aviso e mantém só o crescimento por keyword (sem âncora).
+        """
         active_client = client or self.client or BrightDataClient()
+        anchor = (anchor_keyword or "").strip() or None
         collected: list[dict[str, Any]] = []
         for geo in geos:
             for keyword in keywords:
-                response = active_client.google_trends(self.build_url(keyword, geo))
-                collected.extend(parse_bright_data_response(response, keyword, geo, captured_at))
+                terms = [keyword] + (
+                    [anchor] if anchor and anchor.casefold() != keyword.strip().casefold() else []
+                )
+                with_anchor = len(terms) > 1
+                try:
+                    response = active_client.google_trends(self.build_url(terms, geo))
+                    rows = parse_bright_data_response(
+                        response, keyword, geo, captured_at,
+                        anchor_keyword=anchor if with_anchor else None,
+                        anchor_index=1 if with_anchor else None,
+                    )
+                    if with_anchor and not any(row["keyword"] == anchor for row in rows):
+                        LOGGER.warning(
+                            "Bright Data não retornou a série da âncora %r; "
+                            "mantido só o crescimento por keyword",
+                            anchor,
+                        )
+                except ValueError:
+                    raise
+                except Exception as error:
+                    if not with_anchor:
+                        raise
+                    # Possível rejeição a múltiplos termos: registra e tenta só
+                    # a keyword, sem âncora.
+                    LOGGER.warning(
+                        "Bright Data não aceitou múltiplos termos no Trends "
+                        "(%s); mantido só o crescimento por keyword, sem âncora",
+                        error,
+                    )
+                    response = active_client.google_trends(self.build_url([keyword], geo))
+                    rows = parse_bright_data_response(response, keyword, geo, captured_at)
+                collected.extend(rows)
         return collected
 
 

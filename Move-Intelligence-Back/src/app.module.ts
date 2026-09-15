@@ -14,14 +14,11 @@ import { DashboardApiModule } from './modules/dashboard-api/dashboard-api.module
 import { ImportsModule } from './modules/imports/imports.module';
 import { IngestionModule } from './modules/ingestion/ingestion.module';
 import { KeywordsModule } from './modules/keywords/keywords.module';
-import { MarginEngineModule } from './modules/margin-engine/margin-engine.module';
 import { NormalizationModule } from './modules/normalization/normalization.module';
-import { OpportunityEngineModule } from './modules/opportunity-engine/opportunity-engine.module';
 import { ProductMatchingModule } from './modules/product-matching/product-matching.module';
 import { ProductsModule } from './modules/products/products.module';
 import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
-import { TrendEngineModule } from './modules/trend-engine/trend-engine.module';
 import { BusinessRulesModule } from './shared/business-rules/business-rules.module';
 import { AppConfigModule } from './shared/config/app-config.module';
 import { DatabaseModule } from './shared/database/database.module';
@@ -41,9 +38,6 @@ import { RedisModule } from './shared/redis/redis.module';
     NormalizationModule,
     ProductMatchingModule,
     SnapshotsModule,
-    TrendEngineModule,
-    MarginEngineModule,
-    OpportunityEngineModule,
     AlertsModule,
     SuppliersModule,
     ProductsModule,

@@ -35,4 +35,59 @@ export const DEFAULT_BUSINESS_RULES = {
     factoryPriceDrop30d: -0.18,
     minimumOpportunityScore: 0.7,
   },
+  discovery: {
+    // Teto de chamadas pagas por execução da descoberta, contando busca +
+    // raspagens (A3.5). Espelho de DISCOVERY_MAX_CALLS no ETL Python.
+    maxCalls: 300,
+  },
+  tracking: {
+    // Anúncio vira DEAD após N "not_found" seguidos; preço fora de ±X% da
+    // mediana das últimas 4 observações ok vira "partial" (A3.7/A3.1).
+    notFoundAfterFailures: 3,
+    priceDeviationPct: 60,
+  },
+  reviewSampling: {
+    // Nova amostra de textos quando reviews_count crescer ≥ N ou ≥ X%
+    // desde reviews_count_at_sample; até Y por faixa 1–2/3/4–5 (A5).
+    minNewReviews: 10,
+    minGrowthPct: 10,
+    perBand: 10,
+  },
+  sourcing: {
+    // "Alto volume" (A6): maior soma de vendidos/transações, ou presença em
+    // ≥ N anúncios do mesmo cluster. Foco B2B (Alibaba, 1688, AliExpress).
+    highVolumeMinListings: 2,
+  },
+  socialSourcesStatus: {
+    // A7 (14/09/2026): descoberta TikTok Shop acha produtos no SERP, mas as
+    // páginas /pdp/ voltam vazias no unlocker (0/2) — fonte indisponível: o
+    // momentum ignora "social" e a UI mostra "sinal social indisponível" (B6).
+    tiktok_shop: 'unavailable',
+  },
+  moveScoreBands: {
+    // B1 (decisão 5): faixas configuráveis do Move Score. Verde > green,
+    // amarelo green–yellow, vermelho <= yellow. Padrão 70/50.
+    green: 70,
+    yellow: 50,
+  },
+  momentum: {
+    // B2 (decisão 7): pesos e limiares do momentum. Crescimento de vendas =
+    // inclinação de log(vendas) nas últimas 8 semanas; busca = variação 8
+    // semanas contra 8 anteriores (+ YoY quando existir). Default 0,6/0,4.
+    salesWeight: 0.6,
+    searchWeight: 0.4,
+    upThresholdPct: 10,
+    downThresholdPct: -10,
+  },
+  quadrant: {
+    // B3 (decisões 2-3): "financeiro bom" = faixa verde por padrão; permite
+    // incluir o amarelo depois sem trocar código.
+    financialThreshold: 'green',
+  },
+  riskCauses: {
+    // B4 (decisão 4): limiares estruturais comparando premissas com receita.
+    lowMarginPct: 10,
+    highImportCostPct: 70,
+    highInvestmentMonths: 2,
+  },
 } as const;

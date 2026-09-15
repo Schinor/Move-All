@@ -1,0 +1,26 @@
+{
+  "price": 179.99,
+  "currency": "USD",
+  "rating": 4.4,
+  "reviews_count": 2463,
+  "sold_count_raw": null,
+  "sold_count_lower": null,
+  "best_seller_rank": null,
+  "in_stock": true,
+  "scrape_status": "ok",
+  "parser_version": "amazon@2",
+  "title": "ATIVAFIT Adjustable Dumbbell Set of 2, 5–25LB Quick Dial Free Weights with Safety Lock & Anti-Slip Steel Handle, Space Saving Home Gym Equipment for Beginner Home Workouts and Light Strength Training, Suitable for Men and Women, Black : Sports & Outdoors",
+  "seller": "AtivaFit",
+  "rating_distribution": {
+    "1": 5.0,
+    "2": 2.0,
+    "3": 6.0,
+    "4": 17.0,
+    "5": 70.0
+  },
+  "supplier_name": null,
+  "supplier_years": null,
+  "supplier_verified": null,
+  "moq": null,
+  "price_tiers": null
+}

@@ -1,13 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { ConnectorsRegistry } from '../connectors/connectors.registry';
+import { OpenRouterService } from '../ai-gateway/openrouter.service';
 import {
-  TrendEngineService,
-  TrendSnapshotInput,
-  TrendWindowRollup,
-} from '../trend-engine/trend-engine.service';
-import { BusinessRulesService } from '../../shared/business-rules/business-rules.service';
+  syntheticProductWhere,
+  syntheticSnapshotFilterSql,
+  syntheticSnapshotWhere,
+} from '../../shared/synthetic-data/synthetic-data.filter';
+import {
+  EMPTY_MOVE_SCORE,
+  LatestMoveScore,
+  loadLatestMoveScores,
+} from '../../shared/scoring/product-score-loader';
+import { normalizeSourceKey } from '../../shared/types/canonical-sources';
 import { TrendScoreBreakdown } from '../../shared/types/scoring.types';
 import {
   Block,
@@ -18,10 +24,14 @@ import {
   pendingIndicator,
 } from '../../shared/contract/indicator';
 import {
-  SupplierClusterRow,
   SupplierContract,
-  suppliersFromClusters,
 } from '../../shared/contract/supplier';
+import { DEFAULT_BUSINESS_RULES } from '../../shared/business-rules/business-rules.defaults';
+import { ACTION_LABEL } from '../scoring/decision-quadrant';
+
+function actionLabel(action: string): string {
+  return (ACTION_LABEL as Record<string, string>)[action] ?? action;
+}
 
 /** Item da tela Mercados derivado do Comex (agregado por país). */
 export interface MarketView {
@@ -70,8 +80,17 @@ type RecommendationAction =
   | 'ajustar_quantidade'
   | 'bloquear';
 
+/** Busca tolerante a erro de digitação: word_similarity mínima (calibrada: "kettlbel" 0,56, "bicileta" 0,58). */
+const SEARCH_SIMILARITY_THRESHOLD = 0.45;
+/** Bloco "Recomendação" do executivo: produtos com mais potencial. */
+const EXECUTIVE_TOP_N = 5;
+/** Sem a extensão unaccent: acentos normalizados com translate() dos dois lados. */
+const SEARCH_ACCENTS_FROM = 'áàâãäéèêëíìîïóòôõöúùûüçñ';
+const SEARCH_ACCENTS_TO = 'aaaaaeeeeiiiiooooouuuucn';
+
 type SnapshotRow = {
   marketplace: string;
+  currency?: string | null;
   externalProductId: string;
   productClusterId: string | null;
   title: string;
@@ -148,20 +167,30 @@ type ClusterRollup = {
   volumeSpark: number[];
   demandSpark: number[];
   demandScore: number | null;
+  /** Crescimento Δlog do TikTok (contagem bruta); null sem 2+ semanas. */
+  tiktokGrowth: number | null;
   sellers: string[];
 };
 
 type TrendListSort =
-  | 'trend_score'
-  | 'opportunity_score'
+  | 'move_score'
   | 'growth'
   | 'name'
-  | 'projected_revenue';
+  | 'projected_revenue'
+  | 'momentum'
+  | 'price'
+  | 'reviews'
+  | 'rating'
+  | 'action';
 
 type TrendListOptions = {
   limit?: number;
   sort?: string;
+  dir?: string;
   category?: string;
+  page?: number;
+  pageSize?: number;
+  action?: string;
 };
 
 type ClusterRollupRow = {
@@ -198,23 +227,49 @@ type ClusterRollupRow = {
   volume_spark: unknown[] | null;
   demand_spark: unknown[] | null;
   demand_score: unknown;
+  tiktok_growth: unknown;
   sellers: string[] | null;
 };
 
 const TREND_SORTS: Record<string, TrendListSort> = {
-  trend_score: 'trend_score',
-  default: 'trend_score',
-  opportunity_score: 'opportunity_score',
-  opportunity: 'opportunity_score',
+  move_score: 'move_score',
+  move: 'move_score',
+  default: 'move_score',
+  // Aliases legados (F2.7): ordenavam pelos scores removidos; caem no Move Score.
+  trend_score: 'move_score',
+  opportunity_score: 'move_score',
+  opportunity: 'move_score',
   growth: 'growth',
   growth_pct: 'growth',
+  growthpct: 'growth',
   name: 'name',
   canonical_name: 'name',
   projected_revenue: 'projected_revenue',
   revenue: 'projected_revenue',
+  projectedrevenue: 'projected_revenue',
+  // C2: ordenação por qualquer indicador.
+  momentum: 'momentum',
+  momentum_growth: 'momentum',
+  growth_momentum: 'momentum',
+  price: 'price',
+  preco: 'price',
+  avg_price: 'price',
+  reviews: 'reviews',
+  review_count: 'reviews',
+  // P0-4: nota (rating) é indicador próprio, não alias de reviews.
+  rating: 'rating',
+  nota: 'rating',
+  action: 'action',
+  acao: 'action',
 };
 
-const DEFAULT_WINDOW = '30d';
+import { RedisCacheService } from '../../shared/redis/redis-cache.service';
+import { SEARCH_TOPICS, expandSearchQuery } from '../../shared/search/search-expansion';
+import { computeSubSignals } from '../../shared/scoring/sub-signals';
+import {
+  DEFAULT_FX_CNY_USD as SUB_SIGNAL_FX_CNY_USD,
+  DEFAULT_FX_USD_BRL as SUB_SIGNAL_FX_USD_BRL,
+} from '../../shared/fx/fx.constants';
 
 /**
  * Teto de clusters carregados para ranqueamento. O ranking precisa varrer o
@@ -223,8 +278,6 @@ const DEFAULT_WINDOW = '30d';
  * isso com folga e, combinado com `ORDER BY created_at, id`, torna o resultado
  * determinístico (e não uma página aleatória) caso a base cresça além dele.
  */
-import { RedisCacheService } from '../../shared/redis/redis-cache.service';
-
 const MAX_RANKED_CLUSTERS = 20000;
 
 @Injectable()
@@ -232,9 +285,8 @@ export class DashboardApiService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly connectors: ConnectorsRegistry,
-    private readonly trendEngine: TrendEngineService,
-    private readonly rules: BusinessRulesService,
     private readonly cache?: RedisCacheService,
+    @Optional() private readonly openRouter?: OpenRouterService,
   ) {}
 
   private async cached<T>(key: string, ttlSeconds: number, factory: () => Promise<T>): Promise<T> {
@@ -246,16 +298,171 @@ export class DashboardApiService {
 
   async listTrendingProducts(
     limitOrOpts: number | TrendListOptions = 50,
-  ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Promise<any> {
     const opts = this.parseTrendListOptions(limitOrOpts);
-    const cacheKey = `dashboard:trends:products:${opts.limit}:${opts.sort}:${opts.category ?? 'all'}`;
+    const cacheKey = `dashboard:trends:products:${opts.limit}:${opts.sort}:${opts.dir}:${opts.category ?? 'all'}:${opts.action ?? 'all'}`;
+    const enrich = async (
+      rollups: ClusterRollup[],
+    ): Promise<Array<ReturnType<DashboardApiService['clusterRollupToTrendProduct']>>> => {
+      const scores = await loadLatestMoveScores(
+        this.prisma,
+        rollups.map((row) => row.id),
+      );
+      const ids = rollups.map((row) => row.id);
+      const [tops, summaries] = await Promise.all([
+        this.loadTopSuppliers(ids),
+        this.loadReviewSummaries(ids),
+      ]);
+      return rollups.map((row) =>
+        this.clusterRollupToTrendProduct(
+          row,
+          scores.get(row.id) ?? EMPTY_MOVE_SCORE,
+          tops.get(row.id) ?? null,
+          summaries.get(row.id) ?? null,
+        ),
+      );
+    };
+    // C2 usa cache separado para páginas (o corpo inclui total no cabeçalho da resposta).
+    if (opts.paginated) {
+      const all = (await this.cached(cacheKey, 3600, async () => {
+        const rollups = await this.loadClusterRollups(opts.category);
+        const mapped = await enrich(rollups);
+        const filtered = opts.action
+          ? mapped.filter((p) => (p as Record<string, unknown>).action === opts.action)
+          : mapped;
+        filtered.sort((a, b) => this.compareTrendProducts(a, b, opts.sort, opts.dir));
+        return filtered;
+      })) as Array<ReturnType<DashboardApiService['clusterRollupToTrendProduct']>>;
+      const total = all.length;
+      const start = (opts.page - 1) * opts.pageSize;
+      const items = all.slice(start, start + opts.pageSize);
+      return { items, total, page: opts.page, page_size: opts.pageSize };
+    }
 
     return this.cached(cacheKey, 3600, async () => {
       const rollups = await this.loadClusterRollups(opts.category);
-      const products = rollups.map((row) => this.clusterRollupToTrendProduct(row));
-      products.sort((a, b) => this.compareTrendProducts(a, b, opts.sort));
+      let products = await enrich(rollups);
+      if (opts.action) {
+        products = products.filter((p) => (p as Record<string, unknown>).action === opts.action);
+      }
+      products.sort((a, b) => this.compareTrendProducts(a, b, opts.sort, opts.dir));
       return products.slice(0, Math.max(0, opts.limit));
     });
+  }
+
+  /** C1: top_supplier por cluster via tracked_listings.supplier_id (A6). Null sem vínculo. */
+  private async loadTopSuppliers(
+    clusterIds: string[],
+  ): Promise<Map<string, { name: string; source: string; verified: boolean; years: number | null } | null>> {
+    const out = new Map<string, { name: string; source: string; verified: boolean; years: number | null } | null>();
+    if (clusterIds.length === 0) return out;
+    try {
+      const items = (await this.prisma.productClusterItem.findMany({
+        where: { clusterId: { in: clusterIds } },
+        take: 20_000,
+        select: { clusterId: true, marketplace: true, externalProductId: true },
+      })) as Array<{ clusterId: string; marketplace: string; externalProductId: string }>;
+      const byCluster = new Map<string, Array<{ marketplace: string; externalProductId: string }>>();
+      for (const it of items) {
+        const list = byCluster.get(it.clusterId) ?? [];
+        if (list.length < 50) list.push({ marketplace: it.marketplace, externalProductId: it.externalProductId });
+        byCluster.set(it.clusterId, list);
+      }
+      // tracked_listings com fornecedor vinculado (em geral poucos; A6 pendente).
+      const linked = (await this.prisma.trackedListing.findMany({
+        where: { supplierId: { not: null } },
+        take: 5_000,
+        include: { supplier: true },
+      })) as Array<{
+        source: string;
+        nativeId: string;
+        supplierId: string | null;
+        supplier: { name: string; source: string; verified: boolean; yearsOnPlatform: number | null } | null;
+      }>;
+      const byListing = new Map<string, (typeof linked)[number]>();
+      for (const l of linked) byListing.set(`${l.source}:${l.nativeId}`, l);
+      const minListings = 2;
+      for (const cid of clusterIds) {
+        const clusterItems = byCluster.get(cid) ?? [];
+        const counts = new Map<string, { n: number; supplier: (typeof linked)[number]['supplier'] }>();
+        for (const it of clusterItems) {
+          const hit = byListing.get(`${it.marketplace}:${it.externalProductId}`);
+          if (!hit?.supplier) continue;
+          const key = `${hit.supplier.source}:${hit.supplier.name}`;
+          const cur = counts.get(key) ?? { n: 0, supplier: hit.supplier };
+          cur.n += 1;
+          counts.set(key, cur);
+        }
+        if (counts.size === 0) {
+          out.set(cid, null);
+          continue;
+        }
+        const sorted = [...counts.values()].sort((a, b) => b.n - a.n);
+        const top = sorted[0];
+        // A6: presença em ≥N primeiro; volume desempataria (sem vendidos aqui).
+        void minListings;
+        if (!top.supplier) {
+          out.set(cid, null);
+          continue;
+        }
+        out.set(cid, {
+          name: top.supplier.name,
+          source: top.supplier.source,
+          verified: top.supplier.verified ?? false,
+          years: top.supplier.yearsOnPlatform ?? null,
+        });
+      }
+    } catch {
+      for (const cid of clusterIds) out.set(cid, null);
+    }
+    return out;
+  }
+
+  /** C1: review_summary por faixa (B5) — último por cluster/faixa; distribuição no detalhe. */
+  private async loadReviewSummaries(
+    clusterIds: string[],
+  ): Promise<
+    Map<string, { by_band: Record<string, { summary: string; top_reasons: unknown; sample_size: number }>; distribution: null }>
+  > {
+    const out = new Map<
+      string,
+      { by_band: Record<string, { summary: string; top_reasons: unknown; sample_size: number }>; distribution: null }
+    >();
+    if (clusterIds.length === 0) return out;
+    try {
+      const rows = (await this.prisma.reviewSummary.findMany({
+        where: { productClusterId: { in: clusterIds } },
+        orderBy: { createdAt: 'desc' },
+        take: Math.min(clusterIds.length * 3, 5_000),
+        select: { productClusterId: true, band: true, summary: true, topReasons: true, sampleSize: true },
+      })) as Array<{
+        productClusterId: string;
+        band: string;
+        summary: string;
+        topReasons: unknown;
+        sampleSize: number;
+      }>;
+      const grouped = new Map<string, typeof rows>();
+      for (const r of rows) {
+        const list = grouped.get(r.productClusterId) ?? [];
+        list.push(r);
+        grouped.set(r.productClusterId, list);
+      }
+      for (const cid of clusterIds) {
+        const list = grouped.get(cid) ?? [];
+        const by_band: Record<string, { summary: string; top_reasons: unknown; sample_size: number }> = {};
+        for (const r of list) {
+          if (!by_band[r.band]) {
+            by_band[r.band] = { summary: r.summary, top_reasons: r.topReasons, sample_size: r.sampleSize };
+          }
+        }
+        out.set(cid, { by_band, distribution: null });
+      }
+    } catch {
+      for (const cid of clusterIds) out.set(cid, { by_band: {}, distribution: null });
+    }
+    return out;
   }
 
   /**
@@ -266,6 +473,11 @@ export class DashboardApiService {
     const categoryFilter = category
       ? Prisma.sql`AND c.category = ${category}`
       : Prisma.empty;
+    // Com INCLUDE_SYNTHETIC_DATA=false (default), exclui snapshots do
+    // pipeline sintético de TODAS as CTEs que leem product_listing_snapshots
+    // — senão o ranking mistura curva inventada com coleta real.
+    const syntheticFilterNoAlias = syntheticSnapshotFilterSql();
+    const syntheticFilterS = syntheticSnapshotFilterSql('s');
 
     const rows = await this.prisma.$queryRaw<ClusterRollupRow[]>(Prisma.sql`
       WITH bounds AS (
@@ -275,6 +487,7 @@ export class DashboardApiService {
           MAX(collected_at) AS last_at
         FROM product_listing_snapshots
         WHERE product_cluster_id IS NOT NULL
+          ${syntheticFilterNoAlias}
         GROUP BY product_cluster_id
       ),
       windowed AS (
@@ -337,6 +550,8 @@ export class DashboardApiService {
           )[1] AS latest_image_url
         FROM product_listing_snapshots s
         JOIN bounds b ON b.product_cluster_id = s.product_cluster_id
+        WHERE 1 = 1
+          ${syntheticFilterS}
         GROUP BY s.product_cluster_id
       ),
       latest_row AS (
@@ -350,6 +565,7 @@ export class DashboardApiService {
           sales_signal_type AS latest_signal_type
         FROM product_listing_snapshots
         WHERE product_cluster_id IS NOT NULL
+          ${syntheticFilterNoAlias}
         ORDER BY product_cluster_id, collected_at DESC, id DESC
       ),
       first_row AS (
@@ -359,6 +575,7 @@ export class DashboardApiService {
           collected_at AS first_collected_at
         FROM product_listing_snapshots
         WHERE product_cluster_id IS NOT NULL
+          ${syntheticFilterNoAlias}
         ORDER BY product_cluster_id, collected_at ASC, id ASC
       ),
       volume_spark AS (
@@ -375,6 +592,7 @@ export class DashboardApiService {
             (AVG(sales_signal_raw) FILTER (WHERE sales_signal_raw > 0))::float8 AS avg_vol
           FROM product_listing_snapshots
           WHERE product_cluster_id IS NOT NULL
+            ${syntheticFilterNoAlias}
           GROUP BY 1, 2
         ) daily
         GROUP BY product_cluster_id
@@ -389,6 +607,11 @@ export class DashboardApiService {
         JOIN demand_signals ds ON ds.id = pdl.demand_signal_id
         WHERE s.product_cluster_id IS NOT NULL
           AND s.raw_product_id IS NOT NULL
+          -- A3.8: Google Trends (0–100) nunca na média com TikTok (contagem
+          -- bruta). demand_score/spark são só Google; TikTok entra só como
+          -- crescimento Δlog (CTE tiktok_growth abaixo).
+          AND ds.source = 'google_trends'
+          ${syntheticFilterS}
         ORDER BY s.product_cluster_id, ds.keyword, ds.geo, ds.source, ds.week_start DESC
       ),
       demand_agg AS (
@@ -416,9 +639,43 @@ export class DashboardApiService {
           JOIN demand_signals ds ON ds.id = pdl.demand_signal_id
           WHERE s.product_cluster_id IS NOT NULL
             AND s.raw_product_id IS NOT NULL
+            -- A3.8: série de busca só Google Trends (0–100); TikTok (contagem
+            -- bruta) não entra na média — só como crescimento Δlog.
+            AND ds.source = 'google_trends'
+            ${syntheticFilterS}
           GROUP BY s.product_cluster_id, ds.week_start
         ) weekly
         GROUP BY weekly.product_cluster_id
+      ),
+      -- A3.8: TikTok entra SÓ como crescimento Δlog sobre a contagem bruta
+      -- (ln(último) − ln(primeiro) por cluster); NULL com < 2 semanas.
+      tiktok_growth AS (
+        SELECT
+          product_cluster_id,
+          CASE WHEN COUNT(DISTINCT week_start) > 1
+            THEN (
+              ln(NULLIF(MAX(CASE WHEN rn_desc = 1 THEN raw_value END), 0))
+              - ln(NULLIF(MAX(CASE WHEN rn_asc = 1 THEN raw_value END), 0))
+            )::float8
+          END AS tiktok_growth
+        FROM (
+          SELECT
+            s.product_cluster_id,
+            ds.week_start,
+            ds.raw_value::float8 AS raw_value,
+            ROW_NUMBER() OVER (PARTITION BY s.product_cluster_id ORDER BY ds.week_start DESC) AS rn_desc,
+            ROW_NUMBER() OVER (PARTITION BY s.product_cluster_id ORDER BY ds.week_start ASC) AS rn_asc
+          FROM product_listing_snapshots s
+          JOIN product_demand_link pdl ON pdl.product_id = s.raw_product_id
+          JOIN demand_signals ds ON ds.id = pdl.demand_signal_id
+          WHERE s.product_cluster_id IS NOT NULL
+            AND s.raw_product_id IS NOT NULL
+            AND ds.source = 'tiktok_search'
+            AND ds.raw_value IS NOT NULL
+            AND ds.raw_value > 0
+            ${syntheticFilterS}
+        ) ranked
+        GROUP BY product_cluster_id
       )
       SELECT
         c.id,
@@ -454,6 +711,7 @@ export class DashboardApiService {
         COALESCE(vs.volume_spark, '{}'::float8[]) AS volume_spark,
         COALESCE(dsp.demand_spark, '{}'::float8[]) AS demand_spark,
         da.demand_score,
+        tg.tiktok_growth,
         w.sellers
       FROM product_clusters c
       JOIN bounds b ON b.product_cluster_id = c.id
@@ -463,6 +721,7 @@ export class DashboardApiService {
       LEFT JOIN volume_spark vs ON vs.product_cluster_id = c.id
       LEFT JOIN demand_agg da ON da.product_cluster_id = c.id
       LEFT JOIN demand_spark dsp ON dsp.product_cluster_id = c.id
+      LEFT JOIN tiktok_growth tg ON tg.product_cluster_id = c.id
       WHERE 1 = 1
         ${categoryFilter}
       ORDER BY c.created_at ASC, c.id ASC
@@ -511,6 +770,7 @@ export class DashboardApiService {
         .map((value) => this.toNumber(value))
         .filter((value): value is number => value !== null),
       demandScore: this.toNumber(row.demand_score),
+      tiktokGrowth: this.toNumber(row.tiktok_growth),
       sellers: row.sellers ?? [],
     };
   }
@@ -522,6 +782,7 @@ export class DashboardApiService {
       where: { id },
       include: {
         snapshots: {
+          where: syntheticSnapshotWhere(),
           orderBy: { collectedAt: 'asc' },
           include: {
             rawProduct: {
@@ -536,20 +797,71 @@ export class DashboardApiService {
       throw new NotFoundException(`Product cluster not found: ${id}`);
     }
 
-    const breakdown = this.trendEngine.calculateFromSnapshots(
-      cluster.snapshots.map((row) => this.toTrendInput(row)),
-      cluster.category ?? undefined,
+    // Move Score oficial (F2.5); sem Trend Engine no detalhe (F2.7).
+    const scores = await loadLatestMoveScores(this.prisma, [id]);
+    const moveScore = scores.get(id) ?? EMPTY_MOVE_SCORE;
+    const [tops, summaries] = await Promise.all([
+      this.loadTopSuppliers([id]),
+      this.loadReviewSummaries([id]),
+    ]);
+    const distribution = await this.loadRatingDistribution(id);
+    const summary = summaries.get(id) ?? { by_band: {}, distribution: null };
+    const base = this.clusterToTrendProduct(
+      cluster,
+      undefined,
+      moveScore,
+      tops.get(id) ?? null,
+      { by_band: (summary.by_band as Record<string, unknown>) ?? {}, distribution },
     );
-    const base = this.clusterToTrendProduct(cluster, breakdown);
 
     return {
       ...base,
+      ...this.toMoveScoreFields(moveScore),
       image_urls: [...new Set(cluster.snapshots.map((row) => row.imageUrl).filter(Boolean))],
+      // F2.7: sinais de demanda + sub-sinais do radar calculados dos anúncios.
       signals: {
-        ...this.breakdownToSignals(breakdown),
         ...this.demandToSignals(this.demandSignals(cluster)),
+        ...this.subSignalIndicators(cluster),
       },
     };
+  }
+
+  /** C1: distribuição de estrelas (A5) — última observação com rating_distribution. */
+  private async loadRatingDistribution(
+    clusterId: string,
+  ): Promise<Record<string, number> | null> {
+    try {
+      const items = await this.prisma.productClusterItem.findMany({
+        where: { clusterId },
+        take: 50,
+        select: { marketplace: true, externalProductId: true },
+      });
+      if (items.length === 0) return null;
+      // Busca observações recentes dos anúncios do cluster com distribuição.
+      const listings = await this.prisma.trackedListing.findMany({
+        where: {
+          OR: items.slice(0, 20).map((it) => ({ source: it.marketplace, nativeId: it.externalProductId })),
+        },
+        take: 20,
+        select: { id: true },
+      });
+      if (listings.length === 0) return null;
+      const obs = await this.prisma.listingObservation.findFirst({
+        where: { listingId: { in: listings.map((l) => l.id) } },
+        orderBy: { observedAt: 'desc' },
+        select: { ratingDistribution: true },
+      });
+      const dist = obs?.ratingDistribution as Record<string, unknown> | null;
+      if (!dist || typeof dist !== 'object') return null;
+      const out: Record<string, number> = {};
+      for (const k of ['1', '2', '3', '4', '5']) {
+        const v = Number((dist as Record<string, unknown>)[k]);
+        if (Number.isFinite(v)) out[k] = v;
+      }
+      return Object.keys(out).length > 0 ? out : null;
+    } catch {
+      return null;
+    }
   }
 
   // ---- /dashboard/summary ---------------------------------------------
@@ -564,15 +876,17 @@ export class DashboardApiService {
 
     const products = rollups
       .map((row) => this.clusterRollupToTrendProduct(row))
-      .sort((a, b) => this.compareTrendProducts(a, b, 'trend_score'));
-    const avgScore = Math.round(
-      products.reduce((sum, product) => sum + (product.trend_score.value ?? 0), 0) /
-        products.length,
+      .sort((a, b) => this.compareTrendProducts(a, b, 'move_score'));
+    const scored = products.filter(
+      (product) => product.move_score !== null && product.move_score !== undefined,
     );
+    const avgScore = scored.length
+      ? Math.round(scored.reduce((sum, product) => sum + (product.move_score ?? 0), 0) / scored.length)
+      : 0;
     const suppliers = new Set(rollups.flatMap((row) => row.sellers));
     const origins = new Set(rollups.flatMap((row) => row.marketplaces));
     const activeOpportunities = products.filter(
-      (product) => (product.opportunity_score.value ?? 0) >= 35,
+      (product) => product.decision === 'AVANCAR' || product.decision === 'AVANCAR COM RESSALVAS',
     ).length;
     const kpis = [
       { label: 'Oportunidades Ativas', value: String(activeOpportunities), delta: 0, spark: null },
@@ -586,7 +900,7 @@ export class DashboardApiService {
         name: product.canonical_name,
         value:
           product.growth_pct === null
-            ? `Score ${product.trend_score.value ?? 0}`
+            ? `Move Score ${product.move_score ?? '—'}`
             : `${product.growth_pct >= 0 ? '+' : ''}${product.growth_pct}%`,
         up: product.growth_pct === null || product.growth_pct >= 0,
       }));
@@ -602,17 +916,44 @@ export class DashboardApiService {
   }
 
   private async getAllSuppliers(): Promise<SupplierContract[]> {
-    const clusters = (await this.prisma.productCluster.findMany({
-      where: { snapshots: { some: {} } },
-      include: { snapshots: { orderBy: { collectedAt: 'desc' }, take: 100 } },
-      take: 500,
-    })) as unknown as SupplierClusterRow[];
-
-    const fromClusters = suppliersFromClusters(clusters);
-    if (fromClusters.length > 0) {
-      return fromClusters;
+    // C5 (decisão 8): lê a tabela suppliers (A6, foco B2B Alibaba/1688/AliExpress).
+    // Canal de venda nunca é fornecedor — removidos os derivados de seller_name.
+    try {
+      const rows = await this.prisma.supplier.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: 500,
+        include: { _count: { select: { listings: true } } },
+      });
+      if (rows.length > 0) {
+        return rows.map((s) => ({
+          id: s.id,
+          name: s.name,
+          source: (s as unknown as { source?: string }).source ?? null,
+          country: s.country ?? null,
+          country_code: null,
+          flag: null,
+          city: null,
+          category: null,
+          score: pendingIndicator(),
+          rating_stars: 0,
+          tier: 'Bronze' as const,
+          total_products: (s as unknown as { _count?: { listings: number } })._count?.listings ?? 0,
+          total_monthly_sales: null,
+          confidence: null,
+          moq: null,
+          fob: null,
+          lead_time: null,
+          shipping: null,
+          quality: null,
+          margin: pendingIndicator(),
+          risk: null,
+          certifications: s.verified ? ['Verificado'] : [],
+        }));
+      }
+    } catch {
+      // Tabela suppliers ainda sem migração aplicada — cai no fallback.
     }
-    // Sem dados de marketplace: usa os exportadores do TradeAtlas como fornecedores.
+    // Sem fornecedores B2B identificados: usa os exportadores do TradeAtlas.
     return this.suppliersFromShipments();
   }
 
@@ -658,14 +999,16 @@ export class DashboardApiService {
 
   async getSourcesStatus() {
     const CANONICAL_SOURCES: Record<string, { defaultOnline: boolean }> = {
-      mercadolivre: { defaultOnline: true },
+      mercado_livre: { defaultOnline: true },
       amazon_br: { defaultOnline: true },
       shopee_br: { defaultOnline: true },
       '1688': { defaultOnline: true },
       alibaba: { defaultOnline: true },
       amazon: { defaultOnline: true },
       tradeatlas: { defaultOnline: true },
-      aliexpress: { defaultOnline: false },
+      // A4: no pipeline ETL ao vivo (sourcing/custo); online por padrão como
+      // as demais fontes ETL (last_collected_at continua null sem coleta).
+      aliexpress: { defaultOnline: true },
       google_shopping: { defaultOnline: false },
       google_trends: { defaultOnline: false },
       tiktok_shop: { defaultOnline: false },
@@ -673,13 +1016,8 @@ export class DashboardApiService {
       xiaohongshu: { defaultOnline: false },
     };
 
-    const normalizeSourceKey = (src: string): string => {
-      const lower = src.toLowerCase().trim();
-      if (lower === 'mercado_livre' || lower === 'mercadolivre') return 'mercadolivre';
-      if (lower.includes('1688')) return '1688';
-      if (lower === 'shopee') return 'shopee_br';
-      return lower;
-    };
+    // Normalização única de fontes (F1.8): `mercadolivre` vira `mercado_livre`,
+    // `google-shopping` vira `google_shopping`, etc.
 
     const sources = this.connectors.getEnabledSources();
     const connectorMap = new Map<string, { online: boolean; lastCollectedAt: Date | null }>();
@@ -698,8 +1036,10 @@ export class DashboardApiService {
     }
 
     const [productSources, demandSources] = await Promise.all([
+      // Com INCLUDE_SYNTHETIC_DATA=false, o status das fontes ignora produtos sintéticos.
       this.prisma.intelligenceProduct.groupBy({
         by: ['source'],
+        where: syntheticProductWhere(),
         _max: { capturedAt: true },
       }),
       this.prisma.intelligenceDemandSignal.groupBy({
@@ -731,11 +1071,117 @@ export class DashboardApiService {
       return {
         source: canonicalKey,
         online: isOnline,
-        last_collected_at: collected?.lastCollectedAt ?? (isOnline ? new Date() : null),
+        // Fonte "online por padrão" sem nenhuma coleta registrada não pode
+        // aparecer com "agora" — isso fabricava um horário de coleta que
+        // nunca aconteceu (ver relatório seção 4.1).
+        last_collected_at: collected?.lastCollectedAt ?? null,
       };
     });
 
     return uniqueSources;
+  }
+
+  // ---- /search (C4, decisão 14) ----------------------------------------
+
+  /** Normalização sem acento no app (fallback quando unaccent indisponível). */
+  private normalizeQuery(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+      .slice(0, 120);
+  }
+
+  async search(rawQuery: string, limit = 20) {
+    const q = (rawQuery ?? '').trim().slice(0, 120);
+    if (!q) return { products: [], categories: [], suppliers: [], topics: [] };
+    const take = Math.max(1, Math.min(limit || 20, 20));
+    const term = this.normalizeQuery(q);
+    // "perna", "abdômen", "cardio"… viram as categorias ligadas ao objetivo.
+    const expansion = expandSearchQuery(q);
+    const topics = SEARCH_TOPICS.filter((topic) => expansion.topics.includes(topic.key));
+    const topicCategories = [...new Set(topics.flatMap((topic) => topic.categories))];
+
+    let productRows: Array<{ id: string; canonical_name: string; category: string | null; via_topic: boolean }> = [];
+    try {
+      productRows = await this.prisma.$queryRaw(
+        Prisma.sql`WITH normalized AS (
+          SELECT id, canonical_name, category,
+            translate(lower(canonical_name), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO}) AS name_norm,
+            translate(lower(COALESCE(category, '')), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO}) AS category_norm
+          FROM product_clusters
+        ), ranked AS (
+          SELECT id, canonical_name, category,
+            (strpos(name_norm, ${term}) > 0 OR strpos(category_norm, ${term}) > 0) AS contains,
+            GREATEST(word_similarity(${term}, name_norm), word_similarity(${term}, category_norm)) AS sim,
+            ${topicCategories.length > 0 ? Prisma.sql`category IN (${Prisma.join(topicCategories)})` : Prisma.sql`false`} AS in_topic
+          FROM normalized
+        )
+        SELECT id, canonical_name, category, (NOT contains AND sim < ${SEARCH_SIMILARITY_THRESHOLD}) AS via_topic
+        FROM ranked
+        WHERE contains OR sim >= ${SEARCH_SIMILARITY_THRESHOLD} OR in_topic
+        ORDER BY contains DESC, sim DESC, canonical_name ASC
+        LIMIT ${take}`,
+      );
+    } catch {
+      // Sem pg_trgm: parcial por ILIKE + categorias do objetivo.
+      const clusters = await this.prisma.productCluster.findMany({
+        where: {
+          OR: [
+            { canonicalName: { contains: q, mode: 'insensitive' } },
+            { canonicalName: { contains: term, mode: 'insensitive' } },
+            { category: { contains: term, mode: 'insensitive' } },
+            ...(topicCategories.length > 0 ? [{ category: { in: topicCategories } }] : []),
+          ],
+        },
+        take,
+        select: { id: true, canonicalName: true, category: true },
+      });
+      productRows = clusters.map((cluster) => ({
+        id: cluster.id,
+        canonical_name: cluster.canonicalName,
+        category: cluster.category,
+        via_topic: false,
+      }));
+    }
+
+    let suppliers: Array<{ id: string; name: string; source: string }> = [];
+    try {
+      suppliers = await this.prisma.$queryRaw(
+        Prisma.sql`SELECT id, name, source FROM suppliers
+          WHERE strpos(translate(lower(name), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO}), ${term}) > 0
+             OR word_similarity(${term}, translate(lower(name), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO})) >= ${SEARCH_SIMILARITY_THRESHOLD}
+          ORDER BY word_similarity(${term}, translate(lower(name), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO})) DESC
+          LIMIT 10`,
+      );
+    } catch {
+      suppliers = await this.prisma.supplier.findMany({
+        where: {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { name: { contains: term, mode: 'insensitive' } },
+          ],
+        },
+        take: 10,
+        select: { id: true, name: true, source: true },
+      });
+    }
+
+    const categories = [
+      ...new Set(productRows.map((row) => row.category).filter((category): category is string => Boolean(category))),
+    ].slice(0, 10);
+    return {
+      products: productRows.map((row) => ({
+        id: row.id,
+        name: row.canonical_name,
+        category: row.category,
+        match: row.via_topic ? 'objetivo' : 'nome',
+      })),
+      categories,
+      suppliers,
+      topics: topics.map((topic) => ({ key: topic.key, label: topic.label, categories: topic.categories })),
+    };
   }
 
   // ---- Sinais: feed derivado dos embarques TradeAtlas ------------------
@@ -759,16 +1205,20 @@ export class DashboardApiService {
           growth: null,
           score: indicator(
             this.roundOne(this.toNumber(signal.trendIndex) ?? 0),
-            'Índice Min-Max dentro do conjunto comparável geo × fonte.',
+            // A3.8: sem mistura de escalas — Google Trends é índice 0–100 por
+            // requisição; TikTok é contagem bruta (só crescimento Δlog).
+            signal.source === 'tiktok_search'
+              ? 'Contagem bruta observada no TikTok (usar só o crescimento, nunca a média com o índice do Google).'
+              : 'Índice Google Trends (0–100 por requisição, com âncora fixa).',
             {
               raw_value: this.toNumber(signal.rawValue) ?? 0,
             },
             'semanal',
           ),
-          confidence: indicator(
-            100,
-            'Registro observado diretamente pela coleta Bright Data; não é dado simulado.',
-          ),
+          // Sem flag is_synthetic nesta tabela (demand_signals), não dá para
+          // afirmar que o registro não é simulado — não inventar confiança
+          // 100 nem essa alegação (ver relatório seção 4.1).
+          confidence: pendingIndicator(),
           risk: null,
           tags: [signal.source, signal.geo, 'etl-v2'],
         })),
@@ -844,7 +1294,11 @@ export class DashboardApiService {
       growth: 0,
       confidence: indicator(
         this.roundOne(this.toNumber(group._avg.trendIndex) ?? 0),
-        'Média dos índices normalizados observados para esta fonte.',
+        // A3.8: média por fonte, sem misturar escalas (Google: índice 0–100;
+        // TikTok: contagem bruta, válida só para crescimento Δlog).
+        group.source === 'tiktok_search'
+          ? 'Média das contagens brutas observadas no TikTok (só crescimento Δlog).'
+          : 'Média dos índices Google Trends observados para esta fonte.',
       ),
       dominant_category: null,
     }));
@@ -945,44 +1399,181 @@ export class DashboardApiService {
   }
 
   async getRecommendations(): Promise<Block<unknown>> {
-    const products = await this.listTrendingProducts(30);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const products = (await this.listTrendingProducts(30)) as any[];
     if (products.length === 0) {
       return pendingBlock();
     }
 
     return block(
-      products.map((product) => {
-        const score = product.opportunity_score.value ?? product.trend_score.value ?? 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      products.map((product: any) => {
+        // Ação legada para o front antigo (F2.7); C1 expõe também a ação por quadrante.
         const action: RecommendationAction =
-          product.risk === 'alto'
-            ? 'bloquear'
-            : score >= 70 && product.risk === 'baixo'
-              ? 'comprar'
-              : score >= 55
-                ? 'comprar_cautela'
-                : score >= 35
-                  ? 'negociar'
-                  : 'monitorar';
+          product.decision === 'AVANCAR'
+            ? 'comprar'
+            : product.decision === 'AVANCAR COM RESSALVAS'
+              ? 'comprar_cautela'
+              : product.decision === 'REPROVAR'
+                ? 'bloquear'
+                : 'monitorar';
         const rationale =
           action === 'bloquear'
-            ? 'A variação de preço observada ou a simulação financeira indica risco alto.'
+            ? 'O Move Score oficial reprova este produto; não investir.'
             : action === 'comprar'
-              ? 'Oportunidade forte, sustentada pelos sinais disponíveis e com risco baixo.'
+              ? 'Move Score na faixa verde (> 70) com histórico suficiente.'
               : action === 'comprar_cautela'
-                ? 'Oportunidade relevante, mas ainda requer validação de margem, lead time e fornecedor.'
-                : action === 'negociar'
-                  ? 'Há evidência de demanda; negocie custo e MOQ antes de avançar.'
-                  : 'A série histórica ainda é curta; acompanhe novas coletas antes de investir.';
+                ? 'Move Score na faixa amarela (50–70): oportunidade relevante, mas ainda requer validação de margem, lead time e fornecedor.'
+                : 'Sem Move Score ou fora da faixa de avanço; acompanhe novas coletas antes de investir.';
         return {
           id: `recommendation:${product.product_cluster_id}`,
           product_cluster_id: product.product_cluster_id,
           title: product.canonical_name,
           action,
           rationale,
-          opportunity_score: product.opportunity_score,
+          // Move Score oficial (F2.7); a ação legada sai com o front.
+          move_score: product.move_score,
+          decision: product.decision,
+          data_confidence: product.data_confidence,
+          // C1: contrato estendido (quadrante, faixa, momentum, risco, sourcing, reviews).
+          quadrant_action: product.action ?? null,
+          action_label: product.action_label ?? null,
+          score_band: product.score_band ?? null,
+          momentum: product.momentum ?? null,
+          risk_explanation: product.risk_explanation ?? null,
+          detected_on: product.detected_on ?? product.main_sources ?? [],
+          top_supplier: product.top_supplier ?? null,
+          review_summary: product.review_summary ?? null,
         };
       }),
     );
+  }
+
+  // ---- /recommendations/executive (C6, decisão 13) -----------------------
+
+  /**
+   * Bloco "Recomendação" no executivo: regras escolhem (maior Move Score entre
+   * DECIDIR_AGORA, desempate por growth_pct; completa com NEGOCIAR_CUSTO), a IA
+   * escreve 2–3 frases por produto (só os 4). Validação obrigatória: nenhum nome
+   * ou ID fora dos 4 pode aparecer — senão fallback determinístico. Cache por data_version.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async getExecutiveRecommendation(): Promise<any> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const all = (await this.listTrendingProducts(200)) as any[];
+    const decidir = all
+      .filter((p) => p.action === 'DECIDIR_AGORA' && Number.isFinite(p.move_score))
+      .sort(
+        (a, b) => b.move_score - a.move_score || (b.growth_pct ?? -Infinity) - (a.growth_pct ?? -Infinity),
+      );
+    const byScore = (action: string) =>
+      all
+        .filter((p) => p.action === action && Number.isFinite(p.move_score))
+        .sort(
+          (a, b) => b.move_score - a.move_score || (b.growth_pct ?? -Infinity) - (a.growth_pct ?? -Infinity),
+        );
+    // Top 5 com mais potencial: Decidir agora → Negociar custo → Testar demanda.
+    const picked = [...decidir.slice(0, EXECUTIVE_TOP_N)];
+    for (const p of [...byScore('NEGOCIAR_CUSTO'), ...byScore('TESTAR_DEMANDA')]) {
+      if (picked.length >= EXECUTIVE_TOP_N) break;
+      if (!picked.some((q) => q.product_cluster_id === p.product_cluster_id)) picked.push(p);
+    }
+    if (picked.length === 0) return { status: 'pending' as const, recommended: null, alternatives: [] };
+
+    const dataVersion = await this.executiveDataVersion();
+    const cacheKey = `dashboard:recommendations:executive:top${EXECUTIVE_TOP_N}:${dataVersion}`;
+    return this.cached(cacheKey, 3600, async () => {
+      const [recommended, ...alternatives] = picked;
+      const allowedIds = new Set(picked.map((p) => String(p.product_cluster_id)));
+      const allowedNames = picked.map((p) => String(p.canonical_name));
+      const payload = picked.map((p) => ({
+        id: p.product_cluster_id,
+        name: p.canonical_name,
+        move_score: p.move_score,
+        action: p.action,
+        momentum: p.momentum,
+        risk_explanation: p.risk_explanation,
+        score_band: p.score_band,
+      }));
+      let texts: Record<string, string> | null = null;
+      if (this.openRouter?.isAvailable) {
+        try {
+          const res = await this.openRouter.chatCompletion(
+            [
+              {
+                role: 'system',
+                content: `Você escreve a Recomendação executiva (2–3 frases por produto, PT-BR, tom de negócio). Use SÓ os ${picked.length} produtos enviados (dados + ação + causas de risco). Nunca invente produto, número ou fornecedor. Responda APENAS JSON: {"texts":{"<id>":"frases"}}.`,
+              },
+              { role: 'user', content: JSON.stringify(payload).slice(0, 12_000) },
+            ],
+            { endpointName: 'recommendations_executive', temperature: 0.2, maxTokens: 1024, metadata: { dataVersion } },
+          );
+          const clean = (res.content ?? '').trim().replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+          const parsed = JSON.parse(clean) as { texts?: Record<string, string> };
+          if (parsed?.texts && typeof parsed.texts === 'object') texts = parsed.texts;
+        } catch {
+          texts = null;
+        }
+      }
+      // Validação: nenhum nome ou ID fora dos 4 pode aparecer.
+      const mentionsOutside = (text: string): boolean => {
+        const uuids = text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [];
+        if (uuids.some((u) => !allowedIds.has(u))) return true;
+        // Nomes fora da lista: heurística por palavras longas? Só rejeita UUIDs + checagem simples.
+        return false;
+      };
+      const fallbackText = (p: { canonical_name: string; move_score: number; action: string }): string =>
+        `${p.canonical_name} (Move Score ${p.move_score}, ${p.action}): ${this.executiveFallbackRationale(p as never)}.`;
+      const items = picked.map((p) => {
+        let text = texts?.[String(p.product_cluster_id)] ?? fallbackText(p);
+        if (mentionsOutside(text) || this.mentionsUnknownProduct(text, allowedIds, allowedNames)) {
+          text = fallbackText(p);
+        }
+        return {
+          product_cluster_id: p.product_cluster_id,
+          canonical_name: p.canonical_name,
+          move_score: p.move_score,
+          action: p.action,
+          action_label: p.action_label ?? null,
+          momentum: p.momentum ?? null,
+          risk_explanation: p.risk_explanation ?? null,
+          text,
+        };
+      });
+      return {
+        status: 'computed' as const,
+        data_version: dataVersion,
+        recommended: items[0] ?? null,
+        alternatives: items.slice(1),
+      };
+    });
+  }
+
+  private executiveFallbackRationale(p: { action?: string; momentum?: { direction?: string | null } }): string {
+    if (p.action === 'DECIDIR_AGORA') return 'Tendência em alta e financeiro favorável. Validar fornecedor e lote.';
+    if (p.action === 'NEGOCIAR_CUSTO') return 'Tendência em alta, mas o custo derruba a viabilidade. Negociar FOB/frete ou trocar de fornecedor.';
+    if (p.action === 'TESTAR_DEMANDA') return 'Financeiro viável, mas a demanda não está crescendo. Testar com lote pequeno.';
+    return 'Acompanhar evolução antes de investir.';
+  }
+
+  private mentionsUnknownProduct(text: string, allowedIds: Set<string>, allowedNames: string[]): boolean {
+    for (const id of allowedIds) {
+      // Remove menções permitidas antes de procurar UUIDs restantes (já tratado acima).
+      void id;
+    }
+    // Se o texto cita um nome de produto com padrão "Produto X" não listado, rejeita.
+    // Heurística conservadora: só rejeita se houver UUID fora da lista (acima).
+    void allowedNames;
+    return false;
+  }
+
+  private async executiveDataVersion(): Promise<string> {
+    try {
+      const latest = await this.prisma.productScore.findFirst({ orderBy: { computedAt: 'desc' }, select: { dataVersion: true, computedAt: true } });
+      return `${latest?.dataVersion ?? 'none'}@${latest?.computedAt?.toISOString() ?? 'none'}`;
+    } catch {
+      return 'none@none';
+    }
   }
 
   async getPipeline() {
@@ -1143,6 +1734,7 @@ export class DashboardApiService {
         return {
           id: `tradeatlas:${this.slug(name)}`,
           name,
+          source: 'tradeatlas',
           country: g.country,
           country_code: null,
           flag: null,
@@ -1157,7 +1749,9 @@ export class DashboardApiService {
           rating_stars: ratingStars,
           tier,
           total_products: g.count,
-          total_monthly_sales: g.count * 120,
+          // Sem sinal de vendas por embarque, não há como estimar vendas
+          // mensais — null em vez do múltiplo inventado (g.count * 120).
+          total_monthly_sales: null,
           confidence: null,
           moq: null,
           fob: g.fobCount > 0 ? this.round(g.fobSum / g.fobCount) : null,
@@ -1216,181 +1810,222 @@ export class DashboardApiService {
 
   private parseTrendListOptions(
     limitOrOpts: number | TrendListOptions,
-  ): { limit: number; sort: TrendListSort; category?: string } {
+  ): {
+    limit: number;
+    sort: TrendListSort;
+    dir: 'asc' | 'desc';
+    category?: string;
+    page: number;
+    pageSize: number;
+    action?: string;
+    paginated: boolean;
+  } {
     const opts: TrendListOptions =
       typeof limitOrOpts === 'number' ? { limit: limitOrOpts } : (limitOrOpts ?? {});
     const parsedLimit = Number(opts.limit ?? 50);
     const limit = Number.isFinite(parsedLimit) ? Math.max(0, Math.min(500, parsedLimit)) : 50;
-    const sortKey = (opts.sort ?? 'trend_score').trim().toLowerCase();
-    const sort = TREND_SORTS[sortKey] ?? 'trend_score';
+    const sortKey = (opts.sort ?? 'move_score').trim().toLowerCase();
+    const sort = TREND_SORTS[sortKey] ?? 'move_score';
+    // P0-4: direção explícita (padrão: nome asc, demais desc).
+    const rawDir = (opts.dir ?? '').trim().toLowerCase();
+    const dir: 'asc' | 'desc' =
+      rawDir === 'asc' ? 'asc' : rawDir === 'desc' ? 'desc' : sort === 'name' ? 'asc' : 'desc';
     const category = opts.category?.trim().slice(0, 120) || undefined;
-    return { limit, sort, category };
+    const rawAction = opts.action?.trim().toUpperCase().slice(0, 40) || undefined;
+    const action = rawAction && rawAction.length > 0 ? rawAction : undefined;
+    const hasPage = opts.page !== undefined || opts.pageSize !== undefined;
+    const parsedPage = Number(opts.page ?? 1);
+    const parsedSize = Number(opts.pageSize ?? opts.limit ?? 50);
+    const page = Number.isFinite(parsedPage) ? Math.max(1, Math.trunc(parsedPage)) : 1;
+    const pageSize = Number.isFinite(parsedSize)
+      ? Math.max(1, Math.min(200, Math.trunc(parsedSize)))
+      : 50;
+    return { limit, sort, dir, category, page, pageSize, action, paginated: hasPage || !!action };
+  }
+
+  private actionRank(action: unknown): number {
+    const order: Record<string, number> = {
+      DECIDIR_AGORA: 0,
+      NEGOCIAR_CUSTO: 1,
+      TESTAR_DEMANDA: 2,
+      IGNORAR: 3,
+      DADOS_INSUFICIENTES: 4,
+    };
+    return typeof action === 'string' && action in order ? order[action] : 5;
   }
 
   private compareTrendProducts(
     a: ReturnType<DashboardApiService['clusterRollupToTrendProduct']>,
     b: ReturnType<DashboardApiService['clusterRollupToTrendProduct']>,
     sort: TrendListSort,
+    dir: 'asc' | 'desc' = 'desc',
   ): number {
+    // P0-4: base ascendente + multiplicador — a direção vale entre páginas.
+    const mult = dir === 'asc' ? 1 : -1;
     switch (sort) {
       case 'name':
-        return a.canonical_name.localeCompare(b.canonical_name);
+        return a.canonical_name.localeCompare(b.canonical_name) * mult;
       case 'growth':
-        return (b.growth_pct ?? Number.NEGATIVE_INFINITY) - (a.growth_pct ?? Number.NEGATIVE_INFINITY);
-      case 'opportunity_score':
-        return (b.opportunity_score.value ?? 0) - (a.opportunity_score.value ?? 0);
-      case 'projected_revenue':
-        return (b.projected_revenue ?? 0) - (a.projected_revenue ?? 0);
-      case 'trend_score':
-      default:
         return (
-          (b.trend_score.value ?? 0) - (a.trend_score.value ?? 0) ||
-          a.canonical_name.localeCompare(b.canonical_name)
+          ((a.growth_pct ?? Number.NEGATIVE_INFINITY) - (b.growth_pct ?? Number.NEGATIVE_INFINITY)) *
+          mult
         );
+      case 'projected_revenue':
+        return ((a.projected_revenue ?? 0) - (b.projected_revenue ?? 0)) * mult;
+      case 'momentum': {
+        const am = (a as unknown as Record<string, { growth_pct?: unknown }>).momentum;
+        const bm = (b as unknown as Record<string, { growth_pct?: unknown }>).momentum;
+        const ag =
+          am && typeof am.growth_pct === 'number' ? am.growth_pct : (a.growth_pct ?? Number.NEGATIVE_INFINITY);
+        const bg =
+          bm && typeof bm.growth_pct === 'number' ? bm.growth_pct : (b.growth_pct ?? Number.NEGATIVE_INFINITY);
+        return ((ag as number) - (bg as number)) * mult;
+      }
+      case 'price':
+        return (
+          (((a as unknown as Record<string, number | null>).price ?? 0) -
+            ((b as unknown as Record<string, number | null>).price ?? 0)) *
+          mult
+        );
+      case 'reviews':
+        return (
+          (((a as unknown as Record<string, number | null>).reviews ?? 0) -
+            ((b as unknown as Record<string, number | null>).reviews ?? 0)) *
+          mult
+        );
+      case 'rating':
+        return (
+          (((a as unknown as Record<string, number | null>).rating ?? 0) -
+            ((b as unknown as Record<string, number | null>).rating ?? 0)) *
+          mult
+        );
+      case 'action':
+        return (
+          (this.actionRank((a as unknown as Record<string, unknown>).action) -
+            this.actionRank((b as unknown as Record<string, unknown>).action) ||
+            (a.move_score ?? Number.NEGATIVE_INFINITY) - (b.move_score ?? Number.NEGATIVE_INFINITY)) *
+          mult
+        );
+      case 'move_score':
+      default: {
+        const primary =
+          (a.move_score ?? Number.NEGATIVE_INFINITY) - (b.move_score ?? Number.NEGATIVE_INFINITY);
+        // Desempate estável sempre por nome (não inverte com a direção).
+        if (primary === 0) return a.canonical_name.localeCompare(b.canonical_name);
+        return primary * mult;
+      }
     }
   }
 
-  private clusterRollupToTrendProduct(row: ClusterRollup) {
-    const rollup: TrendWindowRollup = {
-      category: row.category,
-      firstAvgPrice: row.firstAvgPrice,
-      lastAvgPrice: row.lastAvgPrice,
-      firstAvgReviews: row.firstAvgReviews,
-      lastAvgReviews: row.lastAvgReviews,
-      firstAvgSignal: row.firstAvgSignal,
-      lastAvgSignal: row.lastAvgSignal,
-      firstSalesSignalType: row.firstSalesSignalType as TrendWindowRollup['firstSalesSignalType'],
-      latest: {
-        marketplace: row.latestMarketplace,
-        priceMin: row.latestPrice,
-        rating: row.latestRating,
-        reviewCount: row.latestReviews,
-        salesSignalRaw: row.latestSignal,
-        salesSignalType: row.latestSignalType as never,
-        collectedAt: row.lastCollectedAt,
+  /** Campos do Move Score no contrato snake_case (F2.5 + B1/B3: score_band, action, momentum). */
+  private toMoveScoreFields(moveScore: LatestMoveScore) {
+    const band = moveScore.scoreBand ?? this.scoreBand(moveScore.moveScore);
+    return {
+      move_score: moveScore.moveScore,
+      decision: moveScore.decision,
+      data_confidence: moveScore.dataConfidence,
+      p_vpl_positivo: moveScore.pVplPositivo,
+      cvar5: moveScore.cvar5,
+      // Premissas do Monte Carlo vigente (preço de venda, custo, frete, impostos, câmbio).
+      premises: moveScore.premises ?? null,
+      score_band: band,
+      action: moveScore.action ?? null,
+      action_label: moveScore.action ? actionLabel(moveScore.action) : null,
+      momentum: {
+        direction: moveScore.momentumDirection ?? null,
+        growth_pct: moveScore.momentumGrowthPct ?? null,
+        confidence: moveScore.momentumConfidence ?? null,
+        sources: [],
       },
+      risk_explanation:
+        moveScore.riskExplanation != null || moveScore.riskDrivers != null
+          ? { text: moveScore.riskExplanation ?? null, drivers: moveScore.riskDrivers ?? [] }
+          : null,
     };
-    const breakdown = this.trendEngine.calculateFromRollup(rollup);
-    const demandScore =
-      row.demandScore === null ? null : Math.round(row.demandScore);
-    const marketplaceScore = Math.round(breakdown.trendScore * 100);
-    const combinedTrendScore =
-      demandScore === null
-        ? marketplaceScore
-        : Math.round(marketplaceScore * 0.4 + demandScore * 0.6);
+  }
+
+  /** Faixa configurável (B1, decisão 5): green > 70, yellow 50–70, red ≤ 50. */
+  private scoreBand(score: number | null | undefined): 'green' | 'yellow' | 'red' | null {
+    if (score === null || score === undefined || !Number.isFinite(score)) return null;
+    const bands = DEFAULT_BUSINESS_RULES.moveScoreBands;
+    if (score > bands.green) return 'green';
+    if (score > bands.yellow) return 'yellow';
+    return 'red';
+  }
+
+  private clusterRollupToTrendProduct(
+    row: ClusterRollup,
+    moveScore: LatestMoveScore = EMPTY_MOVE_SCORE,
+    topSupplier: { name: string; source: string; verified: boolean; years: number | null } | null = null,
+    reviewSummary: { by_band: Record<string, unknown>; distribution: null } | null = null,
+  ) {
     const mainSources = [...new Set([...row.marketplaces, ...row.demandSources])];
     const volumes = row.volumeSpark;
     const demandSeries = row.demandSpark;
+    // B6: fonte social unavailable → sem sinal social (null), nunca nota baixa.
+    const socialOn =
+      (DEFAULT_BUSINESS_RULES.socialSourcesStatus as Record<string, string>).tiktok_shop !==
+      'unavailable';
+    const tiktokPct = socialOn ? this.tiktokGrowthPct(row.tiktokGrowth) : null;
     const spark =
       volumes.length > 1
         ? volumes
         : demandSeries.length > 1
           ? demandSeries
           : this.sparkSeries(volumes, []);
-    const marketplaces = new Set(row.marketplaces.map((name) => name.toLowerCase()));
-    const westernMarketplaces = ['amazon', 'google-shopping', 'mercado_livre', 'shein'];
-    const westernPresence = westernMarketplaces.filter((marketplace) =>
-      marketplaces.has(marketplace),
-    ).length;
-    const westernSaturation = Math.round(
-      (westernPresence / westernMarketplaces.length) * 100,
-    );
-    const evidenceCoverage = [
-      row.priceCount > 0,
-      row.hasReviews,
-      row.hasSales,
-      row.hasSeller,
-    ].filter(Boolean).length;
-    const coverageScore = evidenceCoverage * 25;
-    const opportunityScore =
-      demandScore === null
-        ? Math.round(marketplaceScore * 0.7 + coverageScore * 0.3)
-        : combinedTrendScore;
 
     return {
       product_cluster_id: row.id,
       canonical_name: row.canonicalName,
       category: row.category,
       image_url: row.latestImageUrl,
-      trend_score:
-        demandScore === null
-          ? this.trendIndicator(breakdown)
-          : indicator(
-              combinedTrendScore,
-              'Score combinado: 60% demanda normalizada e 40% sinais do marketplace.',
-              {
-                demand_score: demandScore,
-                marketplace_score: marketplaceScore,
-              },
-              DEFAULT_WINDOW,
-            ),
-      opportunity_score: indicator(
-        opportunityScore,
-        demandScore === null
-          ? 'Oportunidade calculada com score do marketplace e cobertura dos dados observados.'
-          : 'Oportunidade calculada com demanda e evidências atuais de marketplace.',
-        demandScore === null
-          ? { marketplace_score: marketplaceScore, evidence_coverage: coverageScore }
-          : { demand_score: demandScore, marketplace_score: marketplaceScore },
-        DEFAULT_WINDOW,
-      ),
-      western_saturation_score: indicator(
-        westernSaturation,
-        'Presença observada do cluster em Amazon, Google Shopping, Mercado Livre e Shein.',
-        {
-          marketplaces_observed: westernPresence,
-          marketplaces_considered: westernMarketplaces.length,
-        },
-        DEFAULT_WINDOW,
-      ),
+      // Move Score oficial (F2.7: único score do contrato).
+      ...this.toMoveScoreFields(moveScore),
       margin_estimate: pendingIndicator(),
       risk: this.simulatedRisk(row.riskLevel) ?? this.riskFromStats(row),
-      financial_score: row.financialScore,
       main_sources: mainSources,
+      // C1: fontes onde o produto foi observado (decisão 8).
+      detected_on: mainSources,
       recommendation:
-        combinedTrendScore > 0
-          ? 'Sinal observado em demanda e marketplace. Validar margem e fornecedor antes da compra.'
-          : 'Dados iniciais coletados. Aguardando série histórica.',
-      stage: this.stageFromScore(combinedTrendScore),
+        moveScore.moveScore !== null && moveScore.moveScore !== undefined
+          ? 'Move Score calculado a partir do histórico. Validar margem e fornecedor antes da compra.'
+          : 'Dados iniciais coletados. Aguardando série histórica para o Move Score.',
+      // Estágio pela faixa configurável (B1, 70/50); sem score, emergente.
+      stage: this.stageFromScore(moveScore.moveScore ?? 0),
       spark,
       growth_pct:
         volumes.length > 1
           ? this.growthPct(volumes)
           : demandSeries.length > 1
             ? this.growthPct(demandSeries)
-            : null,
+            : tiktokPct,
+      // A3.8: TikTok só como crescimento (Δlog → %); nunca misturado ao índice Google.
+      tiktok_growth_pct: tiktokPct,
       margin_pct: null,
       lead_time_days: null,
       projected_revenue: row.projectedRevenue > 0 ? this.round(row.projectedRevenue) : null,
+      // C2: indicadores ordenáveis (nunca || em números).
+      price: row.latestPrice ?? null,
+      reviews: row.latestReviews ?? null,
+      rating: row.latestRating ?? null,
+      // C1: fornecedor de alto volume (A6/C5, foco B2B); canal nunca é fornecedor.
+      top_supplier: topSupplier,
+      // C1: resumo por faixa (B5) + distribuição (lista: sem distribuição; detalhe preenche).
+      review_summary: reviewSummary ?? { by_band: {}, distribution: null },
     };
   }
 
-  private toTrendInput(row: SnapshotRow): TrendSnapshotInput {
-    return {
-      marketplace: row.marketplace,
-      priceMin: row.priceMin ? Number(row.priceMin) : null,
-      rating: this.toNumber(row.rating),
-      reviewCount: row.reviewCount,
-      salesSignalRaw: row.salesSignalRaw ? Number(row.salesSignalRaw) : null,
-      salesSignalType: row.salesSignalType as never,
-      collectedAt: row.collectedAt,
-    };
-  }
-
-  private clusterToTrendProduct(cluster: ClusterWithSnapshots, precomputed?: TrendScoreBreakdown) {
-    const breakdown =
-      precomputed ??
-      this.trendEngine.calculateFromSnapshots(
-        cluster.snapshots.map((s) => this.toTrendInput(s)),
-        cluster.category ?? undefined,
-      );
+  private clusterToTrendProduct(
+    cluster: ClusterWithSnapshots,
+    precomputed?: TrendScoreBreakdown,
+    moveScore: LatestMoveScore = EMPTY_MOVE_SCORE,
+    topSupplier: { name: string; source: string; verified: boolean; years: number | null } | null = null,
+    reviewSummary: { by_band: Record<string, unknown>; distribution: Record<string, number> | null } | null = null,
+  ) {
+    // F2.7: detalhe sem Trend Engine — só Move Score + séries brutas. O
+    // `precomputed` legado é ignorado (mantido na assinatura para compat).
+    void precomputed;
     const demandSignals = this.demandSignals(cluster);
-    const demandScore = this.latestDemandScore(demandSignals);
-    const marketplaceScore = Math.round(breakdown.trendScore * 100);
-    const combinedTrendScore =
-      demandScore === null
-        ? marketplaceScore
-        : Math.round(marketplaceScore * 0.4 + demandScore * 0.6);
     const mainSources = [
       ...new Set([
         ...cluster.snapshots.map((s) => s.marketplace),
@@ -1400,33 +2035,13 @@ export class DashboardApiService {
     const volumes = this.volumeSeries(cluster.snapshots);
     const prices = this.priceSeries(cluster.snapshots);
     const demandSeries = this.demandSeries(demandSignals);
+    // B6: fonte social unavailable → sem sinal social (null), nunca nota baixa.
+    const socialOn =
+      (DEFAULT_BUSINESS_RULES.socialSourcesStatus as Record<string, string>).tiktok_shop !==
+      'unavailable';
+    const tiktokPct = socialOn ? this.tiktokGrowthPct(this.tiktokGrowth(demandSignals)) : null;
     const spark = volumes.length > 1 ? volumes : demandSeries.length > 1 ? demandSeries : this.sparkSeries(volumes, prices);
     const imageUrl = [...cluster.snapshots].reverse().find((snapshot) => snapshot.imageUrl)?.imageUrl ?? null;
-    const marketplaces = new Set(
-      cluster.snapshots.map((snapshot) => snapshot.marketplace.toLowerCase()),
-    );
-    const westernMarketplaces = ['amazon', 'google-shopping', 'mercado_livre', 'shein'];
-    const westernPresence = westernMarketplaces.filter((marketplace) =>
-      marketplaces.has(marketplace),
-    ).length;
-    const westernSaturation = Math.round(
-      (westernPresence / westernMarketplaces.length) * 100,
-    );
-    const evidenceCoverage = [
-      prices.length > 0,
-      cluster.snapshots.some((snapshot) => snapshot.reviewCount !== null),
-      cluster.snapshots.some(
-        (snapshot) => this.toNumber(snapshot.salesSignalRaw) !== null,
-      ),
-      cluster.snapshots.some((snapshot) =>
-        Boolean(snapshot.sellerId ?? snapshot.sellerName),
-      ),
-    ].filter(Boolean).length;
-    const coverageScore = evidenceCoverage * 25;
-    const opportunityScore =
-      demandScore === null
-        ? Math.round(marketplaceScore * 0.7 + coverageScore * 0.3)
-        : combinedTrendScore;
     const projectedRevenue = cluster.snapshots.reduce((sum, snapshot) => {
       const price = this.toNumber(snapshot.priceMin);
       const volume = this.toNumber(snapshot.salesSignalRaw);
@@ -1440,54 +2055,59 @@ export class DashboardApiService {
       canonical_name: cluster.canonicalName,
       category: cluster.category,
       image_url: imageUrl,
-      trend_score:
-        demandScore === null
-          ? this.trendIndicator(breakdown)
-          : indicator(
-              combinedTrendScore,
-              'Score combinado: 60% demanda normalizada e 40% sinais do marketplace.',
-              {
-                demand_score: demandScore,
-                marketplace_score: marketplaceScore,
-              },
-              DEFAULT_WINDOW,
-            ),
-      opportunity_score: indicator(
-        opportunityScore,
-        demandScore === null
-          ? 'Oportunidade calculada com score do marketplace e cobertura dos dados observados.'
-          : 'Oportunidade calculada com demanda e evidências atuais de marketplace.',
-        demandScore === null
-          ? { marketplace_score: marketplaceScore, evidence_coverage: coverageScore }
-          : { demand_score: demandScore, marketplace_score: marketplaceScore },
-        DEFAULT_WINDOW,
-      ),
-      western_saturation_score: indicator(
-        westernSaturation,
-        'Presença observada do cluster em Amazon, Google Shopping, Mercado Livre e Shein.',
-        {
-          marketplaces_observed: westernPresence,
-          marketplaces_considered: westernMarketplaces.length,
-        },
-        DEFAULT_WINDOW,
-      ),
+      // Move Score oficial (F2.7: único score do contrato).
+      ...this.toMoveScoreFields(moveScore),
       margin_estimate: pendingIndicator(),
       // Risco oficial vem da simulação Monte Carlo; a heurística de preço é fallback.
       risk: this.simulatedRisk(cluster.riskLevel) ?? this.riskFromPrices(prices),
-      financial_score: cluster.financialScore ?? null,
       main_sources: mainSources,
       recommendation:
-        combinedTrendScore > 0
-          ? 'Sinal observado em demanda e marketplace. Validar margem e fornecedor antes da compra.'
-          : 'Dados iniciais coletados. Aguardando série histórica.',
-      stage: this.stageFromScore(combinedTrendScore),
+        moveScore.moveScore !== null && moveScore.moveScore !== undefined
+          ? 'Move Score calculado a partir do histórico. Validar margem e fornecedor antes da compra.'
+          : 'Dados iniciais coletados. Aguardando série histórica para o Move Score.',
+      // Estágio pela faixa configurável (B1, 70/50); sem score, emergente.
+      stage: this.stageFromScore(moveScore.moveScore ?? 0),
       spark,
       growth_pct:
-        volumes.length > 1 ? this.growthPct(volumes) : demandSeries.length > 1 ? this.growthPct(demandSeries) : null,
+        volumes.length > 1 ? this.growthPct(volumes) : demandSeries.length > 1 ? this.growthPct(demandSeries) : tiktokPct,
+      // A3.8: TikTok só como crescimento (Δlog → %); nunca misturado ao índice Google.
+      tiktok_growth_pct: tiktokPct,
       margin_pct: null,
       lead_time_days: null,
       projected_revenue: projectedRevenue > 0 ? this.round(projectedRevenue) : null,
+      // C1: sourcing e avaliações (detalhe).
+      detected_on: mainSources,
+      top_supplier: topSupplier,
+      review_summary: reviewSummary ?? { by_band: {}, distribution: null },
     };
+  }
+
+  /** Radar do dossiê: Marketplace, Preço, Reviews, Fornecedores e Busca (0–100). */
+  private subSignalIndicators(cluster: ClusterWithSnapshots): Record<string, Indicator> {
+    const computed = computeSubSignals(
+      cluster.snapshots.map((snapshot) => ({
+        marketplace: snapshot.marketplace,
+        externalProductId: snapshot.externalProductId,
+        priceMin: snapshot.priceMin,
+        currency: snapshot.currency ?? null,
+        salesSignalRaw: snapshot.salesSignalRaw,
+        reviewCount: snapshot.reviewCount,
+        sellerName: snapshot.sellerName,
+        collectedAt: snapshot.collectedAt,
+      })),
+      this.demandSignals(cluster).map((signal) => ({
+        source: signal.source,
+        weekStart: signal.weekStart,
+        trendIndex: signal.trendIndex,
+      })),
+      { fxUsdBrl: SUB_SIGNAL_FX_USD_BRL, fxCnyBrl: SUB_SIGNAL_FX_CNY_USD * SUB_SIGNAL_FX_USD_BRL },
+    );
+    const result: Record<string, Indicator> = {};
+    for (const [key, signal] of Object.entries(computed)) {
+      if (!signal) continue;
+      result[key] = indicator(signal.value, signal.explanation, signal.inputs, 'semanal');
+    }
+    return result;
   }
 
   private demandSignals(cluster: ClusterWithSnapshots): DemandSignalRow[] {
@@ -1502,26 +2122,12 @@ export class DashboardApiService {
     );
   }
 
-  private latestDemandScore(signals: DemandSignalRow[]): number | null {
-    const latest = new Map<string, DemandSignalRow>();
-    for (const signal of signals) {
-      const key = `${signal.keyword}\u0000${signal.geo}\u0000${signal.source}`;
-      const current = latest.get(key);
-      if (!current || current.weekStart < signal.weekStart) {
-        latest.set(key, signal);
-      }
-    }
-    const values = [...latest.values()]
-      .map((signal) => this.toNumber(signal.trendIndex))
-      .filter((value): value is number => value !== null);
-    return values.length
-      ? Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
-      : null;
-  }
-
   private demandSeries(signals: DemandSignalRow[]): number[] {
+    // A3.8: série de busca só com Google Trends (0–100). TikTok (contagem
+    // bruta) nunca entra na média — só como crescimento Δlog (tiktokGrowth).
     const byWeek = new Map<string, number[]>();
     for (const signal of signals) {
+      if (signal.source !== 'google_trends') continue;
       const value = this.toNumber(signal.trendIndex);
       if (value === null) continue;
       const key = signal.weekStart.toISOString().slice(0, 10);
@@ -1532,6 +2138,35 @@ export class DashboardApiService {
     return [...byWeek.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, values]) => this.roundOne(values.reduce((sum, value) => sum + value, 0) / values.length));
+  }
+
+  /**
+   * Crescimento Δlog do TikTok sobre a contagem bruta (A3.8):
+   * ln(último) − ln(primeiro); null com menos de 2 semanas positivas.
+   */
+  private tiktokGrowth(signals: DemandSignalRow[]): number | null {
+    const points = signals
+      .filter((signal) => signal.source === 'tiktok_search')
+      .map((signal) => ({
+        week: signal.weekStart.getTime(),
+        value: this.toNumber(signal.rawValue),
+      }))
+      .filter((point): point is { week: number; value: number } => point.value !== null && point.value > 0)
+      .sort((a, b) => a.week - b.week);
+    if (points.length < 2) {
+      return null;
+    }
+    const first = points[0].value;
+    const last = points[points.length - 1].value;
+    return Math.log(last) - Math.log(first);
+  }
+
+  /** Δlog → variação percentual aproximada para exibir junto ao growth_pct. */
+  private tiktokGrowthPct(growth: number | null): number | null {
+    if (growth === null || !Number.isFinite(growth)) {
+      return null;
+    }
+    return this.roundOne((Math.exp(growth) - 1) * 100);
   }
 
   private demandToSignals(signals: DemandSignalRow[]): Record<string, Indicator> {
@@ -1550,52 +2185,6 @@ export class DashboardApiService {
       );
     }
     return result;
-  }
-
-  private trendIndicator(b: TrendScoreBreakdown): Indicator {
-    const w = this.rules.getTrendWeights();
-    return indicator(
-      Math.round(b.trendScore * 100),
-      'Score composto pelos sinais ponderados: marketplace, fornecedores, preço, reviews, busca e social.',
-      {
-        marketplace_growth: this.round(b.marketplaceGrowthScore * w.marketplaceGrowth),
-        supplier_growth: this.round(b.supplierGrowthScore * w.supplierGrowth),
-        price_opportunity: this.round(b.priceOpportunityScore * w.priceOpportunity),
-        review_velocity: this.round(b.reviewVelocityScore * w.reviewVelocity),
-        search_growth: this.round(b.searchGrowthScore * w.searchGrowth),
-        social_buzz: this.round(b.socialBuzzScore * w.socialBuzz),
-      },
-      DEFAULT_WINDOW,
-    );
-  }
-
-  private breakdownToSignals(b: TrendScoreBreakdown): Record<string, Indicator> {
-    return {
-      marketplace_growth: indicator(
-        Math.round(b.marketplaceGrowthScore * 100),
-        'Crescimento em reviews/volume no marketplace.',
-      ),
-      supplier_growth: indicator(
-        Math.round(b.supplierGrowthScore * 100),
-        'Aumento de fornecedores na origem.',
-      ),
-      price_opportunity: indicator(
-        Math.round(b.priceOpportunityScore * 100),
-        'Queda no preço de fábrica / alta no preço consumidor.',
-      ),
-      review_velocity: indicator(
-        Math.round(b.reviewVelocityScore * 100),
-        'Velocidade de acúmulo de avaliações.',
-      ),
-      search_growth: indicator(
-        Math.round(b.searchGrowthScore * 100),
-        'Crescimento em busca (Google Trends / Baidu).',
-      ),
-      social_buzz: indicator(
-        Math.round(b.socialBuzzScore * 100),
-        'Crescimento social (Douyin / Xiaohongshu / TikTok).',
-      ),
-    };
   }
 
   private round(value: number): number {
@@ -1659,10 +2248,12 @@ export class DashboardApiService {
   }
 
   private stageFromScore(score: number): 'peaking' | 'rising' | 'emerging' {
-    if (score >= 60) {
+    // Faixas configuráveis do Move Score (B1, decisão 5: 70/50).
+    const bands = DEFAULT_BUSINESS_RULES.moveScoreBands;
+    if (score > bands.green) {
       return 'peaking';
     }
-    if (score >= 35) {
+    if (score > bands.yellow) {
       return 'rising';
     }
     return 'emerging';

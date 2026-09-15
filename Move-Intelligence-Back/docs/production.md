@@ -3,7 +3,7 @@
 ## Preparação
 
 1. Copie `.env.production.example` para `.env.production` fora do controle de versão.
-2. Defina senhas fortes, `JWT_SECRET`, `BRIGHTDATA_MCP_URL`, `NVIDIA_API_KEY` e o domínio real em `CORS_ORIGINS`.
+2. Defina senhas fortes, `JWT_SECRET`, `BRIGHTDATA_MCP_URL`, `OPENROUTER_API_KEY` e o domínio real em `CORS_ORIGINS`.
 3. Rotacione qualquer chave que já tenha sido gravada em arquivo ou log.
 4. Valide a configuração com:
 
@@ -44,6 +44,24 @@ O scheduler do Nest usa `WEEKLY_COLLECTION_CRON` e recusa iniciar se já houver 
 job `QUEUED` ou `RUNNING`. Para manutenção, defina
 `WEEKLY_COLLECTION_CRON_ENABLED=false`, reinicie o backend e aguarde o job ativo
 terminar antes de migrar o banco.
+
+## Dados sintéticos no ranking
+`INCLUDE_SYNTHETIC_DATA` (default `false`) controla se produtos/snapshots
+marcados `is_synthetic=true` — gerados pelo pipeline `historical-collection` /
+`seed-6months`, nunca por coleta real — entram no ranking/dashboard, no Monte
+Carlo em lote, nos alertas de oportunidade e nas respostas do copilot. Deixe
+`false` em produção. Um ambiente cujo banco só tem dados sintéticos (ex.:
+`backup.sql` local) fica com ranking vazio até haver coleta real — isso é o
+comportamento esperado, não um bug.
+
+## Autenticação
+
+Todas as rotas da API exigem `Authorization: Bearer <accessToken>`, exceto
+`POST /auth/register`, `/auth/login`, `/auth/refresh` e `GET /health`.
+`AUTH_ALLOW_REGISTRATION` (default `true`) fecha o registro público quando
+`false` (`POST /auth/register` responde 403). Com registro aberto, qualquer
+pessoa cria conta e a proteção fica inócua — defina o valor em produção
+após criar as contas iniciais (decisão pendente do usuário).
 
 ## Observabilidade mínima
 

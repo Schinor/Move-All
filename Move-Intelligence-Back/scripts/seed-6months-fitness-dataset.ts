@@ -1,9 +1,9 @@
+// ATENÇÃO: este script gera dados SINTÉTICOS (fictícios) para desenvolvimento.
+// Nunca rode em produção. Exige ALLOW_SYNTHETIC_DATA=true e marca tudo com
+// isSynthetic=true (ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 2.1 A5).
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { ProductsService } from '../src/modules/products/products.service';
-import { TrendEngineService } from '../src/modules/trend-engine/trend-engine.service';
-import { OpportunityEngineService } from '../src/modules/opportunity-engine/opportunity-engine.service';
-import { BusinessRulesService } from '../src/shared/business-rules/business-rules.service';
 import { OpenRouterService } from '../src/modules/ai-gateway/openrouter.service';
 import { PrismaService } from '../src/shared/database/prisma.service';
 
@@ -1142,6 +1142,8 @@ async function seedOneCluster(
           moq: isUsd || isCny ? 50 : 1,
           supplier: mp.seller,
           dataQuality: 'catalog_listing',
+          // Seed gera dados sintéticos: marca explícita para o filtro INCLUDE_SYNTHETIC_DATA.
+          isSynthetic: true,
           sourceSpecific: {
             marketplace_origin: mp.country,
             weekly_index: weekIdx,
@@ -1153,6 +1155,8 @@ async function seedOneCluster(
           priceValue: new Prisma.Decimal(finalPrice),
           reviewsCount: reviews,
           monthlySales: sales,
+          // Garante a marca mesmo em re-execuções sobre registros antigos.
+          isSynthetic: true,
         },
       });
       stats.totalProducts++;
@@ -1177,6 +1181,8 @@ async function seedOneCluster(
         imageUrl: `https://images.move-intelligence.com/fitness/${clusterDef.clusterKey}.jpg`,
         productUrl: `https://${mp.code}.com/dp/${clusterDef.clusterKey}`,
         collectedAt: weekDate,
+        // Snapshot sintético do seed: excluído do ranking quando INCLUDE_SYNTHETIC_DATA=false.
+        isSynthetic: true,
       };
 
       await tx.productListingSnapshot.upsert({
@@ -1201,6 +1207,8 @@ async function seedOneCluster(
           sellerName: snapshotPayload.sellerName,
           imageUrl: snapshotPayload.imageUrl,
           productUrl: snapshotPayload.productUrl,
+          // Garante a marca mesmo em re-execuções sobre registros antigos.
+          isSynthetic: true,
         },
       });
       stats.totalSnapshots++;
@@ -1282,6 +1290,15 @@ async function seedOneCluster(
 }
 
 async function main() {
+  // Trava de segurança: este script só gera dados sintéticos. Sem o opt-in
+  // explícito, aborta para evitar poluir um banco real por acidente.
+  if (process.env.ALLOW_SYNTHETIC_DATA !== 'true') {
+    console.error(
+      'Abortando: seed-6months-fitness-dataset.ts gera dados SINTÉTICOS. ' +
+        "Defina ALLOW_SYNTHETIC_DATA=true para confirmar que é intencional.",
+    );
+    process.exit(1);
+  }
   console.log('🚀 Iniciando geração do dataset robusto de 6 meses (Fitness Intelligence)...');
 
   // Criar ou obter Job de Importação para os Shipments
@@ -1353,15 +1370,10 @@ async function main() {
   try {
     const prismaService = new PrismaService();
     await prismaService.$connect();
-    const rulesService = new BusinessRulesService();
-    const trendEngine = new TrendEngineService(rulesService);
-    const opportunityEngine = new OpportunityEngineService(rulesService);
     const openRouterService = new OpenRouterService(prismaService);
 
     const productsService = new ProductsService(
       prismaService,
-      trendEngine,
-      opportunityEngine,
       openRouterService,
     );
 

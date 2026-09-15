@@ -1,7 +1,6 @@
 import { PrismaService } from '../../shared/database/prisma.service';
+import { RedisCacheService } from '../../shared/redis/redis-cache.service';
 import { OpenRouterService } from '../ai-gateway/openrouter.service';
-import { OpportunityEngineService } from '../opportunity-engine/opportunity-engine.service';
-import { TrendEngineService } from '../trend-engine/trend-engine.service';
 import { ProductsService } from './products.service';
 
 // Premissas do cluster "Halteres Ajustáveis" em produção: preço de referência
@@ -19,13 +18,18 @@ const DEFAULTS = {
   custoFixoMensalBrl: 4500.0,
   elasticidadePreco: -1.6,
   volumeBaseMensal: 1846,
+  // Origem explícita dos defaults (T0.3/F1.7): o mock acompanha o contrato real.
+  premiseSources: {
+    precoVendaBrl: 'observado',
+    fobUsd: 'estimativa_18pct_do_preco',
+    volumeBaseMensal: 'observado',
+    cambioUsd: 'default',
+  },
 };
 
 function buildService(): ProductsService {
   const service = new ProductsService(
     {} as PrismaService,
-    {} as TrendEngineService,
-    {} as OpportunityEngineService,
     {} as OpenRouterService,
   );
 
@@ -89,5 +93,463 @@ describe('ProductsService — simulateUnitEconomics', () => {
       expect(Math.min(...precosCaro)).toBeLessThan(1220);
       expect(Math.max(...precosCaro)).toBeGreaterThan(1220);
     });
+  });
+});
+
+// S7 (RELATORIO_ANALISE_DADOS_E_SCORES.md seção 3.2): a simulação "e se" do
+// usuário (com overrides de premissas) não pode sobrescrever o score oficial
+// do ranking nem invalida o cache — só a simulação sem overrides e o lote
+// gravam riskLevel/financialScore.
+describe('ProductsService — runMonteCarloSimulation (S7)', () => {
+  const fakeCluster = {
+    id: 'cluster-1',
+    canonicalName: 'Halteres Ajustáveis',
+    category: 'dumbbells',
+    snapshots: [],
+  };
+
+  function buildMonteCarloService() {
+    const prisma = {
+      productCluster: {
+        update: jest.fn().mockResolvedValue({}),
+      },
+    };
+    const cache = {
+      delPattern: jest.fn().mockResolvedValue(undefined),
+      wrap: async (_key: string, _ttl: number, factory: () => unknown) => factory(),
+    };
+
+    const service = new ProductsService(
+      prisma as unknown as PrismaService,
+      {} as OpenRouterService,
+      cache as unknown as RedisCacheService,
+    );
+
+    jest.spyOn(service as never, 'getSimulationCluster').mockResolvedValue(fakeCluster as never);
+    jest.spyOn(service as never, 'defaultMonteCarloPremises').mockResolvedValue({
+      premises: {},
+      sources: {},
+    } as never);
+    jest.spyOn(service as never, 'runMonteCarloPython').mockResolvedValue({
+      risk_level: 'Baixo',
+      financial_score: 91,
+    } as never);
+
+    return { service, prisma, cache };
+  }
+
+  it('não persiste riskLevel/financialScore nem invalida o cache quando há overrides do usuário', async () => {
+    const { service, prisma, cache } = buildMonteCarloService();
+
+    const result = await service.runMonteCarloSimulation('cluster-1', {
+      premises: { preco_venda: 199 },
+    });
+
+    expect(result.is_user_scenario).toBe(true);
+    expect(prisma.productCluster.update).not.toHaveBeenCalled();
+    expect(cache.delPattern).not.toHaveBeenCalled();
+  });
+
+  it('persiste riskLevel/financialScore e invalida o cache na simulação oficial (sem overrides)', async () => {
+    const { service, prisma, cache } = buildMonteCarloService();
+
+    const result = await service.runMonteCarloSimulation('cluster-1', {});
+
+    expect(result.is_user_scenario).toBe(false);
+    expect(prisma.productCluster.update).toHaveBeenCalledTimes(1);
+    expect(prisma.productCluster.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cluster-1' },
+        data: expect.objectContaining({ riskLevel: 'Baixo', financialScore: 91 }),
+      }),
+    );
+    expect(cache.delPattern).toHaveBeenCalledWith('dashboard:trends:products:*');
+  });
+});
+
+// F2.4: o lote oficial deriva premissas do histórico (F2.2), roda 50.000
+// cenários com seed fixa e grava o ProductScore (ou só a confiança).
+describe('ProductsService — simulateBatchForRanking oficial (F2.4)', () => {
+  const DAY = 86_400_000;
+  const BASE = new Date('2026-08-01T12:00:00.000Z').getTime();
+
+  function snapshot(week: number, overrides: Record<string, unknown> = {}) {
+    return {
+      marketplace: 'amazon_br',
+      currency: 'BRL',
+      priceMin: 500,
+      salesSignalRaw: 100 + week * 10,
+      salesSignalType: 'units_monthly',
+      reviewCount: 10,
+      rating: 4.8,
+      moq: 1,
+      collectedAt: new Date(BASE + week * 7 * DAY),
+      externalProductId: 'B000000001',
+      sellerName: 'Loja X',
+      ...overrides,
+    };
+  }
+
+  function buildBatchService(snapshots: unknown[]) {
+    const prisma = {
+      productCluster: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'cluster-1',
+            canonicalName: 'Halteres Ajustáveis',
+            category: 'dumbbells',
+            simulatedAt: null,
+            createdAt: new Date(),
+            snapshots,
+          },
+        ]),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      productScore: { create: jest.fn().mockResolvedValue({}) },
+      exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const cache = { delPattern: jest.fn().mockResolvedValue(undefined) };
+
+    const service = new ProductsService(
+      prisma as unknown as PrismaService,
+      {} as OpenRouterService,
+      cache as unknown as RedisCacheService,
+    );
+    jest.spyOn(service as never, 'defaultMonteCarloPremises').mockResolvedValue({
+      premises: { elasticidade: 2.5 },
+      sources: {},
+    } as never);
+    const runPython = jest
+      .spyOn(service as never, 'runMonteCarloPython')
+      .mockResolvedValue({
+        risk_level: 'Baixo',
+        financial_score: 91,
+        decision: 'AVANCAR',
+        metrics: { p_vpl_positivo: 0.91, cvar_5: 100, vpl_mediano: 200 },
+        premises: { demanda_referencia: 100 },
+        premises_hash: 'hash-abc',
+        data_version: 'premises@1',
+      } as never);
+    return { service, prisma, cache, runPython };
+  }
+
+  it('com histórico suficiente, grava ProductScore oficial (50k, seed fixa)', async () => {
+    const snapshots = [
+      snapshot(0, { salesSignalRaw: 100 }),
+      snapshot(1, { salesSignalRaw: 110 }),
+      snapshot(2, { salesSignalRaw: 120 }),
+      snapshot(3, { salesSignalRaw: 130 }),
+      {
+        marketplace: '1688',
+        currency: 'CNY',
+        priceMin: 100,
+        salesSignalRaw: null,
+        salesSignalType: null,
+        reviewCount: null,
+        rating: null,
+        moq: 50,
+        collectedAt: new Date(BASE + 21 * DAY),
+        externalProductId: 'C1',
+        sellerName: null,
+      },
+    ];
+    const { service, prisma, cache, runPython } = buildBatchService(snapshots);
+
+    const summary = await service.simulateBatchForRanking(10);
+
+    expect(summary.simulated).toBe(1);
+    expect(runPython).toHaveBeenCalledWith(
+      expect.objectContaining({ scenario_count: 50_000, seed: 7, price_scan: false }),
+    );
+    expect(prisma.productScore.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productClusterId: 'cluster-1',
+        score: 91,
+        decision: 'AVANCAR',
+        pVplPositivo: 0.91,
+        cvar5: 100,
+        vplMediano: 200,
+        premisesHash: 'hash-abc',
+        dataVersion: 'premises@1',
+        dataConfidence: 'suficiente',
+        scenarioCount: 50_000,
+      }),
+    });
+    // Legado segue gravado até F2.7.
+    expect(prisma.productCluster.update).toHaveBeenCalled();
+    expect(cache.delPattern).toHaveBeenCalledWith('monte-carlo:*');
+    expect(cache.delPattern).toHaveBeenCalledWith('dashboard:trends:products:*');
+  });
+
+  it('sem histórico, grava só a confiança (score nulo, sem chamar o Python)', async () => {
+    const { service, prisma, runPython } = buildBatchService([]);
+
+    const summary = await service.simulateBatchForRanking(10);
+
+    expect(summary.simulated).toBe(1);
+    expect(runPython).not.toHaveBeenCalled();
+    expect(prisma.productScore.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productClusterId: 'cluster-1',
+        score: null,
+        decision: 'SEM_SCORE',
+        dataConfidence: 'historico_curto',
+        scenarioCount: 0,
+      }),
+    });
+  });
+});
+
+// F2.5: /products/compare anexa o Move Score vigente (legados mantidos).
+describe('ProductsService — compareProducts com Move Score (F2.5)', () => {
+  it('anexa moveScore/decisão/confiança e mantém os legados', async () => {
+    const prisma = {
+      productCluster: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'c1',
+            canonicalName: 'Halteres',
+            category: 'dumbbells',
+            riskLevel: null,
+            financialScore: null,
+            snapshots: [],
+          },
+        ]),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'c1',
+          canonicalName: 'Halteres',
+          category: 'dumbbells',
+          snapshots: [],
+        }),
+      },
+      productListingSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      productScore: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            productClusterId: 'c1',
+            score: 77,
+            decision: 'AVANCAR COM RESSALVAS',
+            dataConfidence: 'suficiente',
+            pVplPositivo: 0.75,
+            cvar5: 10,
+            computedAt: new Date('2026-09-14T00:00:00.000Z'),
+          },
+        ]),
+      },
+      exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new ProductsService(
+      prisma as unknown as PrismaService,
+      {} as OpenRouterService,
+    );
+
+    const [item] = await service.compareProducts(['c1']);
+
+    expect(item.moveScore).toBe(77);
+    expect(item.decision).toBe('AVANCAR COM RESSALVAS');
+    expect(item.dataConfidence).toBe('suficiente');
+    expect(item.pVplPositivo).toBe(0.75);
+    expect(item.cvar5).toBe(10);
+    expect(item).toHaveProperty('riskLevel', null);
+    expect(item).not.toHaveProperty('financialScore');
+  });
+
+  it('C1: compare expõe action, score_band, momentum e detected_on', async () => {
+    const prisma = {
+      productCluster: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'c1', canonicalName: 'Halteres', category: 'dumbbells', riskLevel: null, financialScore: null, snapshots: [] },
+        ]),
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', canonicalName: 'Halteres', category: 'dumbbells', snapshots: [] }),
+      },
+      productListingSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      productScore: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            productClusterId: 'c1', score: 82, decision: 'AVANCAR', dataConfidence: 'suficiente',
+            pVplPositivo: 0.82, cvar5: 10, computedAt: new Date(), action: 'DECIDIR_AGORA',
+            scoreBand: 'green', momentumDirection: 'sobe', momentumGrowthPct: 20, momentumConfidence: 'completa',
+          },
+        ]),
+      },
+      exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
+      reviewSummary: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new ProductsService(prisma as unknown as PrismaService, {} as OpenRouterService);
+    const [item] = await service.compareProducts(['c1']);
+    expect(item.action).toBe('DECIDIR_AGORA');
+    expect(item.score_band).toBe('green');
+  });
+});
+
+describe('ProductsService — séries com compare=previous (C3)', () => {
+  function snapshots() {
+    const base = new Date('2026-06-01T00:00:00.000Z').getTime();
+    const rows = [];
+    for (let d = 0; d < 70; d += 1) {
+      rows.push({
+        collectedAt: new Date(base + d * 86_400_000),
+        priceMin: 100 + d,
+        salesSignalRaw: 50 + d,
+        reviewCount: 10 + d,
+        currency: 'BRL',
+        marketplace: 'amazon_br',
+      });
+    }
+    return rows;
+  }
+
+  function buildService() {
+    const prisma = {
+      productListingSnapshot: { findMany: jest.fn().mockResolvedValue(snapshots()) },
+      exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
+      logisticsCostParam: { findFirst: jest.fn().mockResolvedValue(null) },
+    };
+    const service = new ProductsService(prisma as unknown as PrismaService, {} as OpenRouterService);
+    return service;
+  }
+
+  it('60d está em WINDOW_MS e compare devolve current+previous', async () => {
+    const service = buildService();
+    const res = (await service.getPriceHistory('c1', '60d', 'previous')) as {
+      window: string;
+      points: Array<{ t: string; v: number }>;
+      current: Array<{ t: string; v: number }>;
+      previous: Array<{ t: string; v: number }>;
+    };
+    expect(res.window).toBe('60d');
+    expect(res.current.length).toBeGreaterThan(0);
+    expect(res.previous.length).toBeGreaterThan(0);
+    expect(res.points).toEqual(res.current);
+  });
+
+  it('sem compare mantém { window, points }', async () => {
+    const service = buildService();
+    const res = (await service.getVolumeHistory('c1', '30d')) as { window: string; points: unknown[] };
+    expect(res.window).toBe('30d');
+    expect(Array.isArray(res.points)).toBe(true);
+  });
+});
+
+describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
+  // Resposta real do print do Raul: cerca de abertura sem fechamento (truncada).
+  const TRUNCATED =
+    '```json\n{ "decision": "AVANCAR_COM_RESSALVAS", "rationale": "O produto apresenta bom potencial de mercado com demanda crescent';
+
+  function buildAiService(responseContent: string) {
+    const created: Array<{ data: Record<string, unknown> }> = [];
+    const logs: Array<{ data: Record<string, unknown> }> = [];
+    const prisma = {
+      productCluster: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'c1',
+          canonicalName: 'Halteres Ajustáveis 24kg',
+          category: 'musculacao_pesos_livres',
+          snapshots: [],
+          alerts: [],
+        }),
+      },
+      aiRecommendation: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
+          created.push(args);
+          return { id: 'rec-1', createdAt: new Date('2026-09-15T12:00:00.000Z'), ...args.data };
+        }),
+      },
+      productScore: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            productClusterId: 'c1',
+            score: 82,
+            decision: 'AVANCAR',
+            dataConfidence: 'suficiente',
+            pVplPositivo: 0.82,
+            cvar5: 100,
+            computedAt: new Date('2026-09-14T00:00:00.000Z'),
+            action: 'DECIDIR_AGORA',
+            scoreBand: 'green',
+            momentumDirection: 'sobe',
+            momentumGrowthPct: 24.5,
+            momentumConfidence: 'completa',
+            riskExplanation: 'Risco baixo.',
+            riskDrivers: [{ factor: 'demanda', share: 60 }],
+          },
+        ]),
+      },
+      aiCallLog: {
+        create: jest.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
+          logs.push(args);
+          return {};
+        }),
+      },
+    };
+    const openRouter = {
+      chatCompletion: jest.fn().mockResolvedValue({ content: responseContent, model: 'test-model' }),
+    };
+    const service = new ProductsService(
+      prisma as unknown as PrismaService,
+      openRouter as unknown as OpenRouterService,
+    );
+    return { service, prisma, openRouter, created, logs };
+  }
+
+  it('resposta truncada com cerca → fallback determinístico, sem JSON na tela, ação das regras', async () => {
+    const { service, created, logs, openRouter } = buildAiService(TRUNCATED);
+
+    const result = await service.getAiRecommendation('c1');
+
+    expect(openRouter.chatCompletion).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ responseFormat: { type: 'json_object' }, maxTokens: 1500 }),
+    );
+    expect(result.action).toBe('DECIDIR_AGORA');
+    expect(result.rationale).toContain('Move Score 82');
+    expect(result.rationale).not.toContain('```');
+    expect(result.rationale).not.toContain('{');
+    expect(result.key_drivers).toEqual([]);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].data.status).toBe('rejected_validation');
+    expect(created).toHaveLength(1);
+    expect(created[0].data.promptVersion).toBe('v2.1-deterministic-fallback');
+    expect(String(created[0].data.rationale)).not.toContain('```');
+  });
+
+  it('JSON válido usa o rationale da IA mas mantém a ação das regras', async () => {
+    const { service } = buildAiService(
+      JSON.stringify({
+        action: 'IGNORAR',
+        rationale: 'Margem apertada no custo atual.',
+        key_drivers: ['custo alto'],
+        recommended_next_step: 'Renegociar.',
+      }),
+    );
+
+    const result = await service.getAiRecommendation('c1');
+
+    expect(result.action).toBe('DECIDIR_AGORA');
+    expect(result.rationale).toBe('Margem apertada no custo atual.');
+    expect(result.key_drivers).toEqual(['custo alto']);
+    expect(result.recommended_next_step).toBe('Renegociar.');
+  });
+
+  it('cache ignora linha inválida antiga e regenera', async () => {
+    const { service, prisma } = buildAiService(
+      JSON.stringify({ action: 'DECIDIR_AGORA', rationale: 'Tudo certo.', key_drivers: [] }),
+    );
+    (prisma.aiRecommendation.findFirst as jest.Mock).mockResolvedValue({
+      id: 'old',
+      productClusterId: 'c1',
+      decision: 'REPROVAR',
+      action: 'monitorar',
+      rationale: '```json {"decision": "X"}',
+      generatedText: '```json {"decision": "X"}',
+      modelVersion: 'old-model',
+      createdAt: new Date('2026-09-15T11:00:00.000Z'),
+    });
+
+    const result = await service.getAiRecommendation('c1');
+
+    expect(result.cached).toBe(false);
+    expect(result.action).toBe('DECIDIR_AGORA');
   });
 });

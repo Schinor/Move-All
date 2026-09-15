@@ -1,14 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { syntheticSnapshotWhere } from '../../shared/synthetic-data/synthetic-data.filter';
+import { assertSafeWebhookUrl, UnsafeWebhookUrlError, WebhookChannel } from './webhook-safety';
 
 export interface AlertRuleConfig {
   minTrendScore: number;
   minGrowthPct: number;
+  /** Variação mínima do Move Score (pontos) para disparar (F2.7). */
+  minMoveScoreDelta?: number;
   webhookUrl?: string;
-  webhookChannel: 'slack' | 'telegram' | 'generic';
+  webhookChannel: WebhookChannel;
   telegramChatId?: string;
   enabled: boolean;
 }
+
+/** Queda/aumento que dispara alerta quando não configurado (F2.7). */
+const DEFAULT_MOVE_SCORE_DELTA = 10;
 
 @Injectable()
 export class AlertsService {
@@ -50,6 +57,7 @@ export class AlertsService {
       return {
         minTrendScore: 78,
         minGrowthPct: 40,
+        minMoveScoreDelta: DEFAULT_MOVE_SCORE_DELTA,
         webhookUrl: process.env.ALERTS_WEBHOOK_URL || '',
         webhookChannel: (process.env.ALERTS_WEBHOOK_CHANNEL as any) || 'slack',
         telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
@@ -57,10 +65,17 @@ export class AlertsService {
       };
     }
 
-    return config.value as unknown as AlertRuleConfig;
+    const stored = config.value as unknown as AlertRuleConfig;
+    return { minMoveScoreDelta: DEFAULT_MOVE_SCORE_DELTA, ...stored };
   }
 
   async saveRules(rules: AlertRuleConfig) {
+    // Previne SSRF: uma regra salva com webhook malicioso seria disparada
+    // depois, sem intervenção do usuário, a cada scan de oportunidades.
+    if (rules.webhookUrl) {
+      await assertSafeWebhookUrl(rules.webhookUrl, rules.webhookChannel);
+    }
+
     const existing = await this.prisma.businessRuleConfig.findFirst({
       where: { key: 'opportunity_alerts_config' },
     });
@@ -80,11 +95,12 @@ export class AlertsService {
     });
   }
 
-  async testWebhook(webhookUrl: string, channel: 'slack' | 'telegram' | 'generic', telegramChatId?: string) {
+  async testWebhook(webhookUrl: string, channel: WebhookChannel, telegramChatId?: string) {
     const samplePayload = {
       product: 'Halteres Ajustáveis Selecionáveis 24kg Par',
       category: 'Musculação / Dumbbells',
-      trendScore: 88,
+      moveScore: 88,
+      decision: 'AVANCAR',
       growthPct: 195,
       currentVolume: 850,
       timestamp: new Date().toISOString(),
@@ -92,10 +108,11 @@ export class AlertsService {
 
     return this.dispatchWebhook(webhookUrl, channel, {
       title: '🚀 Teste de Alerta de Oportunidade Move Intelligence',
-      message: `O produto *${samplePayload.product}* atingiu Trend Score *${samplePayload.trendScore}/100* (+${samplePayload.growthPct}% de crescimento)!`,
+      message: `O produto *${samplePayload.product}* atingiu Move Score *${samplePayload.moveScore}/100* (decisão ${samplePayload.decision}, +${samplePayload.growthPct}% de crescimento)!`,
       productName: samplePayload.product,
       category: samplePayload.category,
-      trendScore: samplePayload.trendScore,
+      moveScore: samplePayload.moveScore,
+      decision: samplePayload.decision,
       growthPct: samplePayload.growthPct,
       telegramChatId,
     });
@@ -107,18 +124,46 @@ export class AlertsService {
       return { status: 'disabled', alertsCreated: 0 };
     }
 
+    // Com INCLUDE_SYNTHETIC_DATA=false (default), não dispara alerta de
+    // oportunidade a partir de crescimento/score calculado sobre dados
+    // sintéticos do historical-collection.
     const clusters = await this.prisma.productCluster.findMany({
       include: {
         snapshots: {
+          where: syntheticSnapshotWhere(),
           orderBy: { collectedAt: 'asc' },
           take: 1000,
         },
       },
       take: 100,
     });
+    // Move Score vigente + anterior por cluster (B3/C8): dispara quando a AÇÃO
+    // muda (ex.: entra em DECIDIR_AGORA) ou variação ≥ N pontos. Decision fica
+    // como fallback até a limpeza futura.
+    const scoreRows = await this.prisma.productScore.findMany({
+      where: { productClusterId: { in: clusters.map((cluster) => cluster.id) } },
+      orderBy: { computedAt: 'desc' },
+    });
+    const scoresByCluster = new Map<
+      string,
+      { score: number | null; decision: string; action: string | null }[]
+    >();
+    for (const row of scoreRows) {
+      const list = scoresByCluster.get(row.productClusterId) ?? [];
+      if (list.length < 2) {
+        const action = (row as unknown as Record<string, unknown>).action;
+        list.push({
+          score: row.score,
+          decision: row.decision,
+          action: typeof action === 'string' ? action : null,
+        });
+        scoresByCluster.set(row.productClusterId, list);
+      }
+    }
 
     let alertsCreated = 0;
     const dispatched = [];
+    const minDelta = rules.minMoveScoreDelta ?? DEFAULT_MOVE_SCORE_DELTA;
 
     for (const cluster of clusters) {
       if (cluster.snapshots.length < 2) continue;
@@ -127,9 +172,28 @@ export class AlertsService {
       const lastVol = Number(cluster.snapshots.at(-1)?.salesSignalRaw) || 0;
       const growthPct = firstVol > 0 ? Math.round(((lastVol - firstVol) / firstVol) * 100) : 0;
       const avgPrice = Number(cluster.snapshots.at(-1)?.priceMin) || 0;
+      const [current, previous] = scoresByCluster.get(cluster.id) ?? [];
+      const moveScore = current?.score ?? null;
+      const actionChanged =
+        current !== undefined &&
+        previous !== undefined &&
+        (current.action ?? current.decision) !== (previous.action ?? previous.decision);
+      const bandChanged =
+        current !== undefined &&
+        previous !== undefined &&
+        current.decision !== previous.decision;
+      const delta =
+        current?.score !== null &&
+        current?.score !== undefined &&
+        previous?.score !== null &&
+        previous?.score !== undefined
+          ? Math.abs(current.score - previous.score)
+          : 0;
+      const moveTrigger =
+        moveScore !== null && (actionChanged || bandChanged || delta >= minDelta);
 
-      // Se atender os critérios de alerta de oportunidade
-      if (growthPct >= rules.minGrowthPct || (cluster.financialScore && cluster.financialScore >= rules.minTrendScore)) {
+      // Disparo: pico de crescimento OU mudança de ação/faixa/variação do Move Score.
+      if (growthPct >= rules.minGrowthPct || moveTrigger) {
         // Verifica se já não existe alerta recente (últimas 48h)
         const recentAlert = await this.prisma.alert.findFirst({
           where: {
@@ -139,17 +203,25 @@ export class AlertsService {
         });
 
         if (!recentAlert) {
+          const actionLabel = current?.action ?? current?.decision ?? null;
+          const reason = moveTrigger
+            ? `Move Score ${previous?.score ?? '—'} → ${moveScore} (ação ${actionLabel})`
+            : `crescimento de +${growthPct}%`;
           const alert = await this.prisma.alert.create({
             data: {
               productClusterId: cluster.id,
-              alertType: 'OPPORTUNITY_SPIKE',
+              alertType: moveTrigger ? 'MOVE_SCORE_SHIFT' : 'OPPORTUNITY_SPIKE',
               severity: 'HIGH',
-              message: `Produto '${cluster.canonicalName}' rompeu marco de crescimento: +${growthPct}% (${lastVol} un/mês).`,
+              message: `Produto '${cluster.canonicalName}': ${reason} (${lastVol} un/mês).`,
               evidence: {
                 growthPct,
                 currentVolume: lastVol,
                 avgPrice,
                 category: cluster.category,
+                moveScore,
+                previousMoveScore: previous?.score ?? null,
+                decision: current?.decision ?? null,
+                action: current?.action ?? null,
               },
             },
           });
@@ -159,11 +231,13 @@ export class AlertsService {
             try {
               await this.dispatchWebhook(rules.webhookUrl, rules.webhookChannel, {
                 title: '⚡ Nova Oportunidade de Mercado Detectada',
-                message: `O produto *${cluster.canonicalName}* está em forte aceleração: +${growthPct}% no volume mensal!`,
+                message: `O produto *${cluster.canonicalName}* mudou de patamar: ${reason}!`,
                 productName: cluster.canonicalName,
                 category: cluster.category || 'Geral',
                 growthPct,
-                trendScore: cluster.financialScore || 80,
+                // Sem Move Score, o webhook reflete a ausência — nunca placeholder.
+                moveScore,
+                decision: current?.decision ?? null,
                 telegramChatId: rules.telegramChatId,
               });
               dispatched.push(cluster.canonicalName);
@@ -185,17 +259,30 @@ export class AlertsService {
 
   private async dispatchWebhook(
     url: string,
-    channel: 'slack' | 'telegram' | 'generic',
+    channel: WebhookChannel,
     data: {
       title: string;
       message: string;
       productName: string;
       category: string;
       growthPct: number;
-      trendScore: number;
+      moveScore: number | null;
+      decision?: string | null;
       telegramChatId?: string;
     },
   ) {
+    // Anti-SSRF: valida protocolo/host (e resolve DNS no caso genérico) antes
+    // de qualquer requisição de rede, mesmo que a regra já tenha sido salva.
+    try {
+      await assertSafeWebhookUrl(url, channel);
+    } catch (error) {
+      if (error instanceof UnsafeWebhookUrlError) {
+        throw new Error(`Webhook recusado por segurança: ${error.message}`);
+      }
+      throw error;
+    }
+
+    const scoreLabel = data.moveScore !== null ? `${data.moveScore}/100` : 'sem score';
     let body: any;
 
     if (channel === 'slack') {
@@ -212,7 +299,7 @@ export class AlertsService {
               { type: 'mrkdwn', text: `*Produto:*\n${data.productName}` },
               { type: 'mrkdwn', text: `*Categoria:*\n${data.category}` },
               { type: 'mrkdwn', text: `*Crescimento:*\n+${data.growthPct}%` },
-              { type: 'mrkdwn', text: `*Score:*\n${data.trendScore}/100` },
+              { type: 'mrkdwn', text: `*Move Score:*\n${scoreLabel}` },
             ],
           },
           {
@@ -231,7 +318,7 @@ export class AlertsService {
         `📦 *Produto:* ${data.productName}\n` +
         `🏷️ *Categoria:* ${data.category}\n` +
         `📈 *Crescimento:* +${data.growthPct}%\n` +
-        `⭐ *Score:* ${data.trendScore}/100\n\n` +
+        `⭐ *Move Score:* ${scoreLabel}\n\n` +
         `_Move Intelligence Platform_`;
 
       body = {

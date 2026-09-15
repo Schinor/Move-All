@@ -1,5 +1,6 @@
 """Extractors de produto por marketplace."""
 
+from .aliexpress import AliExpressExtractor
 from .alibaba import AlibabaExtractor
 from .amazon import AmazonExtractor
 from .amazon_br import AmazonBRExtractor
@@ -9,6 +10,7 @@ from .taobao import TaobaoExtractor
 from .tiktok_shop import TikTokShopExtractor
 
 __all__ = [
+    "AliExpressExtractor",
     "AlibabaExtractor",
     "AmazonExtractor",
     "AmazonBRExtractor",

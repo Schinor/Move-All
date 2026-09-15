@@ -87,6 +87,10 @@ model ProductListingSnapshot {
   rawProductId      String?              @map("raw_product_id") @db.Uuid
   imageUrl          String?              @map("image_url")
   productUrl        String?              @map("product_url")
+  // Marca snapshots gerados pelo pipeline sintético (historical-collection /
+  // seed-6months), propagado a partir de IntelligenceProduct.isSynthetic em
+  // syncAnalyticalModels. Ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 2.1 A5.
+  isSynthetic       Boolean              @default(false) @map("is_synthetic")
   cluster           ProductCluster?      @relation(fields: [productClusterId], references: [id])
   importJob         ImportJob?           @relation(fields: [importJobId], references: [id])
   rawProduct        IntelligenceProduct? @relation(fields: [rawProductId], references: [id])
@@ -96,6 +100,7 @@ model ProductListingSnapshot {
   @@index([collectedAt])
   @@index([importJobId])
   @@index([rawProductId])
+  @@index([isSynthetic])
   @@map("product_listing_snapshots")
 }
 
@@ -121,6 +126,10 @@ model IntelligenceProduct {
   supplier            String?
   dataQuality         String                          @map("data_quality")
   sourceSpecific      Json                            @default("{}") @map("source_specific")
+  // Marca produtos gerados pelo pipeline sintético (historical-collection /
+  // seed-6months, supplier "Move Fitness Partner%") em vez de coleta real.
+  // Ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 2.1 A5.
+  isSynthetic         Boolean                         @default(false) @map("is_synthetic")
   demandLinks         IntelligenceProductDemandLink[]
   analyticalSnapshots ProductListingSnapshot[]
 
@@ -128,6 +137,7 @@ model IntelligenceProduct {
   @@index([source, cluster])
   @@index([capturedAt])
   @@index([gtin])
+  @@index([isSynthetic])
   @@index([canonicalTitle(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_products_canonical_trgm")
   @@map("products")
 }
@@ -142,6 +152,11 @@ model IntelligenceDemandSignal {
   trendIndex   Decimal                         @map("trend_index") @db.Decimal
   rawValue     Decimal?                        @map("raw_value") @db.Decimal
   capturedAt   DateTime                        @map("captured_at") @db.Date
+  // Contexto da observação (F1.6): âncora/timeframe/request que tornam
+  // execuções comparáveis sem reescrever o histórico.
+  requestId     String?                        @map("request_id")
+  timeframe     String?                        @map("timeframe")
+  anchorKeyword String?                        @map("anchor_keyword")
   productLinks IntelligenceProductDemandLink[]
 
   @@unique([keyword, geo, source, weekStart])
@@ -230,8 +245,10 @@ model ProductCluster {
   items           ProductClusterItem[]
   snapshots       ProductListingSnapshot[]
   alerts          Alert[]
+  scores          ProductScore[]
   matchReviews    ProductMatchReview[]
   aiRecommendations AiRecommendation[]
+  reviewSummaries ReviewSummary[]
 
   @@index([createdAt])
   @@index([canonicalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_clusters_canonical_trgm")
@@ -254,8 +271,101 @@ model ProductClusterItem {
   @@map("product_cluster_items")
 }
 
-model ProductMatchReview {
-  id                 String         @id @default(uuid()) @db.Uuid
+/// Anúncio acompanhado pelo loop de acompanhamento (Fase 1). Uma linha por
+/// (source, nativeId); a série histórica mora em `ListingObservation`.
+/// Ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 2.2.
+model TrackedListing {
+  id                  String               @id @default(uuid()) @db.Uuid
+  source              String
+  nativeId            String               @map("native_id")
+  canonicalUrl        String               @map("canonical_url")
+  productId           String?              @map("product_id") @db.Uuid
+  status              String               @default("CANDIDATE")
+  tier                Int                  @default(3)
+  discoveredByTerm    String?              @map("discovered_by_term")
+  firstSeenAt         DateTime             @default(now()) @map("first_seen_at")
+  lastSeenAt          DateTime?            @map("last_seen_at")
+  lastSuccessAt       DateTime?            @map("last_success_at")
+  consecutiveFailures Int                  @default(0) @map("consecutive_failures")
+  nextDueAt           DateTime             @default(now()) @map("next_due_at")
+  observations        ListingObservation[]
+  // Contagem de reviews na última amostra de textos (A5): nova amostra só
+  // quando crescer ≥ 10 ou ≥ 10% (limiares configuráveis).
+  reviewsCountAtSample Int?                @map("reviews_count_at_sample")
+  reviewSamples       ReviewSample[]
+  // Fornecedor que abastece em alto volume (A6, foco B2B). Null enquanto
+  // não houver identificação confiável — nunca canal de venda como fornecedor.
+  supplierId          String?               @map("supplier_id") @db.Uuid
+  supplier            Supplier?             @relation(fields: [supplierId], references: [id])
+
+  @@unique([source, nativeId])
+  @@index([status, nextDueAt])
+  @@map("tracked_listings")
+}
+
+/// Observação de um anúncio acompanhado. APPEND-ONLY: nenhum código pode
+/// fazer `update` nela (há teste que varre o código-fonte).
+model ListingObservation {
+  id             String         @id @default(uuid()) @db.Uuid
+  listingId      String         @map("listing_id") @db.Uuid
+  observedAt     DateTime       @default(now()) @map("observed_at")
+  price          Decimal?       @db.Decimal(14, 4)
+  currency       String?
+  rating         Decimal?       @db.Decimal(5, 2)
+  reviewsCount   Int?           @map("reviews_count")
+  soldCountRaw   String?        @map("sold_count_raw")
+  soldCountLower Int?           @map("sold_count_lower")
+  bestSellerRank Int?           @map("best_seller_rank")
+  inStock        Boolean?       @map("in_stock")
+  scrapeStatus   String         @map("scrape_status")
+  parserVersion  String         @map("parser_version")
+  contentHash    String?        @map("content_hash")
+  isSynthetic    Boolean        @default(false) @map("is_synthetic")
+  // Distribuição de estrelas 1–5 da página do anúncio (A5, JSON
+  // {"1": n1, ..., "5": n5}); null quando a fonte não exibir.
+  ratingDistribution Json?      @map("rating_distribution")
+  listing        TrackedListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, observedAt])
+  @@map("listing_observations")
+}
+
+/// Amostra de textos de avaliação por anúncio (A5). Só o necessário para o
+/// resumo por faixa (B5): estrelas, texto, idioma e ID na fonte. NUNCA o nome
+/// de quem avaliou. Amostrada só quando reviews_count cresce ≥ 10 ou ≥ 10%.
+model ReviewSample {
+  id              String         @id @default(uuid()) @db.Uuid
+  listingId       String         @map("listing_id") @db.Uuid
+  collectedAt     DateTime       @default(now()) @map("collected_at")
+  stars           Int?
+  text            String
+  sourceReviewId  String?        @map("source_review_id")
+  language        String?
+  listing         TrackedListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, collectedAt])
+  @@map("review_samples")
+}
+
+/// Fornecedor B2B que abastece em alto volume (A6, decisão 8): Alibaba, 1688
+/// e AliExpress, onde dá para negociar direto com o fabricante. Canal de
+/// venda (Amazon, Mercado Livre) nunca é fornecedor.
+model Supplier {
+  id               String           @id @default(uuid()) @db.Uuid
+  source           String
+  nativeSupplierId String           @map("native_supplier_id")
+  name             String
+  yearsOnPlatform  Int?             @map("years_on_platform")
+  verified         Boolean          @default(false)
+  country          String?
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  listings         TrackedListing[]
+
+  @@unique([source, nativeSupplierId])
+  @@map("suppliers")
+}
+
+model ProductMatchReview {  id                 String         @id @default(uuid()) @db.Uuid
   sourceProductId    String         @map("source_product_id") @db.Uuid
   candidateProductId String         @map("candidate_product_id") @db.Uuid
   candidateClusterId String         @map("candidate_cluster_id") @db.Uuid
@@ -272,6 +382,62 @@ model ProductMatchReview {
   @@index([status, createdAt])
   @@index([candidateClusterId])
   @@map("product_match_reviews")
+}
+
+/// Score oficial Monte Carlo por cluster (Fase 2, F2.1). Uma linha por
+/// cálculo; o vigente é o último por cluster (`computedAt`). Os campos
+/// `financialScore`, `riskLevel` e `simulatedAt` de `ProductCluster` ficam
+/// como deprecated até F2.7.
+model ProductScore {
+  id              String         @id @default(uuid()) @db.Uuid
+  productClusterId String        @map("product_cluster_id") @db.Uuid
+  // Nulo quando não há dados para calcular (historico_curto/sem_custo):
+  // produto sem score mostra o rótulo de dataConfidence, sem número.
+  score           Int?
+  decision        String
+  pVplPositivo    Float?         @map("p_vpl_positivo")
+  cvar5           Float?
+  vplMediano      Float?         @map("vpl_mediano")
+  premises        Json
+  premisesHash    String         @map("premises_hash")
+  dataVersion     String         @map("data_version")
+  dataConfidence  String         @map("data_confidence")
+  scenarioCount   Int            @map("scenario_count")
+  computedAt      DateTime       @default(now()) @map("computed_at")
+  cluster         ProductCluster @relation(fields: [productClusterId], references: [id], onDelete: Cascade)
+  // B3 (decisões 2-3): ação por quadrante + momentum + faixa. Decision fica
+  // como histórico até limpeza futura.
+  action              String? @map("action")
+  momentumDirection   String? @map("momentum_direction")
+  momentumGrowthPct   Float?  @map("momentum_growth_pct")
+  momentumConfidence  String? @map("momentum_confidence")
+  scoreBand           String? @map("score_band")
+  // B4: explicação do risco (texto + drivers JSON [{factor, share}]).
+  riskExplanation     String? @map("risk_explanation")
+  riskDrivers         Json?   @map("risk_drivers")
+
+  @@index([productClusterId, computedAt])
+  @@map("product_scores")
+}
+
+/// Resumo de avaliações por faixa (B5, decisão 10): 1–2 baixo, 3 neutro,
+/// 4–5 alto. Histórico por cluster/faixa; exibe o último. Contagem por faixa
+/// vem da distribuição de estrelas — a IA nunca calcula números.
+model ReviewSummary {
+  id             String         @id @default(uuid()) @db.Uuid
+  productClusterId String       @map("product_cluster_id") @db.Uuid
+  band           String
+  summary        String
+  topReasons     Json           @map("top_reasons")
+  sampleSize     Int            @map("sample_size")
+  reviewsCountAt Int?           @map("reviews_count_at")
+  model          String?
+  promptVersion  String?        @map("prompt_version")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  cluster        ProductCluster @relation(fields: [productClusterId], references: [id], onDelete: Cascade)
+
+  @@index([productClusterId, band, createdAt])
+  @@map("review_summaries")
 }
 
 model Alert {

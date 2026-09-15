@@ -51,6 +51,9 @@ def upsert_products(
                 "supplier": record.get("supplier"),
                 "data_quality": record.get("data_quality") or "catalog_listing",
                 "source_specific": record.get("source_specific") or {},
+                # Default False: dados coletados de verdade nunca são sintéticos.
+                # Só run_historical_collection.py (gerador de demonstração) passa True.
+                "is_synthetic": record.get("is_synthetic", False),
             }
             if row is None:
                 row = ProductSnapshotModel(**values)

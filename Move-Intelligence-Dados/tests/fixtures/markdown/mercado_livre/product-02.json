@@ -1,0 +1,20 @@
+{
+  "price": 594.0,
+  "currency": "BRL",
+  "rating": null,
+  "reviews_count": null,
+  "sold_count_raw": "+25 vendidos",
+  "sold_count_lower": 25,
+  "best_seller_rank": null,
+  "in_stock": true,
+  "scrape_status": "ok",
+  "parser_version": "mercado_livre@2",
+  "title": "Halter Anilha Ajustável Até 30kg Fitness Dumbbell Musculação",
+  "seller": "AIKAU",
+  "rating_distribution": null,
+  "supplier_name": null,
+  "supplier_years": null,
+  "supplier_verified": null,
+  "moq": null,
+  "price_tiers": null
+}

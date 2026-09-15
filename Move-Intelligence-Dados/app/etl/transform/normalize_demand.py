@@ -121,7 +121,7 @@ def normalize_demand(record: Mapping[str, Any]) -> dict[str, Any]:
     if raw_value is None:
         raise ValueError(f"Sinal {keyword!r} sem valor numérico")
 
-    supplied_index = _number(record.get("trend_index"))
+    # Legado: "trend_index" por execução foi removido (F1.6); vale o bruto.
     captured_at = _date(record.get("captured_at"))
     # captured_at é uma data de captura, não a semana observada. A função _date
     # sempre retorna segunda-feira, o que é desejável para week_start, mas aqui
@@ -153,24 +153,30 @@ def normalize_demand(record: Mapping[str, Any]) -> dict[str, Any]:
         "geo": geo,
         "source": source,
         "week_start": week_start,
-        "trend_index": max(0.0, min(100.0, supplied_index if supplied_index is not None else raw_value)),
+        # Sem reescala por execução (F1.6): Google Trends já é 0–100 por
+        # requisição e o TikTok guarda a contagem bruta (o crescimento é
+        # calculado depois sobre o bruto, Δlog). Comparabilidade temporal
+        # exige que o valor gravado não dependa dos outros pontos do lote.
+        "trend_index": raw_value,
         "raw_value": raw_value,
         "captured_at": captured_at,
+        # Contexto da observação (F1.6): âncora/timeframe/request que tornam
+        # execuções comparáveis. Ausentes em seeds antigos → None.
+        "request_id": record.get("request_id"),
+        "timeframe": record.get("timeframe"),
+        "anchor_keyword": record.get("anchor_keyword"),
     }
     return normalized
 
 
 def normalize_demand_records(
     records: Iterable[Mapping[str, Any]],
-    group_by: tuple[str, ...] = ("geo", "source"),
 ) -> list[dict[str, Any]]:
-    """Normaliza sinais usando Min-Max no conjunto comparável.
+    """Normaliza sinais SEM min-max por execução (F1.6).
 
-    Por padrão, ``geo × source`` é o conjunto de comparação: assim keywords
-    diferentes são colocadas na mesma escala quando vierem da mesma região e
-    fonte, em vez de cada keyword receber automaticamente pico 100. O valor
-    bruto observado permanece em ``raw_value``. ``group_by`` permite uma
-    segmentação mais estreita no futuro, sem alterar o contrato salvo.
+    Cada ponto mantém ``trend_index = raw_value``. A chave do contrato é
+    única: se um extractor enviar o mesmo ponto mais de uma vez, o último
+    registro observado vence de forma determinística.
     """
 
     parsed: list[dict[str, Any]] = []
@@ -180,38 +186,8 @@ def normalize_demand_records(
         except (TypeError, ValueError) as error:
             raise ValueError(f"Falha ao normalizar demanda no índice {index}: {error}") from error
 
-    valid_group_fields = {"keyword", "geo", "source", "week_start"}
-    if not group_by or any(field not in valid_group_fields for field in group_by):
-        raise ValueError("group_by precisa conter apenas keyword, geo, source ou week_start")
-
-    def group_key(item: Mapping[str, Any]) -> tuple[Any, ...]:
-        return tuple(
-            item[field].casefold() if isinstance(item[field], str) else item[field]
-            for field in group_by
-        )
-
-    minima: dict[tuple[Any, ...], float] = {}
-    maxima: dict[tuple[Any, ...], float] = {}
-    for item in parsed:
-        key = group_key(item)
-        value = float(item["raw_value"])
-        minima[key] = min(minima.get(key, value), value)
-        maxima[key] = max(maxima.get(key, value), value)
-
-    # A chave do contrato é única. Se um extractor enviar o mesmo ponto mais
-    # de uma vez, o último registro observado vence de forma determinística.
     unique: dict[tuple[str, str, str, date], dict[str, Any]] = {}
     for item in parsed:
-        series_key = group_key(item)
-        minimum = minima[series_key]
-        maximum = maxima[series_key]
-        value_range = maximum - minimum
-        item["trend_index"] = round(
-            ((float(item["raw_value"]) - minimum) / value_range * 100.0)
-            if value_range > 0
-            else 0.0,
-            4,
-        )
         item["id"] = str(
             uuid.uuid5(
                 uuid.NAMESPACE_URL,

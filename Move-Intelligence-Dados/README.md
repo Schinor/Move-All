@@ -1,5 +1,16 @@
 ## ETL de inteligência de produto (MVP)
 
+### Testes
+
+O comando oficial da suíte é:
+
+```bash
+python -m pytest tests
+```
+
+`tests/run_tests.py` é mantido por compatibilidade, mas não faz descoberta
+automática de testes — use o pytest para validar todos os arquivos `test_*.py`.
+
 O ETL v2 fica em `app/etl` e mantém o scaffold legado (`products/listings`)
 isolado. O fluxo implementado é:
 

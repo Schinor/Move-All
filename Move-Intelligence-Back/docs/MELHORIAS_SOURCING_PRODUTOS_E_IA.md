@@ -7,7 +7,7 @@ Este documento detalha a arquitetura, fórmulas matemáticas, configurações de
 ## 📑 Sumário
 
 1. [⭐ Sistema de Qualificação e Score de Fornecedores (0 a 5.0 Estrelas & Tiers)](#1--sistema-de-qualificação-e-score-de-fornecedores-0-a-50-estrelas--tiers)
-2. [🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Muse Glimmer 30B)](#2--arquitetura-gateway-e-configuração-da-inteligência-artificial-muse-glimmer-30b)
+2. [🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Ling 3.0 Flash Fin free)](#2--arquitetura-gateway-e-configuração-da-inteligência-artificial-ling-30-flash-fin-free)
 3. [🕸️ Motor de Sub-Sinais em 6 Dimensões & Explicabilidade do Score](#3-️-motor-de-sub-sinais-em-6-dimensões--explicabilidade-do-score)
 4. [📈 Normalização e Agregação das Séries Históricas de Produtos](#4--normalização-e-agregação-das-séries-históricas-de-produtos)
 5. [🧪 Guia Prático de Testes e Validação](#5--guia-prático-de-testes-e-validação)
@@ -48,10 +48,10 @@ $$\text{Rating Final} = (S_{\text{avaliações}} \times 0.35) + (S_{\text{vendas
 
 ---
 
-## 2. 🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Muse Glimmer 30B)
+## 2. 🤖 Arquitetura, Gateway e Configuração da Inteligência Artificial (Ling 3.0 Flash Fin free)
 
-### 🔌 Gateway de IA (`NvidiaService`):
-O backend do Move possui um gateway corporativo de IA implementado em `src/modules/ai-gateway/nvidia.service.ts`, equipado com:
+### 🔌 Gateway de IA (`OpenRouterService`):
+O backend do Move possui um gateway corporativo de IA implementado em `src/modules/ai-gateway/openrouter.service.ts`, equipado com:
 * **Streaming em Tempo Real (SSE)**: Transmissão token a token para o frontend via Server-Sent Events.
 * **Suporte Nativo a Fastify & Express**: Manipulação direta dos headers e chunks via `res.raw.setHeader()` e `res.raw.write()`.
 * **Function Calling (Tools)**: Acesso em tempo real ao banco PostgreSQL para consultar produtos, fornecedores e histórico.
@@ -62,13 +62,13 @@ No arquivo `Move-Intelligence-Back/.env`:
 
 ```env
 # Modelo Validado e Ativo:
-NVIDIA_MODEL=meta/muse-glimmer-30b
+OPENROUTER_MODEL=inclusionai/ling-3.0-flash-fin:free
 
 # Chave de API:
-NVIDIA_API_KEY=nvapi-<sua-chave-aqui>
+OPENROUTER_API_KEY=sk-or-<sua-chave-aqui>
 
-# URL do Endpoint (Padrão NVIDIA NIM):
-# NVIDIA_API_URL=https://integrate.api.nvidia.com/v1/chat/completions
+# URL do Endpoint OpenRouter:
+OPENROUTER_API_URL=https://openrouter.ai/api/v1/chat/completions
 ```
 
 ---
@@ -122,4 +122,4 @@ Reescrevemos o método `seriesPoints` no `ProductsService` com agregação consi
 
 ### C. Testar o Copilot de IA:
 1. Acesse o Copilot em: [http://localhost:4200/ai-copilot](http://localhost:4200/ai-copilot)
-2. Envie uma pergunta e observe a resposta fluida em streaming do modelo **Muse Glimmer 30B**.
+2. Envie uma pergunta e observe a resposta fluida em streaming do modelo **Ling 3.0 Flash Fin (free)**.

@@ -1,7 +1,21 @@
 """Pipeline de coleta e geração histórica multianual (ex.: 2 anos / 104 semanas).
 
-Garante que todo o catálogo de inteligência possua uma série temporal completa
-e contínua para cálculo de tendências, crescimento percentual e Monte Carlo.
+⚠️ AVISO: ESTE PIPELINE GERA DADOS SINTÉTICOS. NÃO É COLETA REAL. ⚠️
+Tudo aqui (`CANONICAL_CATALOG`, `growth_factor`, `volatility`, a "oscilação
+determinística") é fabricado em memória apenas para demonstração — não vem do
+Bright Data nem de nenhum marketplace real. Ele existe só para dar uma série
+temporal completa (17 produtos, 104 semanas) suficiente para exercitar o
+Monte Carlo e o ranking em ambiente de demonstração/dev.
+
+Todo registro gravado por este pipeline é marcado com `is_synthetic = true`
+em `products` e `product_listing_snapshots`, exatamente para que ranking,
+Monte Carlo, IA e alertas em produção possam (e devam) excluir esses dados.
+Por isso, rodar este pipeline exige confirmação explícita:
+- via `main.py historical-collection`, é preciso passar `--allow-synthetic`;
+- via `scripts/collector_scheduler.py` no boot, é preciso `RUN_INIT_ON_STARTUP=true`
+  **e** `ALLOW_SYNTHETIC_DATA=true`.
+
+NUNCA rode este pipeline contra um banco de produção com dados reais.
 """
 
 from __future__ import annotations
@@ -27,7 +41,7 @@ CANONICAL_CATALOG = [
         "base_sales": 220,
         "growth_factor": 1.95,
         "volatility": 0.04,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["halteres ajustaveis", "halter regulavel", "adjustable dumbbell"],
     },
     {
@@ -38,7 +52,7 @@ CANONICAL_CATALOG = [
         "base_sales": 150,
         "growth_factor": 2.85,
         "volatility": 0.05,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["plataforma vibratoria", "vibration plate fitness"],
     },
     {
@@ -49,7 +63,7 @@ CANONICAL_CATALOG = [
         "base_sales": 360,
         "growth_factor": 1.35,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["kettlebell 16kg", "kettlebell ferro fundido"],
     },
     {
@@ -60,7 +74,7 @@ CANONICAL_CATALOG = [
         "base_sales": 55,
         "growth_factor": 3.10,
         "volatility": 0.06,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["remo indoor", "air rower machine", "remo seco"],
     },
     {
@@ -71,7 +85,7 @@ CANONICAL_CATALOG = [
         "base_sales": 190,
         "growth_factor": 3.00,
         "volatility": 0.04,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["banco musculacao inclinavel", "banco supino regulavel"],
     },
     {
@@ -82,7 +96,7 @@ CANONICAL_CATALOG = [
         "base_sales": 25,
         "growth_factor": 4.10,
         "volatility": 0.05,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["power rack agachamento", "gaiola crossfit profissional"],
     },
     {
@@ -93,7 +107,7 @@ CANONICAL_CATALOG = [
         "base_sales": 160,
         "growth_factor": 7.40,
         "volatility": 0.06,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["walking pad", "esteira dobravel compacta", "esteira slim"],
     },
     {
@@ -104,7 +118,7 @@ CANONICAL_CATALOG = [
         "base_sales": 150,
         "growth_factor": 3.10,
         "volatility": 0.04,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["bicicleta spinning 18kg", "spinning bike residencial"],
     },
     {
@@ -115,7 +129,7 @@ CANONICAL_CATALOG = [
         "base_sales": 380,
         "growth_factor": 3.15,
         "volatility": 0.04,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["roda abdominal retorno automatico", "ab roller com rebote"],
     },
     {
@@ -126,7 +140,7 @@ CANONICAL_CATALOG = [
         "base_sales": 580,
         "growth_factor": 3.10,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["super bands elasticos", "elasticos de resistencia crossfit"],
     },
     {
@@ -137,7 +151,7 @@ CANONICAL_CATALOG = [
         "base_sales": 1400,
         "growth_factor": 1.38,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["speed rope rolamentada", "corda crossfit double under"],
     },
     {
@@ -148,7 +162,7 @@ CANONICAL_CATALOG = [
         "base_sales": 720,
         "growth_factor": 1.35,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["push up board", "prancha flexao multifuncional"],
     },
     {
@@ -159,7 +173,7 @@ CANONICAL_CATALOG = [
         "base_sales": 300,
         "growth_factor": 1.38,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["barra fixa de parede", "barra pull up calistenia"],
     },
     {
@@ -170,7 +184,7 @@ CANONICAL_CATALOG = [
         "base_sales": 200,
         "growth_factor": 1.36,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["argolas olimpicas madeira", "gymnastic rings crossfit"],
     },
     {
@@ -181,7 +195,7 @@ CANONICAL_CATALOG = [
         "base_sales": 1200,
         "growth_factor": 1.40,
         "volatility": 0.03,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["tapete yoga mat tpe 6mm", "mat pilates antiderrapante"],
     },
     {
@@ -192,7 +206,7 @@ CANONICAL_CATALOG = [
         "base_sales": 65,
         "growth_factor": 7.10,
         "volatility": 0.06,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["reformer pilates portatil", "prancha pilates molas"],
     },
     {
@@ -203,7 +217,7 @@ CANONICAL_CATALOG = [
         "base_sales": 480,
         "growth_factor": 3.12,
         "volatility": 0.04,
-        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercadolivre", "shopee_br"],
+        "sources": ["1688", "alibaba", "amazon", "amazon_br", "mercado_livre", "shopee_br"],
         "keywords": ["rolo liberacao miofascial", "foam roller texturizado"],
     },
 ]
@@ -232,6 +246,27 @@ def run(
     start_date = end_date - timedelta(weeks=total_weeks - 1)
 
     weekly_dates = [start_date + timedelta(weeks=i) for i in range(total_weeks)]
+
+    if dry_run:
+        # Com dry_run, não abre sessão nenhuma (nem get_session): devolve só
+        # as contagens previstas, sem tocar no banco.
+        total_products = sum(len(item["sources"]) for item in CANONICAL_CATALOG) * total_weeks
+        total_snapshots = total_products
+        total_demand = (
+            sum(len(item["keywords"]) * 2 for item in CANONICAL_CATALOG) * total_weeks
+        )
+        return {
+            "status": "success",
+            "period_years": period_years,
+            "weeks_generated": total_weeks,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "canonical_products": len(CANONICAL_CATALOG),
+            "total_products_upserted": total_products,
+            "total_snapshots_upserted": total_snapshots,
+            "total_demand_signals_upserted": total_demand,
+            "dry_run": True,
+        }
 
     db = get_session(database_url)
     try:
@@ -294,7 +329,7 @@ def run(
                     prod_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{source}:{item['canonical_title']}:{current_date.isoformat()}"))
                     record_id = f"prod_{item['category']}_{source}"
 
-                    is_brl = "br" in source or source in ("mercadolivre", "amazon_br", "shopee_br")
+                    is_brl = "br" in source or source in ("mercado_livre", "amazon_br", "shopee_br")
                     base_price = item["base_price_brl"] if is_brl else item["base_price_usd"]
                     currency = "BRL" if is_brl else "USD"
                     # Preço oscila levemente
@@ -308,17 +343,20 @@ def run(
                                 INSERT INTO products (
                                     id, source, record_id, captured_at, title, canonical_title,
                                     cluster, price_value, price_currency, rating, reviews_count,
-                                    monthly_sales, moq, supplier, data_quality, source_specific, attrs
+                                    monthly_sales, moq, supplier, data_quality, source_specific, attrs,
+                                    is_synthetic
                                 ) VALUES (
                                     :id, :source, :record_id, :captured_at, :title, :canonical_title,
                                     :cluster, :price_value, :price_currency, :rating, :reviews_count,
-                                    :monthly_sales, 1, :supplier, 'catalog_listing', '{}'::jsonb, '{}'::jsonb
+                                    :monthly_sales, 1, :supplier, 'catalog_listing', '{}'::jsonb, '{}'::jsonb,
+                                    true
                                 )
                                 ON CONFLICT (source, record_id, captured_at) DO UPDATE SET
                                     monthly_sales = EXCLUDED.monthly_sales,
                                     price_value = EXCLUDED.price_value,
                                     reviews_count = EXCLUDED.reviews_count,
-                                    rating = EXCLUDED.rating
+                                    rating = EXCLUDED.rating,
+                                    is_synthetic = true
                                 """
                             ),
                             {
@@ -347,17 +385,20 @@ def run(
                                 INSERT INTO product_listing_snapshots (
                                     id, marketplace, external_product_id, product_cluster_id, raw_product_id,
                                     title, price_min, price_max, currency, moq, stock, rating, review_count,
-                                    sales_signal_raw, sales_signal_type, seller_name, collected_at
+                                    sales_signal_raw, sales_signal_type, seller_name, collected_at,
+                                    is_synthetic
                                 ) VALUES (
                                     :id, :marketplace, :external_product_id, :product_cluster_id, :raw_product_id,
                                     :title, :price_min, :price_max, :currency, 1, 500, :rating, :review_count,
-                                    :sales_signal_raw, 'units_sold', :seller_name, :collected_at
+                                    :sales_signal_raw, 'units_sold', :seller_name, :collected_at,
+                                    true
                                 )
                                 ON CONFLICT (id) DO UPDATE SET
                                     sales_signal_raw = EXCLUDED.sales_signal_raw,
                                     price_min = EXCLUDED.price_min,
                                     review_count = EXCLUDED.review_count,
-                                    product_cluster_id = EXCLUDED.product_cluster_id
+                                    product_cluster_id = EXCLUDED.product_cluster_id,
+                                    is_synthetic = true
                                 """
                             ),
                             {

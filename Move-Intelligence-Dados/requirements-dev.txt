@@ -1,0 +1,6 @@
+# Dependências de desenvolvimento (testes).
+# O comando oficial da suíte é `python -m pytest tests` (ver README.md).
+# `tests/run_tests.py` é mantido por compatibilidade, mas não faz descoberta
+# automática de testes.
+-r requirements.txt
+pytest>=7.0.0

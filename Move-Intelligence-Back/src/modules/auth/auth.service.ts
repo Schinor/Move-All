@@ -83,7 +83,8 @@ export class AuthService {
   }) {
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, role: user.role },
-      { expiresIn: '15m' },
+      // Sessão longa (~7 dias): o refresh silencioso (30d deslizantes) renova depois disso.
+      { expiresIn: '7d' },
     );
     const refreshToken = randomBytes(48).toString('base64url');
     await this.prisma.refreshToken.create({

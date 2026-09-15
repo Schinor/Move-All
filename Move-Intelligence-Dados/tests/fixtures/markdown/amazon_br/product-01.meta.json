@@ -1,0 +1,10 @@
+{
+  "source": "amazon_br",
+  "url": "https://www.amazon.com.br/dp/B0GW1D1V58",
+  "discovery": "url-direta",
+  "discovery_url": "https://www.amazon.com.br/s?k=haltere+ajustavel+24kg",
+  "captured_at": "2026-09-14T23:54:10.438337+00:00",
+  "chars": 152122,
+  "redactions": 0,
+  "candidates": 1
+}

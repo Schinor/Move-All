@@ -76,8 +76,10 @@ export function parseTiktokShop(content: string): MarketplaceParseResult {
     const imageCount = parseJsonArray(record.images).length;
 
     rows.push({
-      naturalKey: `tiktok-shop|${externalProductId}`,
-      marketplace: 'tiktok-shop',
+      // Fonte canônica com underscore (F1.8); imports antigos com hífen não
+      // casam a chave natural e são reimportados uma vez.
+      naturalKey: `tiktok_shop|${externalProductId}`,
+      marketplace: 'tiktok_shop',
       externalProductId,
       title,
       priceMin,

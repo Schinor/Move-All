@@ -17,7 +17,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional, Pattern
+from typing import Any, Callable, Mapping, Optional, Pattern
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -462,6 +462,7 @@ def extract_image_urls(markdown: str, source: str) -> list[str]:
     filters = {
         "amazon": r"(?:media-amazon|ssl-images-amazon)\.com/images/I/",
         "alibaba": r"alicdn|alibaba",
+        "aliexpress": r"aliexpress|alicdn",
         "taobao": r"taobao|alicdn|tmall",
         "1688": r"1688|alicdn|tbcdn",
         "tiktok_shop": r"tiktokcdn|byteimg|ibytedtos",
@@ -482,23 +483,82 @@ def extract_image_urls(markdown: str, source: str) -> list[str]:
 
 
 def extract_native_id(url: str, source: str) -> str:
-    patterns = {
-        "amazon": r"/dp/([A-Z0-9]{10})",
-        "amazon_br": r"/dp/([A-Z0-9]{10})",
-        "alibaba": r"[_-](\d{8,})\.html",
-        "taobao": r"/item/(\d+)",
-        "1688": r"/offer/(\d+)\.html",
-        "mercado_livre": r"(?:MLB-|/p/)([A-Z0-9-]+)",
-        "shopee_br": r"-i\.(\d+)\.\d+",
+    # Cada fonte pode ter mais de um formato de URL válido; os padrões são
+    # tentados em ordem e o primeiro que casar vence.
+    patterns: dict[str, list[str]] = {
+        "amazon": [r"/dp/([A-Z0-9]{10})"],
+        "amazon_br": [r"/dp/([A-Z0-9]{10})"],
+        "alibaba": [r"[_-](\d{8,})\.html"],
+        # AliExpress (A4): ID nativo = dígitos do item em /item/<id>.html.
+        "aliexpress": [r"/item/(\d+)\.html"],
+        "taobao": [r"/item/(\d+)"],
+        "1688": [r"/offer/(\d+)\.html"],
+        # Mercado Livre: o formato antigo capturava o slug do título junto do
+        # ID (`(?:MLB-|/p/)([A-Z0-9-]+)`), então o ID mudava se o vendedor
+        # editasse o título do anúncio. Agora extraímos só os dígitos do MLB,
+        # cobrindo tanto o anúncio (".../MLB-3456789012-titulo-slug") quanto
+        # a página de catálogo ("/p/MLB12345"); ambos são normalizados para
+        # "MLB<dígitos>" logo abaixo.
+        "mercado_livre": [r"MLB-?(\d+)"],
+        # Shopee: o formato padrão é "...-i.{shop_id}.{item_id}". O padrão
+        # antigo (`-i\.(\d+)\.\d+`) capturava o shop_id (1º grupo), fazendo
+        # produtos distintos da mesma loja colidirem no mesmo record_id. O
+        # item_id (2º grupo) é globalmente único no Shopee, então é ele que
+        # deve virar o record_id. Também aceitamos o formato alternativo
+        # "shopee.com.br/product/{shop_id}/{item_id}".
+        "shopee_br": [r"-i\.\d+\.(\d+)", r"/product/\d+/(\d+)"],
     }
-    pattern = patterns.get(source)
-    if pattern:
+    for pattern in patterns.get(source, []):
         match = re.search(pattern, url, re.IGNORECASE)
         if match:
-            return match.group(1)
+            native_id = match.group(1)
+            if source == "mercado_livre":
+                return f"MLB{native_id}"
+            return native_id
     path = urlsplit(url).path.strip("/")
     basis = f"{source}:{path or url}".encode("utf-8")
     return hashlib.sha1(basis).hexdigest()[:32]
+
+
+def unwrap_search_link(link: str) -> Optional[str]:
+    """Desembrulha links do SERP para a URL direta do anúncio.
+
+    O `search_engine` do MCP devolve `/goto?url=<token>` (redirecionador do
+    Google) em vez da URL direta — sem desembrulhar, a descoberta não acha
+    nenhum produto (A1, 14/09/2026). `/url?q=<destino>` sai por parsing local;
+    `/goto?url=` exige 1 GET local no 302 (grátis, 10s; 400/429 → None).
+    """
+    from urllib.parse import parse_qs, urlparse
+
+    text = (link or "").strip()
+    if not text:
+        return None
+    if text.startswith("/url?") or "/url?" in text:
+        try:
+            params = parse_qs(urlparse(text).query)
+            target = (params.get("q") or [""])[0].strip()
+            return target or None
+        except ValueError:
+            return None
+    if text.startswith("/goto?url=") or "/goto?url=" in text:
+        token = text.split("url=", 1)[1].split("&")[0]
+        if not token:
+            return None
+        try:
+            response = requests.get(
+                "https://www.google.com/goto?url=" + token,
+                allow_redirects=False,
+                timeout=10,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+                },
+            )
+            if response.status_code in (301, 302, 303, 307, 308):
+                return (response.headers.get("Location") or "").strip() or None
+        except Exception:
+            return None
+        return None
+    return text
 
 
 class MarketplaceExtractor:
@@ -510,7 +570,12 @@ class MarketplaceExtractor:
         candidates: list[dict[str, Any]] = []
         seen: set[str] = set()
         for item in _organic(response):
-            url = str(item.get("link") or item.get("url") or "").strip()
+            raw = str(item.get("link") or item.get("url") or "").strip()
+            if not raw:
+                continue
+            # Links do SERP vêm embrulhados (/goto?url=); desembrulha antes do
+            # filtro, senão nenhum candidato passa (A1).
+            url = unwrap_search_link(raw) or ""
             if not url or not self.profile.accepted_url.search(url):
                 continue
             key = canonical_url(url)
@@ -542,6 +607,23 @@ class MarketplaceExtractor:
             "detail_content_chars": len(content),
             "raw_content_preview": content[:4000],
         }
+        # A3.4: a primeira observação da descoberta passa pelo parser da fonte
+        # (A2). O preço genérico acima (primeiro match monetário) continua no
+        # produto para descoberta/matching, mas o status do parser decide o
+        # scrape_status da observação em tracked.py: partial nunca vira "ok".
+        try:
+            from app.etl.extract.marketplace import parsers as listing_parsers
+
+            parsed = listing_parsers.parse(self.profile.source, content)
+            source_specific["parser_version"] = parsed.parser_version
+            source_specific["parser_scrape_status"] = parsed.scrape_status
+        except ValueError:
+            # Fonte ainda sem parser de acompanhamento: sem validação.
+            source_specific["parser_version"] = f"{self.profile.source}@pending"
+            source_specific["parser_scrape_status"] = "unknown"
+        except Exception:
+            source_specific["parser_version"] = f"{self.profile.source}@error"
+            source_specific["parser_scrape_status"] = "unknown"
         observed_fields = ["url"]
         if candidate.get("title"):
             observed_fields.append("title")
@@ -577,13 +659,26 @@ class MarketplaceExtractor:
         limit: int = 10,
         concurrency: int = 2,
         client: Optional[BrightDataClient] = None,
+        candidate_filter: Optional[Callable[[Mapping[str, Any]], bool]] = None,
     ) -> dict[str, Any]:
-        """Executa descoberta + detalhes e conserva erros parciais."""
+        """Executa descoberta + detalhes e conserva erros parciais.
+
+        `candidate_filter` recebe cada candidato e devolve True para raspar
+        (ex.: pular URLs cujo `(source, native_id)` já está em
+        `tracked_listings` na descoberta F1.4). Nenhum filtro por padrão.
+        """
 
         active_client = client or self.client or BrightDataClient()
         effective_query = self.profile.build_query(query)
         search_response = active_client.search(effective_query, self.profile.country)
-        candidates = self.discover_candidates(search_response, query)[: max(1, limit)]
+        discovered = self.discover_candidates(search_response, query)
+        if candidate_filter is not None:
+            candidates = [item for item in discovered if candidate_filter(item)]
+            skipped = len(discovered) - len(candidates)
+        else:
+            candidates = discovered
+            skipped = 0
+        candidates = candidates[: max(1, limit)]
         records: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
 
@@ -626,17 +721,20 @@ class MarketplaceExtractor:
                     records.append(fallback)
 
         records.sort(key=lambda item: str(item.get("record_id")))
+        metadata = {
+            "source": self.profile.source,
+            "query": query,
+            "country": self.profile.country,
+            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "candidates_count": len(candidates),
+            "records_count": len(records),
+            "errors_count": len(errors),
+            "provider": getattr(active_client, "provider", "test_or_custom"),
+        }
+        if candidate_filter is not None:
+            metadata["tracked_skipped"] = skipped
         return {
-            "metadata": {
-                "source": self.profile.source,
-                "query": query,
-                "country": self.profile.country,
-                "captured_at": datetime.now(timezone.utc).isoformat(),
-                "candidates_count": len(candidates),
-                "records_count": len(records),
-                "errors_count": len(errors),
-                "provider": getattr(active_client, "provider", "test_or_custom"),
-            },
+            "metadata": metadata,
             "candidates": candidates,
             "records": records,
             "errors": errors,
