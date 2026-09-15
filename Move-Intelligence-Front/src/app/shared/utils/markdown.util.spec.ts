@@ -1,4 +1,4 @@
-import { renderCopilotMarkdown } from './markdown.util';
+import { renderCopilotMarkdown, stripToolCallMarkup } from './markdown.util';
 
 describe('renderCopilotMarkdown', () => {
   it('renderiza negrito, titulo e listas sem exibir os marcadores Markdown', () => {
@@ -61,6 +61,17 @@ describe('renderCopilotMarkdown', () => {
 
     expect(result).toContain('<code>monte_carlo_simulated</code>');
     expect(result).not.toContain('<em>');
+  });
+
+  it('P0-3: remove blocos <tool_call> de conversas antigas antes de renderizar', () => {
+    const result = renderCopilotMarkdown(
+      'Texto <tool_call>exec <argkey>query</argkey> <argvalue>SELECT 1</arg_value> </tool_call> fim',
+    );
+
+    expect(result).not.toContain('tool_call');
+    expect(result).not.toContain('SELECT');
+    expect(result).toContain('Texto');
+    expect(stripToolCallMarkup(null)).toBe('');
   });
 
   it('nao aplica negrito ou italico dentro de code spans', () => {

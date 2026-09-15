@@ -54,10 +54,25 @@
 
 .config-grid {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1.5fr) 150px 150px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--sp-3);
   align-items: end;
   margin-top: var(--sp-4);
+}
+
+.config-grid .flex-2 {
+  grid-column: span 2;
+}
+
+.triggers-note {
+  grid-column: 1 / -1;
+  margin: var(--sp-1) 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+.triggers-note strong {
+  color: var(--text-2);
 }
 
 .form-group,

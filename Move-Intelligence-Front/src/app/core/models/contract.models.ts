@@ -29,11 +29,32 @@ export interface TrendProduct {
   canonicalName: string;
   category: string | null;
   imageUrl: string | null;
-  trendScore: Indicator;
-  opportunityScore: Indicator;
-  westernSaturationScore: Indicator;
+  /** Legados removidos do contrato em F2.7 (opcionais por tolerância). */
+  trendScore?: Indicator;
+  opportunityScore?: Indicator;
+  westernSaturationScore?: Indicator;
   marginEstimate: Indicator;
   risk: RiskLevel | null;
+  /** Move Score oficial (F2.6, D9 pendente: nome exibido "Move Score"). */
+  moveScore: number | null;
+  decision: string | null;
+  /** Faixa pronta da API (B1, decisão 5): green > 70, yellow 50–70, red ≤ 50. */
+  scoreBand?: 'green' | 'yellow' | 'red' | null;
+  /** Ação por quadrante (B3, decisões 2-3). */
+  action?: string | null;
+  actionLabel?: string | null;
+  momentum?: {
+    direction: string | null;
+    growthPct: number | null;
+    confidence: string | null;
+    sources: string[];
+  } | null;
+  riskExplanation?: { text: string | null; drivers: Array<{ factor: string; share: number }> } | null;
+  /** Premissas do Monte Carlo vigente (precoVenda, custoUsd, freteUsdUnidade, impostoImportacao, cambioBase…). */
+  premises?: Record<string, number> | null;
+  dataConfidence: string | null;
+  pVplPositivo?: number | null;
+  cvar5?: number | null;
   mainSources: string[];
   recommendation: string | null;
   /** Campos de apresentação usados pelos cards (opcionais até o backend calcular). */
@@ -43,6 +64,15 @@ export interface TrendProduct {
   marginPct: number | null;
   leadTimeDays: number | null;
   projectedRevenue: number | null;
+  /** Crescimento TikTok Δlog→% (B6); null = "Sinal social indisponível". */
+  tiktokGrowthPct?: number | null;
+  /** C1/C2: indicadores do ranking (nunca inventados; null vira "—"). */
+  price?: number | null;
+  reviews?: number | null;
+  rating?: number | null;
+  detectedOn?: string[];
+  topSupplier?: { name: string; source: string; verified: boolean; years: number | null } | null;
+  reviewSummary?: { by_band: Record<string, { summary: string; top_reasons: unknown; sample_size: number }>; distribution: Record<string, number> | null } | null;
 }
 
 /** Resumo do dashboard executivo (KPIs de topo + ticker). */
@@ -76,9 +106,44 @@ export interface Series {
   points: SeriesPoint[];
 }
 
+/** Avaliações por semana (positivas 4–5★, neutras 3★, negativas 1–2★) + nota média. */
+export interface ReviewSentimentPoint {
+  t: string;
+  positive: number;
+  neutral: number;
+  negative: number;
+  avgRating: number | null;
+  totalReviews: number;
+}
+
+export interface ReviewSentiment {
+  window: string;
+  points: ReviewSentimentPoint[];
+  totals: {
+    positive: number;
+    neutral: number;
+    negative: number;
+    positiveShare: number | null;
+    negativeShare: number | null;
+    avgRating: number | null;
+  } | null;
+}
+
+/** Item do bloco "Recomendação" do executivo. */
+export interface ExecutiveRecommendationItem {
+  productClusterId: string;
+  canonicalName: string;
+  moveScore: number | null;
+  action: string | null;
+  actionLabel?: string | null;
+  text: string;
+}
+
 export interface Supplier {
   id: string;
   name: string;
+  /** D5: fonte do anúncio — B2B (Alibaba/1688/AliExpress) é fornecedor; retail é canal. */
+  source?: string | null;
   country: string | null;
   countryCode: string | null;
   flag: string | null;
@@ -90,8 +155,8 @@ export interface Supplier {
   tier?: 'Diamante' | 'Ouro' | 'Prata' | 'Bronze' | string;
   totalProducts?: number;
   total_products?: number;
-  totalMonthlySales?: number;
-  total_monthly_sales?: number;
+  totalMonthlySales?: number | null;
+  total_monthly_sales?: number | null;
   confidence: number | null;
   moq: number | null;
   fob: number | null;
@@ -180,6 +245,13 @@ export interface MonteCarloSimulationResult {
   histogram: MonteCarloHistogramBin[];
   priceCurve: MonteCarloPricePoint[];
   optimalPrice: MonteCarloPricePoint | null;
+  /**
+   * true quando a simulação usou premissas alteradas pelo usuário ("e se").
+   * Nesse caso o backend NÃO grava o resultado como score oficial do cluster
+   * (ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 3.2 S7) — a UI precisa
+   * deixar isso explícito para não passar a impressão de que o ranking mudou.
+   */
+  isUserScenario: boolean;
 }
 
 export interface MonteCarloDefaults {
@@ -266,7 +338,11 @@ export interface Recommendation {
   title: string;
   action: RecommendationAction;
   rationale: string | null;
-  opportunityScore: Indicator;
+  /** Legado removido do contrato em F2.7. */
+  opportunityScore?: Indicator;
+  moveScore?: number | null;
+  decision?: string | null;
+  dataConfidence?: string | null;
 }
 
 export interface AiRecommendationResult {
@@ -310,8 +386,8 @@ export interface SourceStatus {
   lastCollectedAt: string | null;
 }
 
-export type TimeWindow = '24h' | '7d' | '30d' | '3m' | '6m' | 'all';
-export const TIME_WINDOWS: TimeWindow[] = ['7d', '30d', '3m', '6m', 'all'];
+export type TimeWindow = '24h' | '7d' | '30d' | '60d' | '3m' | '6m' | 'all';
+export const TIME_WINDOWS: TimeWindow[] = ['7d', '30d', '60d', '3m', '6m', 'all'];
 export const DEFAULT_WINDOW: TimeWindow = '6m';
 
 export interface CopilotChatMessage {

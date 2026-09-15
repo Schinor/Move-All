@@ -1,4 +1,7 @@
 .chart-card {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-3);
   border-radius: var(--r-md);
   padding: var(--sp-4);
 }
@@ -12,4 +15,64 @@ header {
 }
 header strong {
   color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+app-chart {
+  display: block;
+  height: 260px;
+}
+
+/* P1-3: o card nunca aparece vazio. */
+.empty-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+/* Valores de cada dimensão abaixo do radar (a explicação aparece no hover). */
+.signal-list {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) 0 0;
+  list-style: none;
+  border-top: 1px solid var(--border);
+}
+.signal-list li {
+  display: grid;
+  grid-template-columns: 96px 1fr 28px;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.bar-label {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.bar-track {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+}
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--chart-1);
+  border-radius: var(--r-full);
+}
+.bar-value {
+  color: var(--text);
+  font-size: var(--fs-caption);
+  text-align: right;
+}
+.missing .bar-label,
+.bar-empty {
+  color: var(--text-3);
+}
+.bar-empty {
+  grid-column: 2 / -1;
+  font-size: var(--fs-caption);
 }

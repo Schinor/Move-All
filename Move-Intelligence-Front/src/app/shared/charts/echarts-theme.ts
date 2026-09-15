@@ -10,6 +10,10 @@ export interface EchartsTheme {
   chart4: string;
   chart5: string;
   chart6: string;
+  /** P2-3: semânticos do tema (claro/escuro) para os gráficos. */
+  success: string;
+  warning: string;
+  info: string;
 }
 
 const FALLBACK: EchartsTheme = {
@@ -24,6 +28,9 @@ const FALLBACK: EchartsTheme = {
   chart4: '#b08900',
   chart5: '#c42945',
   chart6: '#54585b',
+  success: '#17803d',
+  warning: '#8a6a00',
+  info: '#1b6e86',
 };
 
 function cssValue(name: string, fallback: string): string {
@@ -44,6 +51,9 @@ export function readEchartsTheme(): EchartsTheme {
     chart4: cssValue('--chart-4', FALLBACK.chart4),
     chart5: cssValue('--chart-5', FALLBACK.chart5),
     chart6: cssValue('--chart-6', FALLBACK.chart6),
+    success: cssValue('--success', FALLBACK.success),
+    warning: cssValue('--warning', FALLBACK.warning),
+    info: cssValue('--info', FALLBACK.info),
   };
 }
 

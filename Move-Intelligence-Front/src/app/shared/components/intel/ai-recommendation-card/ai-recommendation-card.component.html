@@ -1,35 +1,84 @@
-<article class="decision surface-panel">
+<article class="decision surface-panel" [attr.data-tone]="tone()">
   <div class="decision-header">
     <span class="eyebrow">Move AI · Parecer Executivo</span>
     @if (recommendation()?.modelVersion) {
-      <span class="model-badge">{{ recommendation()?.modelVersion }}</span>
+      <span class="model-badge" [attr.title]="recommendation()?.modelVersion">{{ shortModel() }}</span>
     }
   </div>
 
-  @if (loading()) {
-    <div class="ai-loading">Gerando parecer com grounding da IA...</div>
-  } @else {
-    <div class="decision-content">
-      <h3 [class.positive]="decision() === 'Lançar'" [class.warning]="decision() === 'Monitorar' || decision() === 'Negociar'" [class.danger]="decision() === 'Evitar' || decision() === 'Bloquear'">
-        {{ decision() }}
-      </h3>
-      <p class="rationale-text">{{ rationale() }}</p>
+  <div class="decision-content">
+    <div class="verdict">
+      <h3>{{ decision() }}</h3>
+      @if (summary()) {
+        <p class="summary">{{ summary() }}</p>
+      }
+    </div>
 
-      <div class="drivers-section">
-        <span class="section-label">Direcionadores Analíticos:</span>
+    @if (loading()) {
+      <p class="ai-loading">Gerando parecer da IA…</p>
+    } @else if (rationale()) {
+      <p class="rationale-text">{{ rationale() }}</p>
+    }
+
+    @if (reasons().length) {
+      <section class="why" aria-labelledby="why-title">
+        <h4 id="why-title">Por que essa decisão</h4>
+        <dl class="reason-list">
+          @for (reason of reasons(); track reason.label) {
+            <div class="reason" [attr.data-tone]="reason.tone">
+              <dt>{{ reason.label }}</dt>
+              <dd class="reason-value num">{{ reason.value }}</dd>
+              <dd class="reason-detail">{{ reason.detail }}</dd>
+            </div>
+          }
+        </dl>
+      </section>
+    }
+
+    @if (economics(); as e) {
+      <section class="unit" aria-labelledby="unit-title">
+        <h4 id="unit-title">Conta por unidade</h4>
+        <dl class="unit-table num">
+          <div><dt>Preço de venda</dt><dd>{{ formatBrl(e.price) }}</dd></div>
+          <div><dt>Custo importado (produto, frete e imposto)</dt><dd>−{{ formatBrl(e.landedCost) }}</dd></div>
+          <div><dt>Comissão e impostos da venda</dt><dd>−{{ formatBrl(e.fees) }}</dd></div>
+          <div><dt>Frete ao cliente</dt><dd>−{{ formatBrl(e.shipping) }}</dd></div>
+          <div class="total" [class.negative]="e.margin < 0"><dt>Margem</dt><dd>{{ formatBrl(e.margin) }}</dd></div>
+        </dl>
+      </section>
+    }
+
+    @if (riskFactors().length) {
+      <section class="risk" aria-labelledby="risk-title">
+        <h4 id="risk-title">O que mais pesa no risco</h4>
+        <ul class="risk-bars">
+          @for (factor of riskFactors(); track factor.label) {
+            <li>
+              <span class="risk-label">{{ factor.label }}</span>
+              <span class="risk-track" aria-hidden="true"><span class="risk-fill" [style.width.%]="factor.share"></span></span>
+              <span class="risk-value num">{{ factor.share }}%</span>
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (aiDrivers().length) {
+      <section class="drivers-section" aria-labelledby="drivers-title">
+        <h4 id="drivers-title">Pontos levantados pela IA</h4>
         <ul class="drivers-list">
-          @for (driver of drivers(); track driver) {
+          @for (driver of aiDrivers(); track driver) {
             <li>{{ driver }}</li>
           }
         </ul>
-      </div>
+      </section>
+    }
 
-      @if (nextStep()) {
-        <div class="next-step-box">
-          <span class="next-step-label">Próximo Passo Recomendado:</span>
-          <p class="next-step-text">{{ nextStep() }}</p>
-        </div>
-      }
-    </div>
-  }
+    @if (nextStep()) {
+      <div class="next-step-box">
+        <span class="next-step-label">Próximo passo</span>
+        <p class="next-step-text">{{ nextStep() }}</p>
+      </div>
+    }
+  </div>
 </article>

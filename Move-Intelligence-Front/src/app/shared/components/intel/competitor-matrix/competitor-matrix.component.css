@@ -172,3 +172,9 @@ tr.buybox {
     border-radius: 0;
   }
 }
+
+/* P2-2: grade dos cartões de tabela. */
+.competitors-grid {
+  display: grid;
+  gap: var(--sp-3);
+}

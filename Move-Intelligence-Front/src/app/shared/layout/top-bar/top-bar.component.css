@@ -54,17 +54,37 @@
   background: var(--surface-2);
 }
 
+/* P1-7: sem controle de sidebar na top-bar em desktop; hambúrguer só no compacto. */
+.sidebar-toggle,
+.compact-only {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .sidebar-toggle,
+  .compact-only {
+    display: inline-grid;
+  }
+}
+
+/* P1-7: breadcrumb discreto, sem cara de link; escondido em desktop. */
 .breadcrumb {
-  gap: var(--sp-2);
-  min-width: 0;
-  white-space: nowrap;
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .breadcrumb {
+    display: inline-flex;
+    gap: var(--sp-2);
+    min-width: 0;
+    white-space: nowrap;
+  }
 }
 
 .eyebrow {
   color: var(--text-3);
-  font-size: var(--fs-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: var(--fs-caption);
+  font-weight: 500;
 }
 
 .breadcrumb-separator {
@@ -73,8 +93,9 @@
 
 .breadcrumb strong {
   overflow: hidden;
+  color: var(--text-2);
   font-size: var(--fs-sm);
-  font-weight: 600;
+  font-weight: 500;
   text-overflow: ellipsis;
 }
 
@@ -239,6 +260,13 @@ kbd {
 .popover-heading span {
   color: var(--text-3);
   font-size: var(--fs-caption);
+}
+
+/* P2-2: menus longos rolam dentro da viewport. */
+.notification-menu,
+.account-menu {
+  max-height: min(70dvh, 480px);
+  overflow-y: auto;
 }
 
 .notification-list {

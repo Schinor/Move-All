@@ -6,6 +6,7 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: var(--sp-4);
   margin-bottom: var(--sp-2);
 }
 .chart-title {
@@ -22,34 +23,101 @@ header {
   color: var(--text-2);
   margin-top: var(--sp-1);
 }
-.header-metrics {
+/* Indicadores do topo: rótulo pequeno + valor, separados por linha fina. */
+.chart-stats {
   display: flex;
-  align-items: center;
-  gap: var(--sp-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin: 0;
 }
-.growth-tag {
+.chart-stats div {
+  display: grid;
+  gap: 2px;
+  padding: 0 var(--sp-3);
+  text-align: right;
+  border-left: 1px solid var(--border);
+}
+.chart-stats div:first-child {
+  border-left: 0;
+}
+.chart-stats dt {
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  white-space: nowrap;
+}
+.chart-stats dd {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.chart-stats dd.positive {
+  color: var(--success);
+}
+.chart-stats dd.negative {
+  color: var(--danger);
+}
+@media (max-width: 767px) {
+  header {
+    flex-direction: column;
+    gap: var(--sp-3);
+  }
+  .chart-stats {
+    justify-content: flex-start;
+  }
+  .chart-stats div {
+    text-align: left;
+  }
+  .chart-stats div:first-child {
+    padding-left: 0;
+  }
+}
+
+/* P1-2: faixa "Mês a mês" com rolagem horizontal no celular. */
+.month-strip {
+  display: flex;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  overflow-x: auto;
+  padding-bottom: var(--sp-1);
+}
+.month-cell {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 120px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.month-label {
+  color: var(--text-2);
   font-size: var(--fs-caption);
   font-weight: 700;
-  min-height: 28px;
-  padding: 0 var(--sp-2);
-  border-radius: var(--r-full);
-  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
-.growth-tag.positive {
-  background: var(--success-bg);
-  color: var(--success);
-  border: 1px solid var(--success);
+.partial-tag {
+  color: var(--text-3);
+  font-style: normal;
+  font-weight: 400;
 }
-.growth-tag.negative {
-  background: var(--danger-bg);
-  color: var(--danger);
-  border: 1px solid var(--danger);
+.month-value {
+  color: var(--text);
+  font-size: var(--fs-body);
 }
-.points-badge {
+.month-delta {
   font-size: var(--fs-caption);
-  color: var(--text-2);
-  background: var(--surface-2);
-  padding: var(--sp-1) var(--sp-2);
-  border-radius: var(--r-full);
-  border: 1px solid var(--border);
+  font-weight: 700;
+  color: var(--text-3);
+}
+.month-delta.positive {
+  color: var(--success);
+}
+.month-delta.negative {
+  color: var(--danger);
+}
+.compare-note {
+  margin: var(--sp-3) 0 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
 }

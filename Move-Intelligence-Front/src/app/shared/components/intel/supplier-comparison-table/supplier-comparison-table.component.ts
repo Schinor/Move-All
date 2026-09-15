@@ -1,6 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import { Supplier } from '../../../../core/models/contract.models';
 import { IconComponent } from '../../../ui/icon/icon.component';
+import { sourceLabel } from '../../../util/format';
+
+export const B2B_SOURCES = ['alibaba', '1688', 'aliexpress'];
 
 type SortColumn = 'name' | 'country' | 'moq' | 'fob' | 'score' | 'rating';
 
@@ -96,5 +99,18 @@ export class SupplierComparisonTableComponent {
   formatSales(supplier: Supplier): string {
     const value = this.getTotalSales(supplier);
     return value === null ? '—' : `${value.toLocaleString('pt-BR')} un/mês`;
+  }
+
+  /** D5: retail é canal, B2B é fornecedor. */
+  sourceText(supplier: Supplier): string {
+    const s = (supplier as { source?: string | null }).source;
+    return sourceLabel(s) || '—';
+  }
+
+  kindText(supplier: Supplier): string {
+    const s = ((supplier as { source?: string | null }).source ?? '').toLowerCase();
+    if (B2B_SOURCES.includes(s)) return 'Fornecedor';
+    if (!s) return '—';
+    return 'Canal';
   }
 }

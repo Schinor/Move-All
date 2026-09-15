@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from '../api/api-client';
+import { AuthService } from '../auth/auth.service';
 import { environment } from '../../../environments/environment';
 import {
   CopilotChatRequest,
@@ -13,9 +14,14 @@ import {
 const CLIENT_ID_KEY = 'move-intelligence:copilot-client-id';
 const ACTIVE_CONVERSATION_KEY = 'move-intelligence:copilot-active-conversation';
 
+/** Sem evento do stream por 60 s → encerra com erro amigável (P0-3, nunca trava). */
+const STREAM_IDLE_TIMEOUT_MS = 60_000;
+const STREAM_EMPTY_ERROR = 'Não consegui gerar a resposta agora. Tente de novo.';
+
 @Injectable({ providedIn: 'root' })
 export class CopilotService {
   private readonly api = inject(ApiClient);
+  private readonly auth = inject(AuthService);
   private readonly clientId = this.getOrCreateClientId();
 
   chat(request: CopilotChatRequest): Observable<CopilotChatResponse> {
@@ -80,11 +86,32 @@ export class CopilotService {
     request: CopilotChatRequest,
     onToken: (token: string) => void,
     onConversationId?: (id: string) => void,
+    options?: { signal?: AbortSignal },
   ): Promise<string> {
+    // O interceptor HttpClient NÃO se aplica ao fetch manual: injeta o Bearer aqui.
+    const accessToken = this.auth.getAccessToken();
+    const abort = new AbortController();
+    // P0-5: "Parar" do usuário cancela via signal externo (só o botão cancela).
+    const external = options?.signal;
+    const onExternalAbort = () => {
+      try {
+        abort.abort((external as AbortSignal)?.reason);
+      } catch {
+        abort.abort();
+      }
+    };
+    if (external) {
+      if (external.aborted) onExternalAbort();
+      else external.addEventListener('abort', onExternalAbort, { once: true });
+    }
     const response = await fetch(`${environment.apiBaseUrl}/copilot/chat/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
       body: JSON.stringify(this.withClientContext(request)),
+      signal: abort.signal,
     });
 
     if (!response.ok || !response.body) {
@@ -96,40 +123,64 @@ export class CopilotService {
     let fullText = '';
     let buffer = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    let idleTimer: ReturnType<typeof window.setTimeout> | null = window.setTimeout(onIdle, STREAM_IDLE_TIMEOUT_MS);
+    const poke = () => {
+      if (idleTimer !== null) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(onIdle, STREAM_IDLE_TIMEOUT_MS);
+    };
+    function onIdle(): void {
+      abort.abort(new DOMException('stream timeout', 'TimeoutError'));
+    }
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop() ?? '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-        const dataStr = trimmed.slice(5).trim();
-        if (dataStr === '[DONE]') {
-          return fullText;
-        }
-        try {
-          const parsed = JSON.parse(dataStr);
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          }
-          if (parsed.conversation_id && onConversationId) {
-            onConversationId(parsed.conversation_id);
-          }
-          if (parsed.token) {
-            fullText += parsed.token;
-            onToken(parsed.token);
-          }
-          if (parsed.done) {
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          poke();
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === '[DONE]') {
             return fullText;
           }
-        } catch {
-          // Fragmentos parciais ignorados
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+            if (parsed.conversation_id && onConversationId) {
+              onConversationId(parsed.conversation_id);
+            }
+            if (parsed.token) {
+              fullText += parsed.token;
+              onToken(parsed.token);
+            }
+            if (parsed.done) {
+              return fullText;
+            }
+          } catch {
+            // Fragmentos parciais ignorados
+          }
         }
       }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'TimeoutError') {
+        throw new Error(STREAM_EMPTY_ERROR);
+      }
+      throw err;
+    } finally {
+      if (idleTimer !== null) window.clearTimeout(idleTimer);
+      external?.removeEventListener?.('abort', onExternalAbort);
+    }
+    // Fechou sem evento de término: com conteúdo, devolve o parcial; sem, erro.
+    if (!fullText.trim()) {
+      throw new Error(STREAM_EMPTY_ERROR);
     }
     return fullText;
   }

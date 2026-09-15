@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from '../api/api-client';
-import {
+import { ReviewSentiment, ExecutiveRecommendationItem,
   DEFAULT_WINDOW,
   AiRecommendationResult,
   MonteCarloAiPremisesRequest,
@@ -20,28 +20,58 @@ import {
 export class TrendsService {
   private readonly api = inject(ApiClient);
 
-  listProducts(opts?: { sort?: string; category?: string; limit?: number }): Observable<TrendProduct[]> {
-    return this.api.get<TrendProduct[]>('/trends/products', {
+  listProducts(
+    opts?: { sort?: string; dir?: 'asc' | 'desc'; category?: string; limit?: number; page?: number; pageSize?: number; action?: string },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Observable<any> {
+    return this.api.get('/trends/products', {
       sort: opts?.sort,
+      dir: opts?.dir,
       category: opts?.category,
       limit: opts?.limit,
+      page: opts?.page,
+      page_size: opts?.pageSize,
+      action: opts?.action,
     });
+  }
+
+  searchAll(q: string, limit = 20): Observable<{
+    products: Array<{ id: string; name: string; category: string | null; match?: 'nome' | 'objetivo' }>;
+    categories: string[];
+    suppliers: Array<{ id: string; name: string; source: string }>;
+    /** Objetivos reconhecidos na busca (ex.: "Pernas"). */
+    topics?: Array<{ key: string; label: string; categories: string[] }>;
+  }> {
+    return this.api.get('/search', { q, limit });
+  }
+
+  executiveRecommendation(): Observable<{
+    status: string;
+    recommended: ExecutiveRecommendationItem | null;
+    alternatives: ExecutiveRecommendationItem[];
+  }> {
+    return this.api.get('/recommendations/executive', {});
   }
 
   getProduct(id: string): Observable<TrendProductDetail> {
     return this.api.get<TrendProductDetail>(`/trends/products/${id}`);
   }
 
-  priceHistory(id: string, window: TimeWindow = DEFAULT_WINDOW): Observable<Series> {
-    return this.api.get<Series>(`/products/${id}/price-history`, { window });
+  priceHistory(id: string, window: TimeWindow = DEFAULT_WINDOW, compare?: 'previous'): Observable<Series & { current?: Array<{ t: string; v: number }>; previous?: Array<{ t: string; v: number }> }> {
+    return this.api.get(`/products/${id}/price-history`, { window, compare });
   }
 
-  reviewHistory(id: string, window: TimeWindow = DEFAULT_WINDOW): Observable<Series> {
-    return this.api.get<Series>(`/products/${id}/review-history`, { window });
+  reviewHistory(id: string, window: TimeWindow = DEFAULT_WINDOW, compare?: 'previous'): Observable<Series & { current?: Array<{ t: string; v: number }>; previous?: Array<{ t: string; v: number }> }> {
+    return this.api.get(`/products/${id}/review-history`, { window, compare });
   }
 
-  volumeHistory(id: string, window: TimeWindow = DEFAULT_WINDOW): Observable<Series> {
-    return this.api.get<Series>(`/products/${id}/volume-history`, { window });
+  /** Avaliações positivas (4–5★), neutras (3★) e negativas (1–2★) por semana + nota média. */
+  reviewSentiment(id: string, window: TimeWindow = DEFAULT_WINDOW): Observable<ReviewSentiment> {
+    return this.api.get<ReviewSentiment>(`/products/${id}/review-sentiment`, { window });
+  }
+
+  volumeHistory(id: string, window: TimeWindow = DEFAULT_WINDOW, compare?: 'previous'): Observable<Series & { current?: Array<{ t: string; v: number }>; previous?: Array<{ t: string; v: number }> }> {
+    return this.api.get(`/products/${id}/volume-history`, { window, compare });
   }
 
   suppliers(id: string): Observable<Supplier[]> {

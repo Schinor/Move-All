@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, ViewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink } from '@angular/router';
@@ -6,9 +6,11 @@ import { filter, map } from 'rxjs';
 import { toAsyncState } from '../../../core/api/async-state';
 import { Alert } from '../../../core/models/contract.models';
 import { AlertsService } from '../../../core/services/alerts.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { LayoutService } from '../../../core/services/layout.service';
 import { ThemeService } from '../../../core/services/theme.service';
 import { CommandPaletteComponent } from '../../ui/command-palette/command-palette.component';
+import { MaiMarkComponent } from '../../ui/mai-mark/mai-mark.component';
 import { IconComponent } from '../../ui/icon/icon.component';
 
 /** Rota -> [grupo da navegação, nome da tela]. O breadcrumb espelha a sidebar. */
@@ -28,13 +30,14 @@ const ROUTE_TRAIL: Record<string, [string, string]> = {
 @Component({
   selector: 'app-top-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent, RouterLink, CommandPaletteComponent, DatePipe],
+  imports: [MaiMarkComponent, IconComponent, RouterLink, CommandPaletteComponent, DatePipe],
   templateUrl: './top-bar.component.html',
   styleUrl: './top-bar.component.css',
 })
 export class TopBarComponent {
   readonly layout = inject(LayoutService);
   readonly themeService = inject(ThemeService);
+  readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly alerts = inject(AlertsService);
 
@@ -61,6 +64,17 @@ export class TopBarComponent {
     if (state.status !== 'ready') return [];
     return state.data.filter((alert) => !this.isClosed(alert));
   });
+
+  @ViewChild('palette') private palette?: CommandPaletteComponent;
+
+  constructor() {
+    // P1-7: a sidebar pode pedir a abertura da paleta (ícone de busca).
+    effect(() => {
+      if (this.layout.paletteRequest() > 0) {
+        this.palette?.open(null);
+      }
+    });
+  }
 
   toggleTheme(): void {
     this.themeService.toggle();
@@ -89,6 +103,14 @@ export class TopBarComponent {
   closeMenus(): void {
     this.notificationsOpen.set(false);
     this.accountOpen.set(false);
+  }
+
+  logout(): void {
+    this.closeMenus();
+    this.auth.logout().subscribe({
+      next: () => void this.router.navigate(['/login']),
+      error: () => void this.router.navigate(['/login']),
+    });
   }
 
   alertSeverity(alert: Alert): string {

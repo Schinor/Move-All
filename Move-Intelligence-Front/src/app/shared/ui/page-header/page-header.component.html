@@ -1,6 +1,16 @@
 <header class="page-header">
   <div class="titles">
-    <h1 class="title">{{ title() }}</h1>
+    @if (showBack()) {
+      <button type="button" class="back-btn" (click)="goBack()">
+        <app-icon name="arrow-left" [size]="14" />
+        <span>{{ backLabel() }}</span>
+      </button>
+    }
+    <h1 class="title">{{ title() }}
+      @if (hint()) {
+        <app-hint [text]="hint()" [label]="'Sobre ' + title()" />
+      }
+    </h1>
     @if (subtitle()) {
       <p class="subtitle">{{ subtitle() }}</p>
     }

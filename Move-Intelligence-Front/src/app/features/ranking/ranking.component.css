@@ -140,7 +140,7 @@ app-data-table.active {
 
 table {
   width: 100%;
-  min-width: 760px;
+  min-width: 1180px;
   border-collapse: collapse;
 }
 
@@ -222,8 +222,9 @@ tbody tr:last-child td {
 
 td.product,
 th.product-heading {
-  width: 42%;
-  min-width: 280px;
+  width: 24%;
+  min-width: 240px;
+  max-width: 320px;
   text-align: left;
 }
 
@@ -245,8 +246,105 @@ th.product-heading {
   font-size: var(--fs-caption);
 }
 
+.score-cell {
+  white-space: nowrap;
+}
+
 .score-cell app-score-gauge {
   display: inline-block;
+  vertical-align: middle;
+}
+
+.score-cell .band-chip,
+.score-cell .confidence-label {
+  margin-left: var(--sp-2);
+  vertical-align: middle;
+}
+
+.confidence-label {
+  display: inline-block;
+  max-width: 96px;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  text-align: left;
+  white-space: normal;
+}
+
+.band-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--sp-2);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+}
+
+.band-chip[data-band='green'] {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.band-chip[data-band='yellow'] {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+}
+
+.band-chip[data-band='red'] {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+th.text-cell,
+td.text-cell {
+  min-width: 160px;
+  text-align: left;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0 var(--sp-4);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.pager button {
+  min-height: 36px;
+  padding: 0 var(--sp-3);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.pager button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .growth {
@@ -312,4 +410,28 @@ th.product-heading {
   .loading-table {
     display: none;
   }
+}
+
+/* Filtro sem resultado: mensagem + ação para voltar à lista completa. */
+.filtered-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--sp-3);
+}
+
+.clear-filters {
+  min-height: 36px;
+  padding: 0 var(--sp-4);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.clear-filters:hover {
+  background: var(--surface-3);
 }

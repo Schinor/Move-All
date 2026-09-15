@@ -3,6 +3,8 @@
     <thead>
       <tr>
         <th><button type="button" (click)="sort('name')">Fornecedor / Fábrica</button></th>
+        <th>Fonte</th>
+        <th>Tipo</th>
         <th><button type="button" (click)="sort('country')">País</button></th>
         <th>Qualificação</th>
         <th>Catálogo</th>
@@ -22,6 +24,8 @@
               <span class="category-tag">{{ supplier.category ?? 'Categoria não informada' }}</span>
             </div>
           </td>
+          <td>{{ sourceText(supplier) }}</td>
+          <td>{{ kindText(supplier) }}</td>
           <td><app-icon name="globe" [size]="14" /> {{ supplier.country ?? 'Não informada' }}</td>
           <td>
             <div class="stars-cell">

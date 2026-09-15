@@ -2,14 +2,13 @@
   <div class="topbar-leading">
     <button
       type="button"
-      class="icon-btn sidebar-toggle"
+      class="icon-btn sidebar-toggle compact-only"
       (click)="$event.stopPropagation(); toggleSidebar()"
       [attr.aria-expanded]="layout.sidebarOpen()"
       aria-controls="app-navigation"
-      [attr.aria-label]="layout.sidebarOpen() ? 'Recolher navegação' : 'Abrir navegação'"
-      [attr.title]="layout.sidebarOpen() ? 'Recolher navegação' : 'Abrir navegação'"
+      aria-label="Abrir navegação"
     >
-      <app-icon [name]="layout.sidebarOpen() ? 'panel-left-close' : 'panel-left'" [size]="17" />
+      <app-icon name="menu" [size]="17" />
     </button>
     <div class="breadcrumb" aria-label="Localização atual">
       <span class="eyebrow">{{ trail()[0] }}</span>
@@ -29,9 +28,9 @@
   </button>
 
   <div class="topbar-actions" (click)="$event.stopPropagation()">
-    <a class="ask-button" routerLink="/ai-copilot" aria-label="Abrir AI Copilot">
-      <app-icon name="sparkles" [size]="15" />
-      <span>Ask Move AI</span>
+    <a class="ask-button" routerLink="/ai-copilot" aria-label="Perguntar ao M.AI">
+      <app-mai-mark [size]="12" />
+      <span>Perguntar</span>
     </a>
     <button
       type="button"
@@ -94,8 +93,8 @@
       @if (accountOpen()) {
         <section id="account-menu" class="popover account-menu" aria-label="Menu da conta">
           <div class="popover-heading">
-            <strong>Conta</strong>
-            <span>Acesso à plataforma</span>
+            <strong>{{ auth.currentUser()?.name || 'Conta' }}</strong>
+            <span>{{ auth.currentUser()?.email || 'Acesso à plataforma' }}</span>
           </div>
           <button type="button" class="menu-action" (click)="toggleTheme()">
             <app-icon [name]="themeService.icon()" [size]="16" />
@@ -105,6 +104,10 @@
             <app-icon name="lock" [size]="16" />
             <span>Gerenciar acesso</span>
           </a>
+          <button type="button" class="menu-action" (click)="logout()">
+            <app-icon name="logout" [size]="16" />
+            <span>Sair</span>
+          </button>
         </section>
       }
     </div>

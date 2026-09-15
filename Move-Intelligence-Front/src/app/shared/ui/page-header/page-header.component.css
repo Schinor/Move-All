@@ -6,12 +6,58 @@
   flex-wrap: wrap;
   margin-bottom: var(--sp-5);
 }
+/* O título nunca colapsa: ocupa a linha e as ações quebram para baixo quando faltar espaço. */
+.titles {
+  flex: 1 1 320px;
+  min-width: min(100%, 320px);
+}
+.actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+/* D3: botão voltar acima do título, sem competir com as ações do header. */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 32px;
+  margin: 0 0 var(--sp-2) calc(var(--sp-2) * -1);
+  padding: 0 var(--sp-2);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+.back-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+.back-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
 .title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
   margin: 0;
   font-size: var(--fs-h1);
   font-weight: 600;
   font-family: var(--font-display);
   line-height: var(--lh-h1);
+}
+/* P1-6: "?" alinhado na linha de base do título. */
+.title app-hint {
+  display: inline-flex;
 }
 .subtitle {
   margin: var(--sp-1) 0 0;

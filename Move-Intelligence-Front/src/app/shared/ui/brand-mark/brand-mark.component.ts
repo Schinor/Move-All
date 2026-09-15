@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { MOVE_M_PATH, MOVE_M_VIEWBOX } from './move-m.path';
 
 /** Símbolo M monocromático da Move, sem moldura ou efeitos. */
 @Component({
@@ -11,4 +12,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 export class BrandMarkComponent {
   readonly size = input(28);
   readonly label = input<string | null>(null);
+  readonly path = MOVE_M_PATH;
+  readonly viewBox = MOVE_M_VIEWBOX;
 }

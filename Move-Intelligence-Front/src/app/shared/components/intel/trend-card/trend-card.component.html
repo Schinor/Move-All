@@ -11,13 +11,17 @@
         </div>
         <h3 class="name" [attr.title]="trend().canonicalName">{{ trend().canonicalName }}</h3>
       </div>
-      <span class="arrow"><app-icon name="arrow-up-right" [size]="16" /></span>
+      <span class="arrow" title="Expandir"><app-icon name="arrow-up-right" [size]="16" label="Expandir" /></span>
     </div>
 
     <div class="score-row">
       <div>
-        <div class="score num">{{ scoreValue() ?? '—' }}</div>
-        <div class="score-label">Trend Score</div>
+        <div class="score num">{{ scoreValue() ?? scoreConfidence() }}</div>
+        <div class="score-label">Move Score</div>
+        <div class="score-tags">
+          <span class="action-chip">{{ actionText() }}</span>
+          <span class="band-text">Faixa {{ bandText() }} {{ momentumArrow() }}</span>
+        </div>
       </div>
       @if (trend().spark?.length) {
         <div class="spark">

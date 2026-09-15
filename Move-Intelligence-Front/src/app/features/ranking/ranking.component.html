@@ -1,6 +1,6 @@
 <app-page-header
-  title="Ranking de tendências"
-  subtitle="Produtos priorizados por sinais de tendência, crescimento e risco."
+  title="Ranking completo"
+  subtitle="Todos os SKUs com Move Score, ação, momentum e sourcing."
 >
   <span class="data-note">Dados fornecidos pela API</span>
   <div class="view-toggle">
@@ -13,7 +13,7 @@
   </div>
 </app-page-header>
 
-@switch (products().status) {
+@switch (result().status) {
   @case ('loading') {
     <section
       class="loading-table"
@@ -31,24 +31,9 @@
         </div>
       }
     </section>
-    <section
-      class="loading-card-grid"
-      [class.active]="viewMode() === 'cards'"
-      role="status"
-      aria-label="Carregando ranking em cartões"
-    >
-      @for (card of [1, 2, 3, 4, 5, 6]; track card) {
-        <div class="loading-card">
-          <app-skeleton [width]="'55%'" [height]="'12px'" />
-          <app-skeleton [width]="'82%'" [height]="'20px'" />
-          <app-skeleton [width]="'30%'" [height]="'44px'" />
-          <app-skeleton [height]="'58px'" />
-        </div>
-      }
-    </section>
   }
   @case ('error') {
-    <app-state-panel [state]="products()" emptyMessage="Não foi possível carregar o ranking." />
+    <app-state-panel [state]="result()" emptyMessage="Não foi possível carregar o ranking." />
   }
   @case ('empty') {
     <app-empty-state
@@ -71,62 +56,84 @@
           />
         </span>
       </label>
-      <div class="segments" role="group" aria-label="Filtro por estágio">
+      <div class="segments" role="group" aria-label="Filtro por ação">
         @for (filter of filters; track filter.id) {
           <button
             type="button"
-            [class.active]="stage() === filter.id"
-            [attr.aria-pressed]="stage() === filter.id"
-            (click)="setStage(filter.id)"
+            [class.active]="action() === filter.id"
+            [attr.aria-pressed]="action() === filter.id"
+            (click)="setAction(filter.id)"
           >
             {{ filter.label }}
           </button>
         }
       </div>
-      <strong class="count num">{{ rows().length }} {{ rows().length === 1 ? 'item' : 'itens' }}</strong>
+      <strong class="count num">{{ total() }} {{ total() === 1 ? 'item' : 'itens' }}</strong>
     </section>
 
     @if (rows().length) {
       <app-data-table
-        class="table-view"
         [class.active]="viewMode() === 'table'"
-        label="Ranking de tendências"
+        label="Ranking completo"
       >
         <table>
-          <caption class="sr-only">Produtos classificados por Trend Score e indicadores relacionados</caption>
+          <caption class="sr-only">Produtos com Move Score, ação, momentum e sourcing</caption>
           <thead>
             <tr>
-              <th scope="col" [attr.aria-sort]="sortDirection('rank')">
-                <button type="button" (click)="sort('rank')">Rank <app-icon [name]="sortIcon('rank')" [size]="13" /></button>
-              </th>
               <th scope="col" class="product-heading" [attr.aria-sort]="sortDirection('name')">
                 <button type="button" (click)="sort('name')">Produto <app-icon [name]="sortIcon('name')" [size]="13" /></button>
               </th>
               <th scope="col" [attr.aria-sort]="sortDirection('score')">
-                <button type="button" (click)="sort('score')">Trend Score <app-icon [name]="sortIcon('score')" [size]="13" /></button>
+                <button type="button" (click)="sort('score')">Move Score <app-icon [name]="sortIcon('score')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('action')">
+                <button type="button" (click)="sort('action')">Ação <app-icon [name]="sortIcon('action')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('momentum')">
+                <button type="button" (click)="sort('momentum')">Momentum <app-icon [name]="sortIcon('momentum')" [size]="13" /></button>
               </th>
               <th scope="col" [attr.aria-sort]="sortDirection('growth')">
-                <button type="button" (click)="sort('growth')">Crescimento <app-icon [name]="sortIcon('growth')" [size]="13" /></button>
+                <button type="button" (click)="sort('growth')">Cresc. % <app-icon [name]="sortIcon('growth')" [size]="13" /></button>
               </th>
-              <th scope="col" [attr.aria-sort]="sortDirection('risk')">
-                <button type="button" (click)="sort('risk')">Risco <app-icon [name]="sortIcon('risk')" [size]="13" /></button>
+              <th scope="col" [attr.aria-sort]="sortDirection('price')">
+                <button type="button" (click)="sort('price')">Preço <app-icon [name]="sortIcon('price')" [size]="13" /></button>
               </th>
-              <th scope="col" class="action-heading">Ação</th>
+              <th scope="col" [attr.aria-sort]="sortDirection('reviews')">
+                <button type="button" (click)="sort('reviews')">Reviews <app-icon [name]="sortIcon('reviews')" [size]="13" /></button>
+              </th>
+              <th scope="col" [attr.aria-sort]="sortDirection('rating')">
+                <button type="button" (click)="sort('rating')">Nota <app-icon [name]="sortIcon('rating')" [size]="13" /></button>
+              </th>
+              <th scope="col" class="text-cell">Detectado em</th>
+              <th scope="col" class="text-cell">Fornecedor</th>
+              <th scope="col" class="action-heading">Dossiê</th>
             </tr>
           </thead>
           <tbody>
             @for (product of rows(); track product.productClusterId) {
               <tr>
-                <td class="rank num">{{ rank(product) }}</td>
                 <td class="product">
                   <strong>{{ product.canonicalName }}</strong>
-                  <span>{{ (product.category | humanize) || 'Categoria não informada' }} · {{ stageLabel(product.stage) }}</span>
+                  <span>{{ (product.category | humanize) || 'Categoria não informada' }}</span>
                 </td>
-                <td class="score-cell"><app-score-gauge [value]="product.trendScore.value" [size]="40" /></td>
+                <td class="score-cell">
+                  <app-score-gauge [value]="product.moveScore" [size]="40" />
+                  @if (product.moveScore === null) {
+                    <span class="confidence-label">{{ confidenceLabel(product) }}</span>
+                  } @else {
+                    <span class="band-chip" [attr.data-band]="product.scoreBand">{{ bandText(product) }}</span>
+                  }
+                </td>
+                <td class="nowrap">{{ actionText(product) }}</td>
+                <td class="num nowrap">{{ momentumText(product) }}</td>
                 <td class="growth num" [class.down]="(product.growthPct ?? 0) < 0">
                   {{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}
                 </td>
-                <td><app-risk-badge [level]="product.risk" /></td>
+                <td class="num nowrap">{{ priceText(product) }}</td>
+                <td class="num">{{ product.reviews === null || product.reviews === undefined ? '—' : product.reviews }}</td>
+                <td class="num">{{ product.rating === null || product.rating === undefined ? '—' : product.rating }}</td>
+                <td class="text-cell">{{ detectedText(product) }}</td>
+                <td class="text-cell">{{ supplierText(product) }}</td>
                 <td><a [routerLink]="['/tendencia', product.productClusterId]" class="go">Ver dossiê <app-icon name="arrow-up-right" [size]="14" /></a></td>
               </tr>
             }
@@ -134,22 +141,33 @@
         </table>
       </app-data-table>
 
+      <div class="pager" aria-label="Paginação do ranking">
+        <button type="button" (click)="goPage(-1)" [disabled]="page() <= 1">← Anterior</button>
+        <span class="num">Página {{ page() }} de {{ totalPages() }} · {{ total() }} itens</span>
+        <button type="button" (click)="goPage(1)" [disabled]="page() >= totalPages()">Próxima →</button>
+      </div>
+
       <div
         class="card-grid"
         [class.active]="viewMode() === 'cards'"
-        aria-label="Ranking de tendências em cartões"
+        aria-label="Ranking em cartões"
       >
         @for (product of rows(); track product.productClusterId) {
           <app-trend-card [trend]="product" />
         }
       </div>
     } @else {
-      <app-empty-state
-        [compact]="true"
-        icon="search"
-        title="Nenhum resultado para estes filtros"
-        description="Ajuste a busca ou selecione outro estágio para continuar."
-      />
+      <div class="filtered-empty">
+        <app-empty-state
+          [compact]="true"
+          icon="search"
+          [title]="hasActiveFilters() ? 'Nenhum produto nesta seleção' : 'Ranking sem dados'"
+          [description]="hasActiveFilters() ? 'Nenhum produto corresponde aos filtros atuais. Escolha outra ação ou limpe a busca.' : 'A tabela será preenchida quando houver produtos coletados e pontuados.'"
+        />
+        @if (hasActiveFilters()) {
+          <button type="button" class="clear-filters" (click)="clearFilters()">Limpar filtros</button>
+        }
+      </div>
     }
   }
 }

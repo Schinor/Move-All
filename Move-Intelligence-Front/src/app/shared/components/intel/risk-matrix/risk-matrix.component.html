@@ -1,13 +1,13 @@
 <article class="matrix surface-panel">
   <header>
-    <span>Risco x demanda</span>
+    <span>Move Score x confiança</span>
     <strong>{{ products().length }} oportunidades</strong>
   </header>
 
   <div class="grid" role="table">
-    @for (cell of cells(); track cell.demand + cell.risk) {
+    @for (cell of cells(); track cell.scoreBand + cell.confidence) {
       <div class="cell" role="cell">
-        <span class="axis">{{ cell.demand }} · {{ cell.risk }}</span>
+        <span class="axis">{{ cell.scoreBand }} · {{ cell.confidence }}</span>
         <div class="chips">
           @for (item of cell.items; track item.productClusterId) {
             <a [routerLink]="['/tendencia', item.productClusterId]" class="chip">

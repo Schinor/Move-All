@@ -1,8 +1,29 @@
 <aside id="app-navigation" class="sidebar" aria-label="Navegação principal">
-  <a class="brand" routerLink="/" (click)="closeOnCompact()" aria-label="Ir para o Executivo">
-    <app-brand-lockup class="brand-full" />
-    <app-brand-mark class="brand-rail" [size]="24" />
-  </a>
+  <div class="brand">
+    <a
+      class="brand-link"
+      [routerLink]="layout.sidebarOpen() ? '/' : null"
+      (click)="brandClick($event)"
+      [attr.aria-label]="layout.sidebarOpen() ? 'Ir para o Executivo' : 'Abrir barra lateral'"
+    >
+      <app-brand-lockup class="brand-full" />
+      <span class="brand-rail-wrap">
+        <app-brand-mark class="brand-rail" [size]="24" />
+        <app-icon class="brand-open" name="panel-left" [size]="20" />
+      </span>
+    </a>
+    <div class="brand-side">
+      <button
+        type="button"
+        class="icon-btn brand-close"
+        (click)="layout.closeSidebar()"
+        aria-label="Fechar barra lateral"
+        title="Fechar barra lateral"
+      >
+        <app-icon name="panel-left-close" [size]="17" />
+      </button>
+    </div>
+  </div>
 
   <nav class="nav" aria-label="Módulos">
     @for (group of groups; track group.label) {
@@ -10,18 +31,25 @@
         <h2 class="section-label" [id]="'nav-' + group.label">{{ group.label }}</h2>
         <ul>
           @for (item of group.items; track item.path) {
-            <li>
+            <li class="nav-item">
               <a
                 [routerLink]="item.path"
                 routerLinkActive="active"
                 [routerLinkActiveOptions]="{ exact: !!item.exact }"
                 [ariaCurrentWhenActive]="'page'"
                 (click)="closeOnCompact()"
-                [attr.title]="item.label + (item.soon ? ' — em breve' : '')"
                 [attr.aria-label]="item.label + (item.soon ? ', em breve' : '')"
               >
-                <app-icon class="nav-icon" [name]="item.icon" [size]="18" />
-                <span class="nav-label">{{ item.label }}</span>
+                @if (item.brandMark) {
+                  <app-mai-mark class="nav-mai" [size]="13" [accent]="true" />
+                  <span class="nav-label">Copilot</span>
+                } @else if (item.image) {
+                  <img class="nav-icon nav-art" [src]="item.image" alt="" width="24" height="24" />
+                  <span class="nav-label">{{ item.label }}</span>
+                } @else {
+                  <app-icon class="nav-icon" [name]="item.icon" [size]="18" />
+                  <span class="nav-label">{{ item.label }}</span>
+                }
                 @if (item.soon) {
                   <span class="soon">em breve</span>
                 }

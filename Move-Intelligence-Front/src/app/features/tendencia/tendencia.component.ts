@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
-import { switchMap } from 'rxjs/operators';
+import { combineLatest } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { AsyncState, toAsyncState } from '../../core/api/async-state';
 import { TrendsService } from '../../core/services/trends.service';
 import {
@@ -23,6 +24,7 @@ import { SparklineComponent } from '../../shared/components/intel/sparkline/spar
 import { ScoreGaugeComponent } from '../../shared/components/intel/score-gauge/score-gauge.component';
 import { OpportunityRadarComponent } from '../../shared/components/intel/opportunity-radar/opportunity-radar.component';
 import { AdoptionCurveChartComponent } from '../../shared/components/intel/adoption-curve-chart/adoption-curve-chart.component';
+import { ReviewSentimentChartComponent } from '../../shared/components/intel/review-sentiment-chart/review-sentiment-chart.component';
 import { SupplierComparisonTableComponent } from '../../shared/components/intel/supplier-comparison-table/supplier-comparison-table.component';
 import { AiRecommendationCardComponent } from '../../shared/components/intel/ai-recommendation-card/ai-recommendation-card.component';
 import { SignalSourceCardComponent } from '../../shared/components/intel/signal-source-card/signal-source-card.component';
@@ -32,7 +34,7 @@ import { UnitEconomicsCalculatorComponent } from '../../shared/components/intel/
 import { CompetitorMatrixComponent } from '../../shared/components/intel/competitor-matrix/competitor-matrix.component';
 import { SeasonalityForecastComponent } from '../../shared/components/intel/seasonality-forecast/seasonality-forecast.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
-import { categoryLabel, premiseSourceLabel } from '../../shared/util/format';
+import { categoryLabel, dataConfidenceLabel, decisionLabel, premiseSourceLabel, actionTooltip, scoreBandLabel, socialSignalLabel, sourceLabel } from '../../shared/util/format';
 
 type PremiseKey = keyof MonteCarloPremises;
 
@@ -57,6 +59,7 @@ interface PremiseField {
     ScoreGaugeComponent,
     OpportunityRadarComponent,
     AdoptionCurveChartComponent,
+    ReviewSentimentChartComponent,
     SupplierComparisonTableComponent,
     AiRecommendationCardComponent,
     MonteCarloHistogramComponent,
@@ -94,17 +97,26 @@ export class TendenciaComponent {
   ];
 
   readonly historyMetric = signal<'volume' | 'price' | 'review'>('volume');
+  readonly comparePrevious = signal(false);
 
   readonly product = toAsyncState(this.trends.getProduct(this.id));
   readonly suppliers = toAsyncState(this.trends.suppliers(this.id));
+  private readonly historyParams$ = combineLatest([toObservable(this.window), toObservable(this.comparePrevious)]).pipe(
+    map(([w, c]) => ({ w, c: c ? ('previous' as const) : undefined })),
+  );
   readonly priceHistory = toAsyncState(
-    toObservable(this.window).pipe(switchMap((w) => this.trends.priceHistory(this.id, w))),
+    this.historyParams$.pipe(switchMap(({ w, c }) => this.trends.priceHistory(this.id, w, c))),
   );
   readonly volumeHistory = toAsyncState(
-    toObservable(this.window).pipe(switchMap((w) => this.trends.volumeHistory(this.id, w))),
+    this.historyParams$.pipe(switchMap(({ w, c }) => this.trends.volumeHistory(this.id, w, c))),
   );
   readonly reviewHistory = toAsyncState(
-    toObservable(this.window).pipe(switchMap((w) => this.trends.reviewHistory(this.id, w))),
+    this.historyParams$.pipe(switchMap(({ w, c }) => this.trends.reviewHistory(this.id, w, c))),
+  );
+  /** Avaliações positivas/neutras/negativas por semana (só a janela; sem período anterior). */
+  readonly reviewSentiment = toAsyncState(
+    toObservable(this.window).pipe(switchMap((w) => this.trends.reviewSentiment(this.id, w))),
+    (data) => !data?.points?.length,
   );
   readonly aiRecommendation = toAsyncState(this.trends.aiRecommendation(this.id));
 
@@ -182,7 +194,46 @@ export class TendenciaComponent {
       searchGrowth: 'Busca',
       socialBuzz: 'Social',
     };
-    return labels[key] ?? key.replace(/([A-Z])/g, ' $1').trim();
+    if (labels[key]) return labels[key];
+    // Sinais de demanda por país (ex.: googleTrends_BR → "Google Trends BR").
+    const byCountry = /^([a-z]+(?:[A-Z][a-z]+)*)_([A-Z]{2})$/.exec(key);
+    if (byCountry) {
+      const base = byCountry[1].replace(/([A-Z])/g, ' $1').trim();
+      return `${base.charAt(0).toUpperCase()}${base.slice(1)} ${byCountry[2]}`;
+    }
+    return key.replace(/([A-Z])/g, ' $1').trim();
+  }
+
+  /** Move Score ou, sem score, o rótulo da confiança (sem número). */
+  moveScoreText(data: any): string {
+    if (data?.moveScore === null || data?.moveScore === undefined) {
+      return dataConfidenceLabel(data?.dataConfidence);
+    }
+    return String(data.moveScore);
+  }
+
+  moveDecisionText(data: any): string {
+    return decisionLabel(data?.action ?? data?.decision) || 'Sem ação calculada';
+  }
+
+  moveConfidenceText(data: any): string {
+    return dataConfidenceLabel(data?.dataConfidence);
+  }
+
+  moveProbabilityText(data: any): string {
+    const value = data?.pVplPositivo;
+    if (value === null || value === undefined) return '—';
+    return `${Math.round(Number(value) * 100)}%`;
+  }
+
+  moveCvarText(data: any): string {
+    const value = data?.cvar5;
+    if (value === null || value === undefined) return '—';
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      maximumFractionDigits: 0,
+    }).format(Number(value));
   }
 
   setWindow(w: TimeWindow): void {
@@ -195,6 +246,60 @@ export class TendenciaComponent {
 
   setHistoryMetric(metric: 'volume' | 'price' | 'review'): void {
     this.historyMetric.set(metric);
+  }
+
+  toggleComparePrevious(event: Event): void {
+    this.comparePrevious.set((event.target as HTMLInputElement).checked);
+  }
+
+  /** D4: ação e faixa no topo, com tooltip "O que fazer". */
+  actionTooltipText(data: any): string {
+    return actionTooltip(data?.action) || 'Ação ainda não calculada: o produto não tem Move Score e momentum suficientes.';
+  }
+
+  /** Faixa do Move Score em português (a API envia green/yellow/red). */
+  bandText(data: any): string {
+    return scoreBandLabel(data?.scoreBand) || '—';
+  }
+
+  sourceName(source: string | null | undefined): string {
+    return sourceLabel(source) || '—';
+  }
+
+  /** D4: badge de risco com causas no hover e no toque (title + aria). */
+  riskTitle(data: any): string {
+    return data?.riskExplanation?.text ?? 'Sem explicação de risco';
+  }
+
+  /** D4: "Sinal social indisponível" quando aplicável (B6). */
+  socialText(data: any): string {
+    return socialSignalLabel(data?.tiktokGrowthPct);
+  }
+
+  previousPoints(): Array<{ t: string; v: number }> {
+    const state = this.currentHistory();
+    if (state.status !== 'ready') return [];
+    const data = state.data as unknown as { previous?: Array<{ t: string; v: number }> };
+    return data.previous ?? [];
+  }
+
+  currentPoints(): Array<{ t: string; v: number }> {
+    const state = this.currentHistory();
+    if (state.status !== 'ready') return [];
+    const data = state.data as unknown as { points?: Array<{ t: string; v: number }>; current?: Array<{ t: string; v: number }> };
+    return data.points ?? data.current ?? [];
+  }
+
+  reviewBands(data: any): Array<{ band: string; summary: string; top_reasons: unknown; sample_size: number }> {
+    const byBand = data?.reviewSummary?.by_band ?? {};
+    return Object.entries(byBand).map(([band, v]) => ({ band, ...(v as { summary: string; top_reasons: unknown; sample_size: number }) }));
+  }
+
+  /** D5: "Detectado em: Amazon BR · Mercado Livre · Alibaba" com nomes comerciais. */
+  detectedText(data: any): string {
+    const sources: string[] = data?.detectedOn ?? data?.detected_on ?? data?.mainSources ?? [];
+    if (!sources.length) return '—';
+    return sources.map((s) => sourceLabel(s)).join(' · ');
   }
 
   runMonteCarlo(): void {

@@ -50,7 +50,7 @@
             <label for="password-cad">Senha</label>
             <div class="input-wrap">
               <app-icon name="password" [size]="17" />
-              <input id="password-cad" [type]="showPassword() ? 'text' : 'password'" placeholder="Mínimo 8 caracteres" autocomplete="new-password" required [ngModel]="password()" (ngModelChange)="onPasswordInput($event)" name="password" [attr.aria-invalid]="passwordError() ? 'true' : null" [attr.aria-describedby]="passwordError() ? 'password-cad-error' : null" />
+              <input id="password-cad" [type]="showPassword() ? 'text' : 'password'" placeholder="Mínimo 10 caracteres" autocomplete="new-password" required [ngModel]="password()" (ngModelChange)="onPasswordInput($event)" name="password" [attr.aria-invalid]="passwordError() ? 'true' : null" [attr.aria-describedby]="passwordError() ? 'password-cad-error' : null" />
               <button type="button" class="toggle-password" (click)="togglePassword()" [attr.aria-label]="showPassword() ? 'Ocultar senha' : 'Mostrar senha'"><app-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="17" /></button>
             </div>
             @if (passwordError()) { <span id="password-cad-error" class="field-error" role="alert">{{ passwordError() }}</span> }
@@ -73,7 +73,7 @@
           @if (termsError()) { <span id="terms-error" class="field-error" role="alert">{{ termsError() }}</span> }
           <div class="form-actions">
             <button id="btn-prev-step" type="button" class="btn-back" (click)="prevStep()"><app-icon name="arrow-right" [size]="15" /> Voltar</button>
-            <button id="btn-submit-signup" type="submit" class="btn-submit">Criar acesso <app-icon name="arrow-right" [size]="16" /></button>
+            <button id="btn-submit-signup" type="submit" class="btn-submit" [disabled]="loading()">{{ loading() ? 'Criando…' : 'Criar acesso' }} <app-icon name="arrow-right" [size]="16" /></button>
           </div>
         </form>
       }

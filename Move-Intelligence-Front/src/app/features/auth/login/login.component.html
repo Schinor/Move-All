@@ -77,8 +77,8 @@
           }
         </div>
 
-        <button id="btn-login" type="submit" class="btn-submit">
-          Entrar na plataforma <app-icon name="arrow-right" [size]="16" />
+        <button id="btn-login" type="submit" class="btn-submit" [disabled]="loading()">
+          {{ loading() ? 'Entrando…' : 'Entrar na plataforma' }} <app-icon name="arrow-right" [size]="16" />
         </button>
       </form>
 

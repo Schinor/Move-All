@@ -4,15 +4,37 @@
       <span class="chart-title">{{ config().title }}</span>
       <small class="chart-subtitle">{{ config().subtitle }}</small>
     </div>
-    <div class="header-metrics">
+    <dl class="chart-stats">
       @if (growthPct() !== null) {
-        <span class="growth-tag" [class.positive]="growthPct()! >= 0" [class.negative]="growthPct()! < 0">
-          <app-icon [name]="growthPct()! >= 0 ? 'chevron-up' : 'chevron-down'" [size]="12" />
-          {{ growthPct()! >= 0 ? '+' : '' }}{{ growthPct() }}%
-        </span>
+        <div>
+          <dt>Na janela</dt>
+          <dd class="num" [class.positive]="growthPct()! > 0" [class.negative]="growthPct()! < 0">{{ growthPct()! > 0 ? '+' : '' }}{{ growthPct() }}%</dd>
+        </div>
       }
-      <span class="points-badge">{{ points().length }} pontos</span>
-    </div>
+      @if (monthOverMonth() !== null) {
+        <div>
+          <dt>Mês vs anterior</dt>
+          <dd class="num" [class.positive]="monthOverMonth()! > 0" [class.negative]="monthOverMonth()! < 0">{{ monthOverMonth()! > 0 ? '+' : '' }}{{ monthOverMonth() }}%</dd>
+        </div>
+      }
+      <div>
+        <dt>Pontos</dt>
+        <dd class="num">{{ points().length }}</dd>
+      </div>
+    </dl>
   </header>
   <app-chart [options]="options()" [label]="config().title" />
+  @if (showMonthly()) {
+    <div class="month-strip" role="list" aria-label="Mês a mês">
+      @for (m of monthly(); track m.label) {
+        <div class="month-cell" role="listitem">
+          <span class="month-label">{{ m.label }}@if (m.partial) { <em class="partial-tag">parcial</em> }</span>
+          <strong class="month-value num">{{ formatMonthValue(m.value) }}</strong>
+          <span class="month-delta" [class.positive]="deltaClass(m.changePct) === 'positive'" [class.negative]="deltaClass(m.changePct) === 'negative'">{{ deltaText(m.changePct) }}</span>
+        </div>
+      }
+    </div>
+  } @else if (window() === '7d') {
+    <p class="compare-note">Selecione 60d ou mais para comparar meses.</p>
+  }
 </section>

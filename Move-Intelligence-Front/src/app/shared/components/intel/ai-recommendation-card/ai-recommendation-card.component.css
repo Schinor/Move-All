@@ -1,8 +1,24 @@
 .decision {
-  padding: var(--sp-4);
+  --tone: var(--brand-text);
+  padding: var(--sp-5);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   background: var(--surface);
+}
+.decision[data-tone='good'] {
+  --tone: var(--success);
+}
+.decision[data-tone='warn'] {
+  --tone: var(--warning);
+}
+.decision[data-tone='bad'] {
+  --tone: var(--danger);
+}
+.decision-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
 }
 .eyebrow {
   color: var(--text-2);
@@ -10,18 +26,193 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-h3 {
-  margin: 0.35rem 0;
-  font-size: 1.8rem;
-  color: var(--brand-text);
+.model-badge {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  padding: var(--sp-1) var(--sp-2);
+  white-space: nowrap;
 }
-p,
-li {
+.decision-content {
+  display: grid;
+  gap: var(--sp-5);
+  margin-top: var(--sp-3);
+}
+.verdict {
+  display: grid;
+  gap: var(--sp-1);
+  padding-left: var(--sp-3);
+  border-left: 3px solid var(--tone);
+}
+h3 {
+  margin: 0;
+  color: var(--tone);
+  font-size: var(--fs-h2);
+}
+.summary {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+.ai-loading,
+.rationale-text {
+  margin: calc(var(--sp-2) * -1) 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+h4 {
+  margin: 0 0 var(--sp-2);
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+
+/* Motivos: valor à direita, explicação embaixo, cor só no valor. */
+.reason-list {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+.reason {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.reason dt {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.reason dd {
+  margin: 0;
+}
+.reason-value {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-align: right;
+}
+.reason[data-tone='good'] .reason-value {
+  color: var(--success);
+}
+.reason[data-tone='warn'] .reason-value {
+  color: var(--warning);
+}
+.reason[data-tone='bad'] .reason-value {
+  color: var(--danger);
+}
+.reason-detail {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  line-height: 1.5;
+}
+
+.unit-table {
+  display: grid;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.unit-table div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 6px 0;
+}
+.unit-table dt {
+  color: var(--text-2);
+}
+.unit-table dd {
+  margin: 0;
+  color: var(--text);
+  white-space: nowrap;
+}
+.unit-table .total {
+  margin-top: var(--sp-1);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-strong);
+}
+.unit-table .total dt,
+.unit-table .total dd {
+  color: var(--text);
+  font-weight: 700;
+}
+.unit-table .total.negative dd {
+  color: var(--danger);
+}
+
+.risk-bars {
+  display: grid;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.risk-bars li {
+  display: grid;
+  grid-template-columns: minmax(96px, 132px) 1fr 40px;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.risk-label {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+}
+.risk-track {
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+  border-radius: var(--r-full);
+}
+.risk-fill {
+  display: block;
+  height: 100%;
+  background: var(--text-3);
+  border-radius: var(--r-full);
+}
+.risk-value {
+  color: var(--text);
+  font-size: var(--fs-caption);
+  text-align: right;
+}
+
+.drivers-list {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+  padding-left: var(--sp-4);
+}
+.drivers-list li {
   color: var(--text-2);
   font-size: var(--fs-sm);
   line-height: 1.55;
 }
-ul {
-  margin: 0.8rem 0 0;
-  padding-left: 1rem;
+.next-step-box {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.next-step-label {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+.next-step-text {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+@media (max-width: 767px) {
+  .decision {
+    padding: var(--sp-4);
+  }
 }

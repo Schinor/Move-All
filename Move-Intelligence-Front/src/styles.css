@@ -51,6 +51,9 @@
   --dur-fast: 120ms;
   --dur-base: 180ms;
   --ease: cubic-bezier(0.2, 0, 0.2, 1);
+  /* Recolher/expandir painéis: rápido, com desaceleração longa (deslize). */
+  --dur-slide: 200ms;
+  --ease-slide: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* ---- Layout ---- */
   --sidebar-w: 240px;
@@ -426,4 +429,21 @@ button {
 
 .markdown-content tbody tr:last-child td {
   border-bottom: none;
+}
+
+/* Ícones ilustrados da navegação (arte branca + acento verde, feitos para fundo escuro).
+   No tema claro a luminância é invertida e o matiz preservado. */
+.nav-art {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+  filter: invert(1) hue-rotate(180deg) saturate(1.4) brightness(0.85);
+}
+:root[data-theme='dark'] .nav-art {
+  filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .nav-art {
+    filter: none;
+  }
 }

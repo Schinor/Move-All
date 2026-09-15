@@ -2,7 +2,10 @@
   display: block;
   flex: 0 0 var(--sidebar-w);
   width: var(--sidebar-w);
-  transition: flex-basis var(--dur-base) var(--ease), width var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
+  transition:
+    flex-basis var(--dur-slide) var(--ease-slide),
+    width var(--dur-slide) var(--ease-slide),
+    transform var(--dur-slide) var(--ease-slide);
 }
 
 :host(.sidebar-collapsed) {
@@ -10,12 +13,17 @@
   width: var(--sidebar-rail-w);
 }
 
+/*
+ * Recolher/expandir desliza: a largura acompanha o host a cada quadro e nada
+ * troca de display no meio do caminho. Ícones ficam parados na mesma coluna;
+ * só textos e logos esmaecem (some rápido ao recolher, volta logo depois ao expandir).
+ */
 .sidebar {
   position: sticky;
   top: 0;
   display: flex;
   flex-direction: column;
-  width: var(--sidebar-w);
+  width: 100%;
   height: 100vh;
   flex-shrink: 0;
   overflow: hidden;
@@ -24,25 +32,107 @@
 }
 
 .brand {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--sp-3);
+  gap: var(--sp-2);
   min-height: var(--topbar-h);
-  padding: 0 var(--sp-5);
-  color: var(--text);
-  text-decoration: none;
+  padding: 0 var(--sp-3) 0 var(--sp-5);
   border-bottom: 1px solid var(--border);
 }
 
+.brand-link {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  min-height: var(--topbar-h);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brand-full {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Símbolo do rail: sempre no DOM, centralizado na largura do rail. */
+.brand-rail-wrap {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--sidebar-rail-w) / 2 - var(--sp-5));
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    visibility 0s linear var(--dur-fast);
+}
+
+.brand-rail,
+.brand-open {
+  grid-area: 1 / 1;
+}
+
 .brand-rail {
-  display: none;
   color: var(--brand-lockup);
+}
+
+.brand-open {
+  display: none;
+  color: var(--text-2);
+}
+
+.brand-side {
+  position: absolute;
+  top: 50%;
+  right: var(--sp-3);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  transform: translateY(-50%);
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.brand-close {
+  flex: 0 0 auto;
 }
 
 .nav {
   flex: 1;
   padding: var(--sp-5) var(--sp-3);
+  overflow-x: hidden;
   overflow-y: auto;
+  transition: padding var(--dur-slide) var(--ease-slide);
 }
 
 .nav-group + .nav-group {
@@ -52,12 +142,13 @@
 .section-label {
   margin: 0 0 var(--sp-2);
   padding: 0 var(--sp-3);
+  overflow: hidden;
   color: var(--text-3);
-  font-size: var(--fs-label);
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: var(--lh-label);
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .nav ul {
@@ -77,6 +168,7 @@
   padding: var(--sp-2) var(--sp-3);
   color: var(--text-2);
   text-decoration: none;
+  white-space: nowrap;
   border-radius: var(--r-sm);
 }
 
@@ -90,18 +182,28 @@
   background: var(--surface-2);
 }
 
-.nav a.active::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 2px;
-  background: var(--brand);
-  content: '';
+.nav-icon {
+  flex: 0 0 auto;
+  color: currentColor;
 }
 
-.nav-icon {
-  color: currentColor;
+/* Ícone ilustrado: um pouco apagado quando inativo, pleno no hover e na tela atual. */
+img.nav-icon {
+  width: 24px;
+  height: 24px;
+  margin: -3px 0;
+  opacity: 0.72;
+  transition: opacity var(--dur-fast, 120ms) ease;
+}
+.nav-item a:hover img.nav-icon,
+.nav-item a.active img.nav-icon {
+  opacity: 1;
+}
+
+/* M.AI ocupa o lugar do ícone; "Copilot" segue na mesma linha. */
+.nav-mai {
+  color: var(--text);
+  transition: transform var(--dur-slide) var(--ease-slide);
 }
 
 .nav-label {
@@ -114,46 +216,96 @@
 }
 
 .soon {
+  min-width: 0;
   margin-left: auto;
-  padding: 2px var(--sp-2);
+  overflow: hidden;
   color: var(--text-3);
-  font-size: var(--fs-label);
+  font-size: var(--fs-caption);
   line-height: var(--lh-label);
   white-space: nowrap;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
 }
 
-:host(.sidebar-collapsed) .sidebar {
-  width: var(--sidebar-rail-w);
+/* Textos: ao expandir voltam logo após o início do deslize. */
+.brand-full,
+.brand-side,
+.section-label,
+.nav-label,
+.soon {
+  transition:
+    opacity var(--dur-fast) var(--ease) 60ms,
+    visibility 0s;
 }
 
-:host(.sidebar-collapsed) .brand {
-  justify-content: center;
-  padding: 0;
-}
-
+/* ---- Recolhida (rail) ---- */
 :host(.sidebar-collapsed) .brand-full,
+:host(.sidebar-collapsed) .brand-side,
 :host(.sidebar-collapsed) .section-label,
 :host(.sidebar-collapsed) .nav-label,
 :host(.sidebar-collapsed) .soon {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dur-fast) var(--ease),
+    visibility 0s linear var(--dur-fast);
+}
+
+:host(.sidebar-collapsed) .brand-rail-wrap {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity var(--dur-fast) var(--ease) 60ms,
+    visibility 0s;
+}
+
+/* Ícones (18px) centralizados no rail sem mudar de justify: só o recuo desliza. */
+:host(.sidebar-collapsed) .nav {
+  padding-inline: calc((var(--sidebar-rail-w) - 18px) / 2 - var(--sp-3));
+}
+
+:host(.sidebar-collapsed) .nav-mai {
+  transform: translateX(-8px);
+}
+
+/* P1-7: hover no logo recolhido vira o ícone de painel. */
+:host(.sidebar-collapsed) .brand-link:hover .brand-rail,
+:host(.sidebar-collapsed) .brand-link:focus-visible .brand-rail {
   display: none;
 }
 
-:host(.sidebar-collapsed) .brand-rail {
+:host(.sidebar-collapsed) .brand-link:hover .brand-open,
+:host(.sidebar-collapsed) .brand-link:focus-visible .brand-open {
   display: block;
 }
 
-:host(.sidebar-collapsed) .nav {
-  padding-inline: var(--sp-2);
+/* P1-7: tooltips à direita no rail (no lugar do title nativo). */
+:host(.sidebar-collapsed) .brand-link:hover::after,
+:host(.sidebar-collapsed) .brand-link:focus-visible::after {
+  content: 'Abrir barra lateral';
 }
 
-:host(.sidebar-collapsed) .nav a {
-  justify-content: center;
-  padding-inline: 0;
+:host(.sidebar-collapsed) .nav a:hover::after,
+:host(.sidebar-collapsed) .nav a:focus-visible::after {
+  content: attr(aria-label);
 }
 
+:host(.sidebar-collapsed) .brand-link:hover::after,
+:host(.sidebar-collapsed) .brand-link:focus-visible::after,
+:host(.sidebar-collapsed) .nav a:hover::after,
+:host(.sidebar-collapsed) .nav a:focus-visible::after {
+  position: absolute;
+  left: calc(100% + var(--sp-2));
+  z-index: 60;
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--text);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-popover);
+}
+
+/* ---- Gaveta (telas compactas): desliza de fora da tela ---- */
 @media (max-width: 1024px) {
   :host {
     position: fixed;
@@ -162,37 +314,65 @@
     flex-basis: min(var(--sidebar-w), 86vw);
     width: min(var(--sidebar-w), 86vw);
     transform: translateX(0);
+    transition:
+      transform var(--dur-slide) var(--ease-slide),
+      visibility 0s;
   }
 
   :host(.sidebar-collapsed) {
     flex-basis: min(var(--sidebar-w), 86vw);
     width: min(var(--sidebar-w), 86vw);
     pointer-events: none;
+    visibility: hidden;
     transform: translateX(-105%);
-  }
-
-  :host(.sidebar-collapsed) .sidebar {
-    width: min(var(--sidebar-w), 86vw);
-  }
-
-  :host(.sidebar-collapsed) .brand {
-    justify-content: flex-start;
-    padding-inline: var(--sp-5);
+    transition:
+      transform var(--dur-slide) var(--ease-slide),
+      visibility 0s linear var(--dur-slide);
   }
 
   :host(.sidebar-collapsed) .brand-full,
+  :host(.sidebar-collapsed) .brand-side,
   :host(.sidebar-collapsed) .section-label,
   :host(.sidebar-collapsed) .nav-label,
   :host(.sidebar-collapsed) .soon {
-    display: revert;
+    opacity: 1;
+    visibility: visible;
+    transition: none;
   }
 
-  :host(.sidebar-collapsed) .brand-rail {
-    display: none;
+  :host(.sidebar-collapsed) .brand-rail-wrap {
+    opacity: 0;
+    visibility: hidden;
+    transition: none;
   }
 
-  :host(.sidebar-collapsed) .nav a {
-    justify-content: flex-start;
+  :host(.sidebar-collapsed) .nav {
     padding-inline: var(--sp-3);
+  }
+
+  :host(.sidebar-collapsed) .nav-mai {
+    transform: none;
+  }
+
+  /* Sem tooltips do rail na gaveta compacta. */
+  :host(.sidebar-collapsed) .brand-link:hover::after,
+  :host(.sidebar-collapsed) .brand-link:focus-visible::after,
+  :host(.sidebar-collapsed) .nav a:hover::after,
+  :host(.sidebar-collapsed) .nav a:focus-visible::after {
+    content: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host,
+  .brand-full,
+  .brand-rail-wrap,
+  .brand-side,
+  .section-label,
+  .nav,
+  .nav-label,
+  .soon,
+  .nav-mai {
+    transition: none !important;
   }
 }

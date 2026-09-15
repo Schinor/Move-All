@@ -59,11 +59,23 @@ function renderTableCells(cells: string[], tag: 'th' | 'td'): string {
 }
 
 /**
+ * P0-3: conversas antigas no banco já têm o markup `<tool_call>` do modelo sem
+ * tool calling nativo. Remove antes de renderizar (nunca exibe nem executa).
+ */
+export function stripToolCallMarkup(markdown: string | null | undefined): string {
+  if (!markdown) return '';
+  return String(markdown)
+    .replace(/<tool_call\b[^>]*>[\s\S]*?(<\/tool_call\s*>|$)/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Renderiza o Markdown básico que o Copilot usa, mantendo o conteúdo seguro.
  * O texto é escapado antes de receber apenas as tags geradas abaixo.
  */
 export function renderCopilotMarkdown(markdown: string): string {
-  const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const lines = stripToolCallMarkup(markdown).replace(/\r\n?/g, '\n').split('\n');
   const html: string[] = [];
   let listTag: 'ul' | 'ol' | null = null;
   let paragraphLines: string[] = [];

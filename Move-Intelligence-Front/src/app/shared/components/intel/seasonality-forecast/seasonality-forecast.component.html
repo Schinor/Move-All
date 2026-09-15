@@ -3,6 +3,9 @@
     <div>
       <h3><app-icon name="calendar" [size]="20" /> Módulo de Sazonalidade Preditiva & Janela de Compra Internacional</h3>
       <p>Projeção de demanda para os próximos 6 meses com cálculo de lead time aduaneiro (China → Brasil).</p>
+      @if (data()?.method === 'fatores_genericos_fixos') {
+        <p class="generic-notice" role="note">Estimativa genérica, não baseada no histórico do produto.</p>
+      }
     </div>
   </div>
 

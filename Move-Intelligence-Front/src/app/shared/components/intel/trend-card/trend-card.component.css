@@ -30,6 +30,13 @@
   justify-content: space-between;
   gap: var(--sp-3);
 }
+/* P2-2: coluna do título/categoria (o link ocupa o cartão todo). */
+.head-left {
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+  flex: 1;
+}
 .tags {
   display: flex;
   align-items: center;
@@ -91,6 +98,30 @@
   letter-spacing: 0.16em;
   color: var(--text-3);
   margin-top: var(--sp-1);
+}
+.score-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  margin-top: var(--sp-1);
+}
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 var(--sp-2);
+  color: var(--text);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+}
+.band-text {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
 }
 .spark {
   width: 112px;

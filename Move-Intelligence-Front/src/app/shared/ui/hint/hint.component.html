@@ -1,0 +1,18 @@
+<span class="hint-wrap">
+  <button
+    type="button"
+    class="hint-trigger"
+    [attr.aria-label]="label()"
+    [attr.aria-describedby]="open() ? tooltipId : null"
+    [attr.aria-expanded]="open()"
+    (click)="toggle($event)"
+    (mouseenter)="show()"
+    (mouseleave)="hide()"
+    (focus)="show()"
+    (blur)="hide()"
+    (keydown.escape)="hide()"
+  >?</button>
+  @if (open()) {
+    <span class="hint-popover" role="tooltip" [id]="tooltipId" [class.below]="below()" [class.start]="alignStart()">{{ text() }}</span>
+  }
+</span>

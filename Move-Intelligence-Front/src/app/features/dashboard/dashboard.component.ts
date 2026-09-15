@@ -2,39 +2,39 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { RouterLink } from '@angular/router';
 import { toAsyncState } from '../../core/api/async-state';
 import { AlertsService } from '../../core/services/alerts.service';
-import { DashboardService } from '../../core/services/dashboard.service';
 import { TrendsService } from '../../core/services/trends.service';
-import { SourceStatus, TimeWindow, TrendProduct } from '../../core/models/contract.models';
-import { RiskMatrixComponent } from '../../shared/components/intel/risk-matrix/risk-matrix.component';
-import { SignalSourceCardComponent } from '../../shared/components/intel/signal-source-card/signal-source-card.component';
-import { StatCardComponent } from '../../shared/components/intel/stat-card/stat-card.component';
-import { TrendCardComponent } from '../../shared/components/intel/trend-card/trend-card.component';
+import { SourceStatus, TrendProduct } from '../../core/models/contract.models';
+import { ExecutiveRecommendationComponent } from '../../shared/components/intel/executive-recommendation/executive-recommendation.component';
+import { QuadrantBubbleComponent } from '../../shared/components/intel/quadrant-bubble/quadrant-bubble.component';
 import { EmptyStateComponent } from '../../shared/ui/empty-state/empty-state.component';
-import { ExplainComponent } from '../../shared/ui/explain/explain.component';
+import { HintComponent } from '../../shared/ui/hint/hint.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { PageHeaderComponent } from '../../shared/ui/page-header/page-header.component';
 import { SkeletonComponent } from '../../shared/ui/skeleton/skeleton.component';
 import { StatePanelComponent } from '../../shared/ui/state-panel/state-panel.component';
-import { WindowSelectorComponent } from '../../shared/ui/window-selector/window-selector.component';
-import { formatBRL } from '../../shared/util/format';
-import { HumanizePipe } from '../../shared/util/humanize.pipe';
+import { ACTION_LABEL, ACTION_TOOLTIP, actionLabel, momentumArrow, scoreBandLabel } from '../../shared/util/format';
+
+export type ActionTab = 'DECIDIR_AGORA' | 'NEGOCIAR_CUSTO' | 'TESTAR_DEMANDA' | 'IGNORAR';
+
+const ACTION_TABS: { id: ActionTab; hint: string }[] = [
+  { id: 'DECIDIR_AGORA', hint: ACTION_TOOLTIP['DECIDIR_AGORA'] },
+  { id: 'NEGOCIAR_CUSTO', hint: ACTION_TOOLTIP['NEGOCIAR_CUSTO'] },
+  { id: 'TESTAR_DEMANDA', hint: ACTION_TOOLTIP['TESTAR_DEMANDA'] },
+  { id: 'IGNORAR', hint: ACTION_TOOLTIP['IGNORAR'] },
+];
 
 @Component({
   selector: 'app-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
-    HumanizePipe,
     RouterLink,
     PageHeaderComponent,
-    WindowSelectorComponent,
-    StatCardComponent,
-    TrendCardComponent,
-    RiskMatrixComponent,
-    SignalSourceCardComponent,
+    ExecutiveRecommendationComponent,
+    QuadrantBubbleComponent,
     StatePanelComponent,
     EmptyStateComponent,
     SkeletonComponent,
-    ExplainComponent,
+    HintComponent,
     IconComponent,
   ],
   templateUrl: './dashboard.component.html',
@@ -42,81 +42,89 @@ import { HumanizePipe } from '../../shared/util/humanize.pipe';
 })
 export class DashboardComponent {
   private readonly trends = inject(TrendsService);
-  private readonly dashboard = inject(DashboardService);
   private readonly alerts = inject(AlertsService);
 
-  readonly window = signal<TimeWindow>('6m');
-  readonly products = toAsyncState(this.trends.listProducts({ limit: 12 }));
-  readonly summary = toAsyncState(this.dashboard.summary());
+  readonly products = toAsyncState(this.trends.listProducts({ limit: 200 }));
   readonly sources = toAsyncState(this.alerts.sourcesStatus());
-
-  readonly kpis = computed(() => {
-    const state = this.summary();
-    return state.status === 'ready' ? state.data.kpis.slice(0, 4) : [];
-  });
+  readonly tab = signal<ActionTab>('DECIDIR_AGORA');
 
   readonly productRows = computed(() => {
     const state = this.products();
-    return state.status === 'ready' ? state.data : [];
+    if (state.status !== 'ready') return [];
+    const data = state.data as unknown;
+    return (Array.isArray(data) ? data : ((data as { items?: TrendProduct[] }).items ?? [])) as TrendProduct[];
   });
 
-  readonly decisionProducts = computed(() =>
-    [...this.productRows()]
-      .filter((product) => (product.opportunityScore.value ?? -1) >= 35)
-      .sort((a, b) => (b.opportunityScore.value ?? -1) - (a.opportunityScore.value ?? -1))
-      .slice(0, 5),
-  );
+  /** D1: cabeçalho não clicável — total, contagem por ação, última coleta. */
+  readonly total = computed(() => this.productRows().length);
+  readonly countOrder: string[] = [...ACTION_TABS.map((t) => t.id), 'DADOS_INSUFICIENTES'];
+  readonly countByAction = computed(() => {
+    const counts: Record<string, number> = {
+      DECIDIR_AGORA: 0,
+      NEGOCIAR_CUSTO: 0,
+      TESTAR_DEMANDA: 0,
+      IGNORAR: 0,
+      DADOS_INSUFICIENTES: 0,
+    };
+    for (const p of this.productRows()) {
+      const key = p.action ?? 'DADOS_INSUFICIENTES';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  });
 
-  readonly topSignals = computed(() =>
-    [...this.productRows()]
-      .sort((a, b) => (b.trendScore.value ?? -1) - (a.trendScore.value ?? -1))
-      .slice(0, 5),
-  );
-
-  readonly featuredProducts = computed(() =>
-    [...this.productRows()]
-      .sort((a, b) => (b.trendScore.value ?? -1) - (a.trendScore.value ?? -1))
-      .slice(0, 6),
-  );
-
-  readonly sourceRows = computed<SourceStatus[]>(() => {
+  readonly lastCollection = computed(() => {
     const state = this.sources();
-    return state.status === 'ready' ? state.data : [];
+    if (state.status !== 'ready') return null;
+    const dates = (state.data as SourceStatus[])
+      .map((s) => (s.lastCollectedAt ? new Date(s.lastCollectedAt).getTime() : NaN))
+      .filter((t) => Number.isFinite(t));
+    if (dates.length === 0) return null;
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(
+      new Date(Math.max(...dates)),
+    );
   });
 
-  setWindow(value: TimeWindow): void {
-    this.window.set(value);
+  readonly tabs = ACTION_TABS;
+
+  readonly topFive = computed(() => {
+    const tab = this.tab();
+    return [...this.productRows()]
+      .filter((p) => p.action === tab)
+      .sort((a, b) => (b.moveScore ?? -1) - (a.moveScore ?? -1))
+      .slice(0, 5);
+  });
+
+  setTab(tab: ActionTab): void {
+    this.tab.set(tab);
   }
 
-  decisionReason(product: TrendProduct): string {
-    const opportunity = product.opportunityScore.value;
-    const growth = product.growthPct;
-    if (opportunity !== null && opportunity !== undefined && growth !== null && growth !== undefined) {
-      return `Oportunidade ${opportunity} · crescimento ${growth >= 0 ? '+' : ''}${growth}%`;
-    }
-    if (opportunity !== null && opportunity !== undefined) return `Opportunity Score ${opportunity}`;
-    return 'Score de oportunidade ainda não informado';
+  actionText(action: string): string {
+    return ACTION_LABEL[action] ?? action;
+  }
+
+  actionHint(action: string): string {
+    return ACTION_TOOLTIP[action] ?? '';
+  }
+
+  productAction(product: TrendProduct): string {
+    return actionLabel(product.action) || '—';
+  }
+
+  momentumArrow(product: TrendProduct): string {
+    return momentumArrow(product.momentum?.direction);
+  }
+
+  riskCause(product: TrendProduct): string {
+    return product.riskExplanation?.text ?? '—';
+  }
+
+  bandText(product: TrendProduct): string {
+    return scoreBandLabel(product.scoreBand) || '—';
   }
 
   formatScore(product: TrendProduct): string {
-    const value = product.opportunityScore.value;
+    const value = product.moveScore;
     return value === null || value === undefined ? '—' : String(value);
-  }
-
-  formatGrowth(product: TrendProduct): string {
-    const value = product.growthPct;
-    return value === null || value === undefined ? '—' : `${value >= 0 ? '+' : ''}${value}%`;
-  }
-
-  formatRevenue(product: TrendProduct): string {
-    return formatBRL(product.projectedRevenue);
-  }
-
-  formatCollectionDate(value: string | null): string {
-    if (!value) return 'Última coleta não informada';
-    const date = new Date(value);
-    return Number.isNaN(date.getTime())
-      ? 'Última coleta não informada'
-      : `Última coleta em ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date)}`;
   }
 }

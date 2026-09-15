@@ -16,61 +16,95 @@
           type="search"
           [value]="query()"
           (input)="setQuery($any($event.target).value)"
-          placeholder="Buscar telas, produtos ou ações…"
-          aria-label="Buscar telas, produtos ou ações"
+          placeholder="Buscar produtos, categorias ou fornecedores…"
+          aria-label="Buscar produtos, categorias ou fornecedores"
           autocomplete="off"
         />
-        <kbd><app-icon name="command" [size]="13" /> K</kbd>
+        @if (query()) {
+          <button type="button" class="clear-btn" (click)="clearQuery()" aria-label="Limpar busca">
+            <app-icon name="x" [size]="14" />
+          </button>
+        } @else {
+          <kbd><app-icon name="command" [size]="13" /> K</kbd>
+        }
       </div>
 
-      <div class="palette-body">
-        @if (items().length) {
-          <div class="palette-list" role="listbox" aria-label="Resultados da busca">
-            @for (item of items(); track item.id; let index = $index) {
-              <button
-                type="button"
-                class="palette-item"
-                [class.selected]="selectedIndex() === index"
-                [attr.data-palette-index]="index"
-                [attr.aria-selected]="selectedIndex() === index"
-                role="option"
-                (mouseenter)="selectedIndex.set(index)"
-                (click)="execute(item)"
-              >
-                <span class="item-icon"><app-icon [name]="item.icon" [size]="17" /></span>
-                <span class="item-copy">
-                  <strong>{{ item.label }}</strong>
-                  <small>{{ item.description }}</small>
-                </span>
-                @if (item.kind === 'product') {
-                  <span class="item-hint">Dossiê</span>
-                } @else {
-                  <span class="item-key">↵</span>
-                }
-              </button>
+      <nav class="screen-bar" aria-label="Ir para a tela">
+        @for (screen of screens; track screen.id) {
+          <button type="button" class="screen-btn" [attr.data-tip]="screen.label" [attr.aria-label]="screen.label" (click)="goTo(screen)">
+            @if (screen.brandMark) {
+              <app-mai-mark [size]="10" [accent]="true" />
+            } @else {
+              <img class="nav-art" [src]="screen.image" alt="" width="26" height="26" />
             }
-          </div>
-        } @else {
-          <div class="palette-empty" role="status">
-            <strong>Nada encontrado para «{{ query() }}»</strong>
-            <span>Tente outro termo ou use uma ação sugerida.</span>
-            <div class="suggested-actions">
-              @for (item of suggested(); track item.id) {
-                <button type="button" class="suggested" (click)="execute(item)">
-                  <app-icon [name]="item.icon" [size]="15" /> {{ item.label }}
+          </button>
+        }
+      </nav>
+
+      <div class="palette-body">
+        @if (!query().trim() || activeGoal()) {
+          <div class="goals">
+            <span class="goals-label">Buscar por objetivo</span>
+            <div class="goal-chips">
+              @for (goal of goals; track goal) {
+                <button
+                  type="button"
+                  class="goal-chip"
+                  [class.active]="activeGoal() === goal"
+                  [attr.aria-pressed]="activeGoal() === goal"
+                  (click)="searchGoal(goal)"
+                >
+                  {{ goal }}
+                  @if (activeGoal() === goal) {
+                    <app-icon name="x" [size]="11" />
+                  }
                 </button>
               }
             </div>
           </div>
         }
+
+        @if (items().length) {
+          <div class="palette-list" role="listbox" aria-label="Resultados da busca">
+            @for (group of groups(); track group.title) {
+              <div class="group" role="group" [attr.aria-label]="group.title">
+                <span class="group-title">{{ group.title }}</span>
+                @for (item of group.items; track item.id; let i = $index) {
+                  <button
+                    type="button"
+                    class="palette-item"
+                    [class.selected]="selectedIndex() === group.start + i"
+                    [attr.data-palette-index]="group.start + i"
+                    [attr.aria-selected]="selectedIndex() === group.start + i"
+                    role="option"
+                    (mouseenter)="selectedIndex.set(group.start + i)"
+                    (click)="execute(item)"
+                  >
+                    <span class="item-icon"><app-icon [name]="item.icon" [size]="15" /></span>
+                    <span class="item-copy">
+                      <strong>{{ item.label }}</strong>
+                      <small>{{ item.description }}</small>
+                    </span>
+                    <span class="item-key" aria-hidden="true">↵</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        } @else if (query().trim().length >= 2 && !isSearching()) {
+          <div class="palette-empty" role="status">
+            <strong>Nada encontrado para «{{ query() }}»</strong>
+            <span>Tente outro termo ou um dos objetivos acima.</span>
+          </div>
+        }
         @if (isSearching()) {
-          <p class="searching" role="status">Consultando produtos…</p>
+          <p class="searching" role="status">Buscando…</p>
         }
       </div>
       <footer class="palette-footer">
         <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
         <span><kbd>↵</kbd> abrir</span>
-        <span><kbd>esc</kbd> fechar</span>
+        <span><kbd>esc</kbd> {{ query() ? 'limpar busca' : 'fechar' }}</span>
       </footer>
     </section>
   </div>

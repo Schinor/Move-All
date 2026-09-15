@@ -74,6 +74,18 @@
   font-size: var(--fs-sm);
 }
 
+/* Origem dos valores padrão (observado vs estimativa/default). */
+.premise-sources {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
 .form-group {
   display: grid;
   gap: var(--sp-1);

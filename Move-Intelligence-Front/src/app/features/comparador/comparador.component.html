@@ -1,28 +1,90 @@
 <app-page-header
   title="Comparador de Produtos Lado a Lado"
   subtitle="Selecione de 2 a 4 produtos para contrastar curvas de adoção, unit economics, margens e volumes no mesmo gráfico"
+  [showBack]="true"
 />
 
-<!-- Barra de Seleção de Produtos -->
-<section class="selection-bar surface-panel">
+<section class="selection-bar surface-panel" aria-labelledby="selection-title">
   <div class="selection-head">
-    <h4>Selecione os produtos para comparação (máx. 4):</h4>
-    <span class="selection-count">{{ selectedIds().length }}/4 selecionados</span>
+    <h2 id="selection-title">Produtos em comparação</h2>
+    <span class="selection-count num">{{ selectedIds().length }} de {{ maxSelected }}</span>
   </div>
 
-  <div class="product-chips">
-    @for (p of allProducts(); track p.productClusterId) {
-      <button
-        type="button"
-        class="chip-btn"
-        [class.selected]="selectedIds().includes(p.productClusterId)"
-        (click)="toggleProduct(p.productClusterId)"
-      >
-        <span class="chip-dot" [class.active]="selectedIds().includes(p.productClusterId)"></span>
-        {{ p.canonicalName }}
-      </button>
+  <div class="selected-row">
+    @for (item of selectedProducts(); track item.id) {
+      <span class="selected-token">
+        <span class="token-dot" [style.background-color]="item.color"></span>
+        <span class="token-name">{{ item.name }}</span>
+        @if (selectedIds().length > 1) {
+          <button type="button" class="token-remove" (click)="toggleProduct(item.id)" [attr.aria-label]="'Remover ' + item.name">
+            <app-icon name="x" [size]="12" />
+          </button>
+        }
+      </span>
     }
+    <button
+      type="button"
+      class="add-btn"
+      [class.active]="pickerOpen()"
+      [attr.aria-expanded]="pickerOpen()"
+      aria-controls="product-picker"
+      (click)="togglePicker()"
+    >
+      {{ pickerOpen() ? 'Fechar lista' : 'Escolher produtos' }}
+    </button>
   </div>
+
+  @if (pickerOpen()) {
+    <div class="picker" id="product-picker">
+      <div class="picker-filters">
+        <label class="picker-search">
+          <app-icon name="search" [size]="15" />
+          <input type="search" placeholder="Buscar produto" aria-label="Buscar produto" [value]="search()" (input)="setSearch($event)" />
+        </label>
+        <select aria-label="Filtrar por categoria" [value]="category()" (change)="setCategory($event)">
+          <option value="">Todas as categorias</option>
+          @for (c of categories(); track c.value) {
+            <option [value]="c.value">{{ c.label }}</option>
+          }
+        </select>
+        <select aria-label="Ordenar lista" [value]="sortBy()" (change)="setSort($event)">
+          <option value="score">Maior Move Score</option>
+          <option value="growth">Maior crescimento</option>
+          <option value="name">Nome (A–Z)</option>
+        </select>
+      </div>
+
+      <ul class="picker-list" role="list">
+        @for (p of visible(); track p.productClusterId) {
+          <li>
+            <label class="picker-row" [class.checked]="isSelected(p.productClusterId)" [class.disabled]="!isSelected(p.productClusterId) && selectedIds().length >= maxSelected">
+              <input
+                type="checkbox"
+                [checked]="isSelected(p.productClusterId)"
+                [disabled]="(!isSelected(p.productClusterId) && selectedIds().length >= maxSelected) || (isSelected(p.productClusterId) && selectedIds().length <= 1)"
+                (change)="toggleProduct(p.productClusterId)"
+              />
+              <span class="row-name">{{ p.canonicalName }}</span>
+              <span class="row-cat">{{ categoryText(p.category) }}</span>
+              <span class="row-score num">{{ p.moveScore ?? '—' }}</span>
+            </label>
+          </li>
+        } @empty {
+          <li class="picker-empty">Nenhum produto encontrado.</li>
+        }
+      </ul>
+      <p class="picker-foot num">
+        @if (filtered().length > visible().length) {
+          Mostrando {{ visible().length }} de {{ filtered().length }}. Refine a busca para ver outros.
+        } @else {
+          {{ filtered().length }} {{ filtered().length === 1 ? 'produto' : 'produtos' }}
+        }
+        @if (selectedIds().length >= maxSelected) {
+          · Limite de {{ maxSelected }} atingido
+        }
+      </p>
+    </div>
+  }
 </section>
 
 @if (loading()) {
@@ -57,10 +119,19 @@
           </tr>
 
           <tr>
-            <td class="metric-name">Score Financeiro</td>
+            <td class="metric-name">Move Score</td>
             @for (p of comparisonData(); track p.id) {
               <td>
-                <strong class="kpi-num">{{ p.financialScore ?? '—' }}{{ p.financialScore !== null && p.financialScore !== undefined ? '/100' : '' }}</strong>
+                <strong class="kpi-num">{{ p.moveScore ?? confidenceOf(p) }}{{ p.moveScore !== null && p.moveScore !== undefined ? '/100' : '' }}</strong>
+              </td>
+            }
+          </tr>
+
+          <tr>
+            <td class="metric-name">Decisão</td>
+            @for (p of comparisonData(); track p.id) {
+              <td>
+                <strong>{{ decisionOf(p) }}</strong>
               </td>
             }
           </tr>

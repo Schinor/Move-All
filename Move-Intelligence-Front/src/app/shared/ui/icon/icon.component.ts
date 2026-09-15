@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { IconDefinition } from '@fortawesome/fontawesome-common-types';
 import {
-  faAnglesLeft, faArrowRight, faArrowTrendDown, faArrowTrendUp, faBars, faBell, faBolt, faBox,
+  faAnglesLeft, faAnglesRight, faArrowLeft, faArrowRight, faArrowTrendDown, faArrowTrendUp, faBars, faBell, faBolt, faBox,
   faBoxesStacked, faBuilding, faBullseye, faCalculator, faCalendarDays, faChartColumn, faCheck,
   faChevronDown, faChevronUp, faCircleCheck, faCircleXmark, faClock, faCompass, faCrown, faDesktop,
   faDiagramProject, faEnvelope, faEye, faEyeSlash, faFileCircleCheck, faFileLines, faFire,
@@ -9,8 +9,16 @@ import {
   faMagnifyingGlass, faMedal, faMoneyBillTrendUp, faMoon, faPen, faPenToSquare, faRightFromBracket,
   faCircleHalfStroke, faRobot, faRotateRight, faScroll, faShip, faSliders, faStamp, faStar,
   faTableColumns,
-  faThumbtack, faTriangleExclamation, faUser, faWandMagicSparkles, faXmark,
+  faThumbtack, faTriangleExclamation, faUser, faXmark,
 } from '@fortawesome/free-solid-svg-icons';
+import { MOVE_M_PATH } from '../brand-mark/move-m.path';
+
+/** Símbolo M da Move como ícone do M.AI (Copilot) em espaços quadrados. */
+const COPILOT_ICON: IconDefinition = {
+  prefix: 'fas',
+  iconName: 'move-m' as IconDefinition['iconName'],
+  icon: [450, 357, [], '', MOVE_M_PATH],
+};
 
 /**
  * Nomes semânticos usados nos templates. A troca de biblioteca acontece só aqui —
@@ -19,6 +27,7 @@ import {
 const ICONS = {
   'alert-triangle': faTriangleExclamation,
   'arrow-down-right': faArrowTrendDown,
+  'arrow-left': faArrowLeft,
   'arrow-right': faArrowRight,
   'arrow-up-right': faArrowTrendUp,
   'bar-chart': faChartColumn,
@@ -35,6 +44,7 @@ const ICONS = {
   columns: faTableColumns,
   command: faKeyboard,
   compass: faCompass,
+  copilot: COPILOT_ICON,
   /* Meia-lua: o faSun do Font Awesome vira um ícone de engrenagem abaixo de ~20px. */
   contrast: faCircleHalfStroke,
   crown: faCrown,
@@ -64,7 +74,8 @@ const ICONS = {
   moon: faMoon,
   package: faBox,
   password: faKey,
-  'panel-left': faTableColumns,
+  /* Expandir = a mesma seta de recolher, espelhada. */
+  'panel-left': faAnglesRight,
   'panel-left-close': faAnglesLeft,
   pin: faThumbtack,
   'pin-filled': faThumbtack,
@@ -74,7 +85,6 @@ const ICONS = {
   search: faMagnifyingGlass,
   ship: faShip,
   sliders: faSliders,
-  sparkles: faWandMagicSparkles,
   'square-pen': faPenToSquare,
   star: faStar,
   target: faBullseye,
@@ -87,6 +97,9 @@ const ICONS = {
 } satisfies Record<string, IconDefinition>;
 
 export type IconName = keyof typeof ICONS;
+
+/** Ícones com viewBox própria (fora da normalização quadrada padrão). */
+const VIEWBOX_OVERRIDES: Partial<Record<IconName, string>> = {};
 export const ICON_NAMES = Object.keys(ICONS) as IconName[];
 
 @Component({
@@ -116,6 +129,8 @@ export class IconComponent {
    * ícone ocupe a mesma caixa e alinhe em listas, botões e tabelas.
    */
   readonly viewBox = computed(() => {
+    const override = VIEWBOX_OVERRIDES[this.name()];
+    if (override) return override;
     const def = this.definition();
     if (!def) return '0 0 512 512';
     const [width, height] = def.icon;

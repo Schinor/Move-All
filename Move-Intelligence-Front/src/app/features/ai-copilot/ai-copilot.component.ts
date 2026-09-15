@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  HostListener,
   Injector,
   OnInit,
   ViewChild,
@@ -10,11 +11,13 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { MaiMarkComponent } from '../../shared/ui/mai-mark/mai-mark.component';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { PageHeaderComponent } from '../../shared/ui/page-header/page-header.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
 import { CopilotService } from '../../core/services/copilot.service';
+import { CopilotStreamStore } from '../../core/services/copilot-stream.store';
 import {
   CopilotChatMessage,
   CopilotConversationDetail,
@@ -35,20 +38,40 @@ const SCROLL_STICK_THRESHOLD_PX = 120;
 @Component({
   selector: 'app-ai-copilot',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, PageHeaderComponent, IconComponent],
+  imports: [FormsModule, PageHeaderComponent, IconComponent, MaiMarkComponent],
   templateUrl: './ai-copilot.component.html',
   styleUrl: './ai-copilot.component.css',
 })
 export class AiCopilotComponent implements OnInit {
   private readonly copilot = inject(CopilotService);
   private readonly injector = inject(Injector);
+  readonly streamStore = inject(CopilotStreamStore);
 
   @ViewChild('messagesContainer') private messagesContainer?: ElementRef<HTMLDivElement>;
 
   readonly available = true;
   readonly messages = signal<CopilotChatMessage[]>([]);
   readonly inputMessage = signal('');
-  readonly isThinking = signal(false);
+  readonly lastQuery = signal('');
+  /** P0-5: chave do stream desta vista (conversationId ou pendente). */
+  readonly activeKey = signal<string | null>(null);
+  private pendingSeq = 0;
+  /** P0-5: ocupado vale por conversa — outra conversa pode perguntar. */
+  readonly busyHere = computed(() => {
+    const key = this.activeKey();
+    return key !== null && this.streamStore.isBusy(key);
+  });
+  readonly streamPartial = computed(() => {
+    const key = this.activeKey();
+    return key ? this.streamStore.stateFor(key).partialContent : '';
+  });
+  /** Banco + parcial ao vivo (o parcial some ao concluir e o banco recarrega). */
+  readonly displayMessages = computed(() => {
+    const base = this.messages();
+    const partial = this.streamPartial();
+    if (!partial || !this.busyHere()) return base;
+    return [...base, { role: 'assistant', content: partial } as CopilotChatMessage];
+  });
   readonly errorMessage = signal<string | null>(null);
   readonly conversationId = signal<string | undefined>(undefined);
   readonly conversations = signal<CopilotConversationSummary[]>([]);
@@ -60,6 +83,8 @@ export class AiCopilotComponent implements OnInit {
   readonly editingTitle = signal('');
   readonly savingConversationId = signal<string | null>(null);
   readonly isConversationSidebarOpen = signal(this.readConversationSidebarOpen());
+  /** P1-8: menu "⋯" aberto (ações só no hover/click do item). */
+  readonly openMenuId = signal<string | null>(null);
   readonly sortedConversations = computed(() =>
     [...this.conversations()].sort((left, right) => {
       if (left.isPinned !== right.isPinned) return left.isPinned ? -1 : 1;
@@ -93,87 +118,82 @@ export class AiCopilotComponent implements OnInit {
   async sendMessage(textToSend?: string): Promise<void> {
     const raw = textToSend ?? this.inputMessage();
     const query = raw.trim();
-    if (!query || this.isThinking()) return;
+    // P0-5: guarda por conversa — outra conversa pode receber pergunta.
+    const key = this.activeKey() ?? `pending:${++this.pendingSeq}`;
+    if (!query || this.streamStore.isBusy(key)) return;
 
     this.errorMessage.set(null);
     this.inputMessage.set('');
+    this.lastQuery.set(query);
+    this.activeKey.set(key);
 
     const userMessage: CopilotChatMessage = {
       role: 'user',
       content: query,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
-
-    const currentHistory = this.messages();
-    this.messages.set([...currentHistory, userMessage]);
-    this.isThinking.set(true);
+    this.messages.update((msgs) => [...msgs, userMessage]);
     this.scrollToBottom(true);
 
-    // Payload de mensagens históricas para manter contexto
-    const messagesPayload = [...currentHistory, userMessage].map((m) => ({
+    // Payload com a pergunta otimista (o backend também salva antes de gerar).
+    const messagesPayload = this.messages().map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
-    // Cria placeholder para mensagem do assistente em streaming
-    const assistantIndex = this.messages().length;
-    let assistantMessage: CopilotChatMessage = {
-      role: 'assistant',
-      content: '',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+    let finalKey = key;
+    const outcome = await this.streamStore.run({
+      key,
+      request: { messages: messagesPayload, conversationId: this.conversationId() },
+      onConversationId: (id) => {
+        finalKey = id;
+        this.conversationId.set(id);
+        this.copilot.rememberConversation(id);
+        this.activeKey.set(id);
+      },
+    });
 
-    try {
-      let isFirstToken = true;
-      await this.copilot.chatStream(
-        {
-          messages: messagesPayload,
-          conversationId: this.conversationId(),
-        },
-        (token) => {
-          if (isFirstToken) {
-            this.isThinking.set(false);
-            isFirstToken = false;
-            this.messages.update((msgs) => [...msgs, assistantMessage]);
-          }
-          assistantMessage = {
-            ...assistantMessage,
-            content: assistantMessage.content + token,
-          };
-          this.messages.update((msgs) => {
-            const updated = [...msgs];
-            updated[assistantIndex] = assistantMessage;
-            return updated;
-          });
-          this.scrollToBottom();
-        },
-        (convId) => {
-          this.conversationId.set(convId);
-          this.copilot.rememberConversation(convId);
-        },
-      );
-      this.isThinking.set(false);
-      void this.refreshConversationList();
+    // Só recarrega se o usuário ainda está nesta conversa.
+    if (this.activeKey() === finalKey) {
+      await this.reloadCurrentMessages();
+      if (!outcome.ok && outcome.error) {
+        this.errorMessage.set(outcome.error);
+      }
       this.scrollToBottom();
-    } catch (err: any) {
-      this.isThinking.set(false);
-      const errorDetail =
-        err?.error?.message ??
-        err?.message ??
-        'Não foi possível obter resposta do Move AI Copilot neste momento.';
-      this.errorMessage.set(errorDetail);
-      void this.refreshConversationList();
-      this.scrollToBottom(true);
     }
+    void this.refreshConversationList();
+  }
+
+  /** P0-5: botão "Parar" — só ele cancela; a navegação nunca cancela. */
+  stopGeneration(): void {
+    const key = this.activeKey();
+    if (key) this.streamStore.abort(key);
   }
 
   useSuggestion(suggestion: SuggestionPrompt): void {
     this.sendMessage(suggestion.query);
   }
 
+  /** P0-3: reenvia a última pergunta após erro/timeout do stream. */
+  retryLastMessage(): void {
+    const query = this.lastQuery().trim();
+    const key = this.activeKey();
+    if (!query || (key !== null && this.streamStore.isBusy(key))) return;
+    // A tentativa com erro já anexou a pergunta sem resposta: remove para não duplicar.
+    this.messages.update((msgs) => {
+      const last = msgs.at(-1);
+      if (last && last.role === 'user' && last.content === query) return msgs.slice(0, -1);
+      return msgs;
+    });
+    this.errorMessage.set(null);
+    void this.sendMessage(query);
+  }
+
   clearConversation(): void {
+    this.userChoseConversation = true;
     this.messages.set([]);
     this.conversationId.set(undefined);
+    this.activeKey.set(null);
     this.copilot.clearRememberedConversation();
     this.errorMessage.set(null);
   }
@@ -189,8 +209,10 @@ export class AiCopilotComponent implements OnInit {
   }
 
   async openConversation(id: string): Promise<void> {
-    if (this.isThinking() || this.openingConversationId() === id) return;
+    // P0-5: trocar de conversa nunca espera nem mexe no stream da outra.
+    if (this.openingConversationId() === id) return;
 
+    this.activeKey.set(id);
     this.openingConversationId.set(id);
     this.conversationError.set(null);
     try {
@@ -198,6 +220,10 @@ export class AiCopilotComponent implements OnInit {
       this.applyConversation(conversation);
       this.copilot.rememberConversation(id);
       this.errorMessage.set(null);
+      const entry = this.streamStore.stateFor(id);
+      if (entry.status === 'error' && entry.error) {
+        this.errorMessage.set(entry.error);
+      }
       this.scrollToBottom(true);
     } catch (err: any) {
       this.conversationError.set(this.readError(err, 'Não foi possível carregar esta conversa.'));
@@ -206,9 +232,28 @@ export class AiCopilotComponent implements OnInit {
     }
   }
 
+  /** Recarrega a conversa aberta do banco (resposta salva após o stream). */
+  private async reloadCurrentMessages(): Promise<void> {
+    const id = this.conversationId();
+    if (!id) return;
+    try {
+      const conversation = await firstValueFrom(this.copilot.getConversation(id));
+      // Só aplica se o usuário continua nesta conversa.
+      if (this.conversationId() === id) {
+        this.applyConversation(conversation);
+        this.errorMessage.set(null);
+      }
+    } catch {
+      // Mantém o estado local; o histórico atualiza na próxima entrada.
+    }
+  }
+
   async deleteConversation(conversation: CopilotConversationSummary, event: Event): Promise<void> {
     event.stopPropagation();
-    if (this.isThinking() || this.deletingConversationId() === conversation.id) return;
+    this.openMenuId.set(null);
+    // P0-5: excluir aborta o stream dela (o backend salva o parcial sozinho).
+    this.streamStore.abort(conversation.id);
+    if (this.deletingConversationId() === conversation.id) return;
 
     const confirmed = window.confirm(`Excluir a conversa “${conversation.title}”?`);
     if (!confirmed) return;
@@ -230,7 +275,8 @@ export class AiCopilotComponent implements OnInit {
 
   startRenameConversation(conversation: CopilotConversationSummary, event: Event): void {
     event.stopPropagation();
-    if (this.isThinking() || this.savingConversationId() !== null) return;
+    this.openMenuId.set(null);
+    if (this.streamStore.isBusy(conversation.id) || this.savingConversationId() !== null) return;
     this.conversationError.set(null);
     this.editingConversationId.set(conversation.id);
     this.editingTitle.set(conversation.title);
@@ -274,7 +320,8 @@ export class AiCopilotComponent implements OnInit {
 
   async togglePinned(conversation: CopilotConversationSummary, event: Event): Promise<void> {
     event.stopPropagation();
-    if (this.isThinking() || this.savingConversationId() === conversation.id) return;
+    this.openMenuId.set(null);
+    if (this.streamStore.isBusy(conversation.id) || this.savingConversationId() === conversation.id) return;
 
     this.savingConversationId.set(conversation.id);
     this.conversationError.set(null);
@@ -307,12 +354,29 @@ export class AiCopilotComponent implements OnInit {
     }
   }
 
+  /** P1-8: menu "⋯" do item (abre/fecha; fora fecha). */
+  toggleItemMenu(conversation: CopilotConversationSummary, event: Event): void {
+    event.stopPropagation();
+    this.openMenuId.update((current) => (current === conversation.id ? null : conversation.id));
+  }
+
+  @HostListener('document:click')
+  closeItemMenu(): void {
+    if (this.openMenuId() !== null) this.openMenuId.set(null);
+  }
+
+  private userChoseConversation = false;
+
   private async loadConversations(): Promise<void> {
     this.isLoadingConversations.set(true);
     this.conversationError.set(null);
     try {
       const conversations = await firstValueFrom(this.copilot.listConversations());
       this.conversations.set(conversations);
+
+      // O usuário já escolheu (nova conversa, abriu outra ou perguntou) enquanto a
+      // lista carregava: não sobrescrever a escolha reabrindo a conversa lembrada.
+      if (this.userChoseConversation || this.activeKey() !== null) return;
 
       const rememberedId = this.copilot.getRememberedConversationId();
       const targetId =

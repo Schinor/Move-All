@@ -5,6 +5,8 @@ const SIDEBAR_OPEN_KEY = 'move-intelligence:sidebar-open';
 @Injectable({ providedIn: 'root' })
 export class LayoutService {
   readonly sidebarOpen = signal(this.readSidebarOpen());
+  /** P1-7: pedido para abrir a paleta (ex.: ícone de busca da sidebar). */
+  readonly paletteRequest = signal(0);
 
   toggleSidebar(): void {
     this.setSidebarOpen(!this.sidebarOpen());
@@ -12,6 +14,11 @@ export class LayoutService {
 
   closeSidebar(): void {
     this.setSidebarOpen(false);
+  }
+
+  /** P1-7: a sidebar (ícone de busca) pede a abertura da paleta na top-bar. */
+  requestPalette(): void {
+    this.paletteRequest.update((n) => n + 1);
   }
 
   private setSidebarOpen(isOpen: boolean): void {

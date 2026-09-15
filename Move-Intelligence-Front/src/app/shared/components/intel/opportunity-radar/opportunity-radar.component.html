@@ -1,7 +1,24 @@
 <section class="chart-card surface-panel">
   <header>
     <span>Radar de sub-sinais</span>
-    <strong>6 dimensões</strong>
+    <strong>{{ dimensions().length }} de {{ allDimensions().length }}</strong>
   </header>
-  <app-chart [options]="options()" label="Radar de sub-sinais" />
+  @if (dimensions().length === 0) {
+    <p class="empty-note">Sub-sinais ainda não calculados para este produto.</p>
+  } @else if (dimensions().length >= 3) {
+    <app-chart [options]="options()" label="Radar de sub-sinais" />
+  }
+  <ul class="signal-list">
+    @for (dim of allDimensions(); track dim.key) {
+      <li [class.missing]="dim.percent === null" [attr.title]="dim.explanation ?? null">
+        <span class="bar-label">{{ dim.label }}</span>
+        @if (dim.percent !== null) {
+          <span class="bar-track" aria-hidden="true"><span class="bar-fill" [style.width.%]="dim.percent"></span></span>
+          <span class="bar-value num">{{ dim.percent }}</span>
+        } @else {
+          <span class="bar-empty">Sem coleta</span>
+        }
+      </li>
+    }
+  </ul>
 </section>

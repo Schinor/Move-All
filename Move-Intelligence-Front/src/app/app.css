@@ -35,6 +35,19 @@
     border: 0;
     background: color-mix(in srgb, var(--text) 42%, transparent);
     cursor: pointer;
+    animation: backdrop-in var(--dur-slide) var(--ease-slide);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-backdrop {
+    animation: none;
   }
 }
 

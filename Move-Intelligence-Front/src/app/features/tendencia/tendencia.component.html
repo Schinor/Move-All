@@ -1,36 +1,55 @@
+@if (product().status === 'ready') {
+  <app-page-header
+    [title]="$any(product()).data.canonicalName"
+    [subtitle]="humanize($any(product()).data.category)"
+    [showBack]="true"
+  >
+    <div class="header-actions">
+      <button
+        type="button"
+        class="export-btn"
+        (click)="exportDossier('pdf')"
+        title="Imprimir ou Salvar Dossiê Executivo em PDF"
+      >
+        <app-icon name="file-text" [size]="16" /> Dossiê PDF
+      </button>
+      <button
+        type="button"
+        class="export-btn"
+        (click)="exportDossier('csv')"
+        title="Exportar Série Histórica em CSV"
+      >
+        <app-icon name="bar-chart" [size]="16" /> Exportar CSV
+      </button>
+      <span [attr.title]="riskTitle($any(product()).data)" [attr.aria-label]="riskTitle($any(product()).data)">
+        <app-risk-badge [level]="$any(product()).data.risk" of="de mercado" />
+      </span>
+    </div>
+  </app-page-header>
+} @else {
+  <app-page-header title="Detalhe da tendência" [showBack]="true" />
+}
+
 @switch (product().status) {
   @case ('ready') {
-    <app-page-header
-      [title]="$any(product()).data.canonicalName"
-      [subtitle]="humanize($any(product()).data.category)"
-    >
-      <div class="header-actions">
-        <button
-          type="button"
-          class="export-btn"
-          (click)="exportDossier('pdf')"
-          title="Imprimir ou Salvar Dossiê Executivo em PDF"
-        >
-          <app-icon name="file-text" [size]="16" /> Dossiê PDF
-        </button>
-        <button
-          type="button"
-          class="export-btn"
-          (click)="exportDossier('csv')"
-          title="Exportar Série Histórica em CSV"
-        >
-          <app-icon name="bar-chart" [size]="16" /> Exportar CSV
-        </button>
-        <app-risk-badge [level]="$any(product()).data.risk" of="de mercado" />
-      </div>
-    </app-page-header>
-
     <section class="hero surface-panel">
       <app-product-image
         [src]="$any(product()).data.imageUrl"
         [alt]="$any(product()).data.canonicalName"
       />
       <div class="hero-main">
+        <div class="action-line" [attr.data-action]="$any(product()).data.action">
+          <span class="action-chip">{{ moveDecisionText($any(product()).data) }}</span>
+          @if ($any(product()).data.scoreBand) {
+            <span class="band-chip" [attr.data-band]="$any(product()).data.scoreBand">Faixa {{ bandText($any(product()).data) }}</span>
+          }
+          <span
+            class="what"
+            tabindex="0"
+            [attr.title]="actionTooltipText($any(product()).data)"
+            [attr.aria-label]="'O que fazer: ' + actionTooltipText($any(product()).data)"
+          >? O que fazer</span>
+        </div>
         <div class="metric-strip">
           <div>
             <span>Crescimento</span>
@@ -45,8 +64,8 @@
             </strong>
           </div>
           <div>
-            <span>Opportunity Score</span>
-            <strong class="num">{{ $any(product()).data.opportunityScore.value ?? '—' }}</strong>
+            <span>Move Score</span>
+            <strong class="num">{{ moveScoreText($any(product()).data) }}</strong>
           </div>
           <div>
             <span>Sinais Mapeados</span>
@@ -56,6 +75,10 @@
             <span>Fontes principais</span>
             <strong class="num">{{ $any(product()).data.mainSources?.length ?? '—' }}</strong>
           </div>
+          <div>
+            <span>Social</span>
+            <strong class="num">{{ socialText($any(product()).data) }}</strong>
+          </div>
         </div>
         @if ($any(product()).data.spark?.length) {
           <app-sparkline
@@ -64,7 +87,7 @@
           />
         }
       </div>
-      <app-score-gauge [value]="$any(product()).data.trendScore.value" [size]="88" />
+      <app-score-gauge [value]="$any(product()).data.moveScore" [size]="88" />
     </section>
 
     <app-tabs [tabs]="tabs" [active]="activeTab()" (changed)="setTab($event)" />
@@ -101,19 +124,50 @@
                 </button>
               </div>
               <app-window-selector [value]="window()" (changed)="setWindow($event)" />
+              <label class="toggle compare-toggle">
+                <input type="checkbox" [checked]="comparePrevious()" (change)="toggleComparePrevious($event)" />
+                Comparar com período anterior
+              </label>
             </div>
-            @switch (currentHistory().status) {
-              @case ('ready') {
-                <app-adoption-curve-chart
-                  [points]="$any(currentHistory()).data.points"
-                  [metric]="historyMetric()"
-                />
+            @if (historyMetric() === 'review') {
+              @switch (reviewSentiment().status) {
+                @case ('ready') {
+                  <app-review-sentiment-chart [data]="$any(reviewSentiment()).data" />
+                }
+                @default {
+                  <app-state-panel
+                    [state]="reviewSentiment()"
+                    emptyMessage="Sem avaliações coletadas na janela selecionada."
+                  />
+                }
               }
-              @default {
-                <app-state-panel
-                  [state]="currentHistory()"
-                  emptyMessage="Sem série histórica para esta métrica na janela selecionada."
-                />
+              @if (reviewBands($any(product()).data).length) {
+                <div class="review-panels">
+                  @for (card of reviewBands($any(product()).data); track card.band) {
+                    <article class="review-card surface-panel">
+                      <h3>Faixa {{ card.band }}</h3>
+                      <p>{{ card.summary }}</p>
+                      <small>Amostra: {{ card.sample_size }}</small>
+                    </article>
+                  }
+                </div>
+              }
+            } @else {
+              @switch (currentHistory().status) {
+                @case ('ready') {
+                  <app-adoption-curve-chart
+                    [points]="currentPoints()"
+                    [previousPoints]="previousPoints()"
+                    [metric]="historyMetric()"
+                    [window]="window()"
+                  />
+                }
+                @default {
+                  <app-state-panel
+                    [state]="currentHistory()"
+                    emptyMessage="Sem série histórica para esta métrica na janela selecionada."
+                  />
+                }
               }
             }
           </div>
@@ -122,6 +176,32 @@
 
         <section class="block">
           <h2>Explicabilidade do score</h2>
+          <div class="move-explain surface-panel">
+            <div>
+              <span>Ação</span>
+              <strong [attr.title]="actionTooltipText($any(product()).data)">{{ moveDecisionText($any(product()).data) }}</strong>
+            </div>
+            <div>
+              <span>Confiança dos dados</span>
+              <strong>{{ moveConfidenceText($any(product()).data) }}</strong>
+            </div>
+            <div>
+              <span>P(VPL &gt; 0)</span>
+              <strong class="num">{{ moveProbabilityText($any(product()).data) }}</strong>
+            </div>
+            <div>
+              <span>CVaR 5%</span>
+              <strong class="num">{{ moveCvarText($any(product()).data) }}</strong>
+            </div>
+            <div class="wide">
+              <span>Risco — causas</span>
+              <strong class="risk-text">{{ riskTitle($any(product()).data) }}</strong>
+            </div>
+            <p class="move-origin">
+              Premissas derivadas do histórico de observações reais do produto
+              (painel balanceado); sem histórico suficiente, nenhum número é exibido.
+            </p>
+          </div>
           <div class="signal-grid">
             @for (entry of signalEntries(); track entry[0]) {
               <app-kpi-card [label]="signalLabel(entry[0])" [indicator]="entry[1]" suffix="pts" />
@@ -151,6 +231,16 @@
       @case ('sourcing') {
         <section class="block">
           <h2>Fornecedores do cluster</h2>
+          <p class="detected-line">
+            <span>Detectado em</span>
+            {{ detectedText($any(product()).data) }}
+          </p>
+          @if ($any(product()).data.topSupplier; as top) {
+            <article class="top-supplier surface-panel">
+              <h3>Fornecedor de alto volume</h3>
+              <p><strong>{{ top.name }}</strong> · {{ sourceName(top.source) }}@if (top.verified) { · Verificado }@if (top.years !== null && top.years !== undefined) { · {{ top.years }} anos }</p>
+            </article>
+          }
           @switch (suppliers().status) {
             @case ('ready') {
               <app-supplier-comparison-table [suppliers]="$any(suppliers()).data" />
@@ -289,10 +379,16 @@
                 <div class="simulation-empty">{{ $any(simulation()).error }}</div>
               }
               @case ('ready') {
+                @if ($any(simulation()).data.isUserScenario) {
+                  <div class="user-scenario-notice">
+                    <app-icon name="alert-triangle" [size]="14" />
+                    Cenário do usuário — não altera o score oficial do ranking.
+                  </div>
+                }
                 <div class="simulation-grid">
                   <div>
                     <span>Risco</span>
-                    <strong>{{ $any(simulation()).data.riskLevel }}</strong>
+                    <strong>{{ $any(simulation()).data.riskLevel ?? '—' }}</strong>
                   </div>
                   <div>
                     <span>Score</span>
@@ -357,7 +453,6 @@
     }
   }
   @default {
-    <app-page-header title="Detalhe da tendência" />
     <app-state-panel [state]="product()" emptyMessage="Produto não encontrado ou ainda não coletado." />
   }
 }

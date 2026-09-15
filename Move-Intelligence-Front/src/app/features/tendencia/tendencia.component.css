@@ -14,6 +14,8 @@
 }
 
 .header-actions {
+  align-items: center;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--sp-2);
@@ -36,6 +38,10 @@
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   cursor: pointer;
+}
+
+.export-btn {
+  flex: 0 0 auto;
 }
 
 .export-btn:hover,
@@ -64,7 +70,7 @@
 
 .metric-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: var(--sp-2);
 }
 
@@ -103,6 +109,233 @@
   color: var(--danger);
 }
 
+/* ---- D4: ação, faixa e "O que fazer" no topo do dossiê ---- */
+.action-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+[data-action='DECIDIR_AGORA'] {
+  --action-color: var(--success);
+  --action-bg: var(--success-bg);
+}
+
+[data-action='NEGOCIAR_CUSTO'] {
+  --action-color: var(--warning);
+  --action-bg: var(--warning-bg);
+}
+
+[data-action='TESTAR_DEMANDA'] {
+  --action-color: var(--info);
+  --action-bg: var(--info-bg);
+}
+
+.action-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 var(--sp-3);
+  color: var(--action-color, var(--text));
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  background: var(--action-bg, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--action-color, var(--border-strong)) 45%, var(--border));
+  border-radius: var(--r-full);
+}
+
+.band-chip,
+.what {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: var(--r-full);
+}
+
+.band-chip {
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.band-chip[data-band='green'] {
+  color: var(--success);
+  background: var(--success-bg);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.band-chip[data-band='yellow'] {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border));
+}
+
+.band-chip[data-band='red'] {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.what {
+  color: var(--text-3);
+  border: 1px dashed var(--border-strong);
+  cursor: help;
+}
+
+.what:hover,
+.what:focus-visible {
+  color: var(--text);
+  border-color: var(--text-3);
+  outline: none;
+}
+
+.compare-toggle {
+  color: var(--text-2);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.compare-toggle input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--brand);
+}
+
+/* ---- Avaliações por faixa ---- */
+.review-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.review-card {
+  display: grid;
+  gap: var(--sp-1);
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+}
+
+.review-card h3 {
+  margin: 0;
+  font-size: var(--fs-h3);
+}
+
+.review-card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-body);
+}
+
+.review-card small {
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+}
+
+/* ---- Explicabilidade do Move Score ---- */
+.move-explain {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+}
+
+.move-explain > div {
+  display: grid;
+  align-content: start;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.move-explain > div.wide {
+  grid-column: 1 / -1;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+
+.move-explain > div > span {
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.move-explain strong {
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.move-explain .risk-text {
+  font-weight: 500;
+  line-height: var(--lh-body);
+}
+
+.move-origin {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* ---- D5: sourcing ---- */
+.detected-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-3);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+
+.detected-line span {
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.top-supplier {
+  display: grid;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-left: 3px solid var(--brand);
+  border-radius: var(--r-md);
+}
+
+.top-supplier h3 {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.top-supplier p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
+.top-supplier strong {
+  color: var(--text);
+}
+
 .tab-grid,
 .decision-grid {
   display: grid;
@@ -125,6 +358,7 @@
 }
 
 .block-head {
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--sp-3);
   margin-bottom: var(--sp-3);
@@ -141,6 +375,7 @@
 }
 
 .metric-btn {
+  white-space: nowrap;
   min-height: 36px;
   padding-inline: var(--sp-3);
   background: transparent;
@@ -311,6 +546,21 @@ legend {
   margin: var(--sp-3) 0 0;
 }
 
+/* Aviso discreto: simulação com premissas alteradas pelo usuário não grava
+   o score oficial do ranking (ver contract.models.ts MonteCarloSimulationResult.isUserScenario). */
+.user-scenario-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--info-bg);
+  border: 1px solid var(--info);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+}
+
 .simulation-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -367,6 +617,10 @@ legend {
     grid-template-columns: 1fr;
   }
 
+  .move-explain {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .simulation-head,
   .block-head {
     align-items: flex-start;
@@ -376,4 +630,11 @@ legend {
   .run-actions {
     justify-content: flex-start;
   }
+}
+
+/* P1-2: distribuição ainda sem coleta (A5) em linha única. */
+.dist-empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--fs-caption);
 }

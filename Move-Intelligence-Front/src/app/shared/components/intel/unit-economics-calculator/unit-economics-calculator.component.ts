@@ -29,6 +29,8 @@ export class UnitEconomicsCalculatorComponent implements OnInit {
 
   readonly loading = signal(true);
   readonly result = signal<any | null>(null);
+  /** Origem dos defaults (observado vs estimativa/default), vinda da API. */
+  readonly premiseSources = signal<Record<string, string> | null>(null);
 
   // Form Inputs
   readonly precoVendaBrl = signal(599);
@@ -101,6 +103,7 @@ export class UnitEconomicsCalculatorComponent implements OnInit {
             this.custoFixoMensalBrl.set(defaults.custoFixoMensalBrl ?? 4500.0);
             this.elasticidadePreco.set(defaults.elasticidadePreco ?? -1.6);
             this.volumeBaseMensal.set(defaults.volumeBaseMensal ?? 250);
+            this.premiseSources.set(defaults.premiseSources ?? defaults.premise_sources ?? null);
           }
           this.recalculate();
         },
@@ -123,5 +126,14 @@ export class UnitEconomicsCalculatorComponent implements OnInit {
   formatNumber(value: number | null | undefined): string {
     if (value === undefined || value === null) return '—';
     return new Intl.NumberFormat('pt-BR').format(value);
+  }
+
+  /** Rótulo de origem de um default (observado vs estimativa/default). */
+  premiseLabel(key: string): string | null {
+    const source = this.premiseSources()?.[key];
+    if (!source) return null;
+    if (source === 'observado') return 'observado';
+    if (source === 'estimativa_18pct_do_preco') return 'estimativa (18% do preço)';
+    return 'default';
   }
 }

@@ -46,7 +46,7 @@ export class SinaisComponent implements OnInit {
   readonly webhookUrl = signal('');
   readonly webhookChannel = signal<'slack' | 'telegram' | 'generic'>('slack');
   readonly telegramChatId = signal('');
-  readonly minTrendScore = signal(80);
+  readonly minMoveScoreDelta = signal(10);
   readonly minGrowthPct = signal(40);
   readonly alertsEnabled = signal(true);
   readonly alertsHistory = signal<any[]>([]);
@@ -67,7 +67,7 @@ export class SinaisComponent implements OnInit {
           this.webhookUrl.set(rules.webhookUrl ?? '');
           this.webhookChannel.set(rules.webhookChannel ?? 'slack');
           this.telegramChatId.set(rules.telegramChatId ?? '');
-          this.minTrendScore.set(rules.minTrendScore ?? 80);
+          this.minMoveScoreDelta.set(rules.minMoveScoreDelta ?? 10);
           this.minGrowthPct.set(rules.minGrowthPct ?? 40);
           this.alertsEnabled.set(rules.enabled !== false);
         }
@@ -89,7 +89,7 @@ export class SinaisComponent implements OnInit {
       webhookUrl: this.webhookUrl(),
       webhookChannel: this.webhookChannel(),
       telegramChatId: this.telegramChatId(),
-      minTrendScore: Number(this.minTrendScore()),
+      minMoveScoreDelta: Number(this.minMoveScoreDelta()),
       minGrowthPct: Number(this.minGrowthPct()),
       enabled: this.alertsEnabled(),
     };

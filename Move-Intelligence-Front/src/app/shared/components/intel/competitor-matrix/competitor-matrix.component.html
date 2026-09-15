@@ -34,7 +34,7 @@
               <tr [class.buybox]="c.buyboxWinner">
                 <td>
                   <div class="seller-info">
-                    <strong>{{ c.sellerName }}</strong>
+                    <strong>{{ c.sellerName ?? 'Vendedor não identificado' }}</strong>
                     @if (c.buyboxWinner) {
                       <span class="badge-buybox"><app-icon name="crown" [size]="12" /> BuyBox Winner</span>
                     }
@@ -44,26 +44,44 @@
                   <span class="mkt-tag">{{ c.marketplace }}</span>
                 </td>
                 <td>
-                  <span class="reputation-badge" [class.platinum]="c.reputation.includes('Platinum')" [class.gold]="c.reputation.includes('Gold')">
-                    <app-icon name="star" [size]="12" /> {{ c.reputation }}
-                  </span>
+                  @if (c.reputation) {
+                    <span class="reputation-badge" [class.platinum]="c.reputation.includes('Platinum')" [class.gold]="c.reputation.includes('Gold')">
+                      <app-icon name="star" [size]="12" /> {{ c.reputation }}
+                    </span>
+                  } @else {
+                    <span class="reputation-badge">—</span>
+                  }
                 </td>
                 <td>
-                  <span class="fulfillment-badge" [class.full]="c.fulfillment.includes('Full') || c.fulfillment.includes('FBA')">
-                    <app-icon name="zap" [size]="12" /> {{ c.fulfillment }}
-                  </span>
+                  @if (c.fulfillment) {
+                    <span class="fulfillment-badge" [class.full]="c.fulfillment.includes('Full') || c.fulfillment.includes('FBA')">
+                      <app-icon name="zap" [size]="12" /> {{ c.fulfillment }}
+                    </span>
+                  } @else {
+                    <span class="fulfillment-badge">—</span>
+                  }
                 </td>
                 <td><strong>{{ formatCurrency(c.avgPrice) }}</strong></td>
                 <td>{{ formatNumber(c.monthlySalesEst) }} un/mês</td>
                 <td>
-                  <div class="share-cell">
-                    <div class="share-bar-bg">
-                      <div class="share-bar-fill" [style.width.%]="c.marketSharePct"></div>
+                  @if (c.marketSharePct !== null && c.marketSharePct !== undefined) {
+                    <div class="share-cell">
+                      <div class="share-bar-bg">
+                        <div class="share-bar-fill" [style.width.%]="c.marketSharePct"></div>
+                      </div>
+                      <span>{{ c.marketSharePct }}%</span>
                     </div>
-                    <span>{{ c.marketSharePct }}%</span>
-                  </div>
+                  } @else {
+                    <span>—</span>
+                  }
                 </td>
-                <td><app-icon name="star" [size]="12" /> {{ c.rating }} <small>({{ formatNumber(c.reviewCount) }})</small></td>
+                <td>
+                  @if (c.rating !== null && c.rating !== undefined) {
+                    <app-icon name="star" [size]="12" /> {{ c.rating }} <small>({{ formatNumber(c.reviewCount) }})</small>
+                  } @else {
+                    <span>—</span>
+                  }
+                </td>
               </tr>
             }
           </tbody>
