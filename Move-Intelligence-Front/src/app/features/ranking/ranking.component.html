@@ -105,7 +105,7 @@
                 <button type="button" (click)="sort('rating')">Nota <app-icon [name]="sortIcon('rating')" [size]="13" /></button>
               </th>
               <th scope="col" class="text-cell">Detectado em</th>
-              <th scope="col" class="text-cell">Fornecedor</th>
+              <th scope="col" class="text-cell">Anúncios</th>
               <th scope="col" class="action-heading">Dossiê</th>
             </tr>
           </thead>
@@ -114,7 +114,10 @@
               <tr>
                 <td class="product">
                   <strong>{{ product.canonicalName }}</strong>
-                  <span>{{ (product.category | humanize) || 'Categoria não informada' }}</span>
+                  @if (product.cardStatus === 'provisional') {
+                    <span class="provisional-badge">Provisório</span>
+                  }
+                  <span>{{ familyType(product) ?? ((product.category | humanize) || 'Categoria não informada') }}</span>
                 </td>
                 <td class="score-cell">
                   <app-score-gauge [value]="product.moveScore" [size]="40" />
@@ -129,11 +132,14 @@
                 <td class="growth num" [class.down]="(product.growthPct ?? 0) < 0">
                   {{ product.growthPct === null ? '—' : (product.growthPct >= 0 ? '+' : '') + product.growthPct + '%' }}
                 </td>
-                <td class="num nowrap">{{ priceText(product) }}</td>
+                <td class="num nowrap">
+                  {{ priceText(product) }}
+                  @if (priceRange(product); as range) { <span class="sub">{{ range }}</span> }
+                </td>
                 <td class="num">{{ product.reviews === null || product.reviews === undefined ? '—' : product.reviews }}</td>
                 <td class="num">{{ product.rating === null || product.rating === undefined ? '—' : product.rating }}</td>
                 <td class="text-cell">{{ detectedText(product) }}</td>
-                <td class="text-cell">{{ supplierText(product) }}</td>
+                <td class="text-cell">{{ listings(product) ?? supplierText(product) }}</td>
                 <td><a [routerLink]="['/tendencia', product.productClusterId]" class="go">Ver dossiê <app-icon name="arrow-up-right" [size]="14" /></a></td>
               </tr>
             }

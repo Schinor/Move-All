@@ -3,13 +3,14 @@
     <div class="head">
       <div class="head-left">
         <div class="tags">
-          <span class="cat">{{ (trend().category | humanize) || 'Categoria não informada' }}</span>
+          <span class="cat">{{ familyType() ?? ((trend().category | humanize) || 'Categoria não informada') }}</span>
           <span class="sep"></span>
           @if (stageLabel()) {
             <span class="stage">{{ stageLabel() }}</span>
           }
         </div>
         <h3 class="name" [attr.title]="trend().canonicalName">{{ trend().canonicalName }}</h3>
+        @if (trend().cardStatus === 'provisional') { <span class="provisional-badge">Provisório</span> }
       </div>
       <span class="arrow" title="Expandir"><app-icon name="arrow-up-right" [size]="16" label="Expandir" /></span>
     </div>
@@ -57,6 +58,7 @@
     }
 
     <div class="foot">
+      @if (listings(); as l) { <span class="listings">{{ l }}</span> }
       <app-risk-badge [level]="trend().risk" of="de mercado" />
       @if (trend().projectedRevenue !== null) {
         <div class="pipeline">Pipeline <span class="num">{{ pipeline() }}</span></div>

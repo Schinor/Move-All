@@ -222,6 +222,79 @@ def extract_title(markdown: str) -> Optional[str]:
     return None
 
 
+_SPEC_HEADINGS = re.compile(
+    r"^(#{1,4})\s*(caracter[ií]sticas|ficha t[eé]cnica|especifica[cç][oõ]es|o que voc[eê] precisa saber|"
+    r"specifications|technical details|product details|about this item|参数|规格|产品参数)\b.*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+_LINK = re.compile(r"\[([^\]]*)\]\((?:https?:)?//[^)]*\)")
+
+
+def _clean_markdown(text: str) -> str:
+    text = _IMAGE.sub("", text)
+    text = _LINK.sub(r"\1", text)
+    lines = [line.rstrip() for line in text.splitlines()]
+    out: list[str] = []
+    for line in lines:
+        if not line.strip() and out and not out[-1].strip():
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
+def _json_ld_summary(markdown: str) -> str:
+    parts: list[str] = []
+    for product in extract_json_ld_products(markdown)[:1]:
+        brand = product.get("brand")
+        brand_name = brand.get("name") if isinstance(brand, Mapping) else brand
+        for label, value in (("Nome", product.get("name")), ("Marca", brand_name), ("Modelo", product.get("model"))):
+            if value:
+                parts.append(f"{label}: {value}")
+        props = product.get("additionalProperty")
+        if isinstance(props, list):
+            for prop in props[:20]:
+                if isinstance(prop, Mapping) and prop.get("name") and prop.get("value") is not None:
+                    parts.append(f"{prop['name']}: {prop['value']}")
+        description = str(product.get("description") or "").strip()
+        if description:
+            parts.append(description[:800])
+    return "\n".join(parts)
+
+
+def _spec_block(markdown: str) -> str:
+    match = _SPEC_HEADINGS.search(markdown)
+    if not match:
+        return ""
+    level = len(match.group(1))
+    rest = markdown[match.end():]
+    stop = re.search(rf"^#{{1,{level}}}\s", rest, re.MULTILINE)
+    return rest[: stop.start()] if stop else rest
+
+
+def _bullets(markdown: str, limit: int = 15) -> str:
+    found = [line.strip() for line in markdown.splitlines() if re.match(r"^\s*[-*•]\s+\S", line)]
+    return "\n".join(found[:limit])
+
+
+def build_page_excerpt(markdown: str, title: Optional[str] = None, limit: int = 4000) -> str:
+    """Recorte da página para a ficha (spec 5.1): título → JSON-LD → especificações → bullets."""
+    content = fix_mojibake(str(markdown or ""))
+    head = (title or extract_title(content) or "").strip()
+    if not content.strip():
+        return head[:limit]
+    sections = [head, _json_ld_summary(content), _clean_markdown(_spec_block(content)), _clean_markdown(_bullets(content))]
+    seen: set[str] = set()
+    lines: list[str] = []
+    for section in sections:
+        for line in section.splitlines():
+            key = line.strip()
+            if key and key not in seen:
+                seen.add(key)
+                lines.append(line)
+    return "\n".join(lines)[:limit]
+
+
 # Símbolos de moeda aceitos nos blocos de preço (a moeda final vem do
 # símbolo ou do default da fonte).
 _CURRENCY_SYMBOLS = ("R$", "US$", "U$", "€", "EUR", "¥", "CNY", "$")
@@ -395,6 +468,7 @@ def parse_in_stock(text: str) -> Optional[bool]:
 __all__ = [
     "ParsedListing",
     "content_hash",
+    "build_page_excerpt",
     "extract_json_ld_products",
     "extract_title",
     "fix_mojibake",

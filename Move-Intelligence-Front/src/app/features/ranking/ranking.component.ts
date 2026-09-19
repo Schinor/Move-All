@@ -18,6 +18,7 @@ import { StatePanelComponent } from '../../shared/ui/state-panel/state-panel.com
 import { DataTableComponent } from '../../shared/ui/data-table/data-table.component';
 import { ACTION_LABEL, STAGE_LABEL, actionLabel, dataConfidenceLabel, formatBRL, momentumArrow, scoreBandLabel, sourceLabel } from '../../shared/util/format';
 import { HumanizePipe } from '../../shared/util/humanize.pipe';
+import { familyTypeText, listingsText, priceMedianText, priceRangeText } from '../../shared/util/card-format';
 
 export type RankSortKey = 'score' | 'action' | 'momentum' | 'growth' | 'price' | 'reviews' | 'rating' | 'name';
 export type ActionFilter = 'all' | 'DECIDIR_AGORA' | 'NEGOCIAR_CUSTO' | 'TESTAR_DEMANDA' | 'IGNORAR' | 'DADOS_INSUFICIENTES';
@@ -218,12 +219,16 @@ export class RankingComponent {
     return product.topSupplier?.name ?? '—';
   }
 
+  familyType(product: TrendProduct): string | null { return familyTypeText(product); }
+  listings(product: TrendProduct): string | null { return listingsText(product); }
+  priceRange(product: TrendProduct): string | null { return priceRangeText(product); }
+
   bandText(product: TrendProduct): string {
     return scoreBandLabel(product.scoreBand) || '—';
   }
 
   priceText(product: TrendProduct): string {
-    return product.price === null || product.price === undefined ? '—' : formatBRL(product.price);
+    return priceMedianText(product) ?? (product.price === null || product.price === undefined ? '—' : formatBRL(product.price));
   }
 
   stageLabel(stage: TrendProduct['stage']): string {
@@ -231,6 +236,7 @@ export class RankingComponent {
   }
 
   confidenceLabel(product: TrendProduct): string {
+    if (product.cardStatus === 'provisional') return 'Aguardando revisão';
     return dataConfidenceLabel(product.dataConfidence);
   }
 

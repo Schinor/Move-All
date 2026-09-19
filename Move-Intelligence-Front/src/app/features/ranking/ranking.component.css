@@ -246,6 +246,20 @@ th.product-heading {
   font-size: var(--fs-caption);
 }
 
+.provisional-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--warning-bg, #f5c26b);
+  color: var(--warning-fg, #1a1a1a);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+td .sub { display: block; font-size: 11px; opacity: 0.7; }
+
 .score-cell {
   white-space: nowrap;
 }

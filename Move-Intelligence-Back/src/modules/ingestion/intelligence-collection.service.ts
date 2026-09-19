@@ -5,8 +5,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
-import { CanonicalProductListing } from '../../shared/types/marketplace.types';
-import { ProductMatchingService } from '../product-matching/product-matching.service';
+import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
 import { RunIntelligenceCollectionDto } from './dto/run-intelligence-collection.dto';
 import { RunTrackListingsDto } from './dto/run-track-listings.dto';
@@ -44,7 +43,7 @@ const COLLECTION_CATEGORIES = [
 export class IntelligenceCollectionService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly matching: ProductMatchingService,
+    private readonly fichas: FichaService,
     private readonly products: ProductsService,
     private readonly cache?: RedisCacheService,
   ) {}
@@ -244,7 +243,7 @@ export class IntelligenceCollectionService {
 
   /**
    * Job de acompanhamento: roda o Python, sincroniza as observações em
-   * snapshots analíticos (isSynthetic=false), vincula clusters via matching,
+   * snapshots analíticos (isSynthetic=false), registra anúncios na ficha,
    * dispara o Monte Carlo em lote e promove os tiers pelo score.
    */
   private async executeTrackListings(jobId: string, dto: RunTrackListingsDto) {
@@ -478,9 +477,9 @@ export class IntelligenceCollectionService {
    */
   private async syncObservationsToSnapshots(
     observationIds: string[],
-  ): Promise<{ analytical_snapshots: number; matched_listings: number }> {
+  ): Promise<{ analytical_snapshots: number; registered_listings: number }> {
     if (observationIds.length === 0) {
-      return { analytical_snapshots: 0, matched_listings: 0 };
+      return { analytical_snapshots: 0, registered_listings: 0 };
     }
     const observations = await this.prisma.listingObservation.findMany({
       where: { id: { in: observationIds } },
@@ -489,7 +488,7 @@ export class IntelligenceCollectionService {
     });
 
     let snapshots = 0;
-    let matched = 0;
+    let registered = 0;
     for (const observation of observations) {
       // A3.1: preço suspeito não entra no ranking — só observações com
       // scrapeStatus 'ok' viram snapshot ('partial'/'blocked'/'not_found'
@@ -507,31 +506,19 @@ export class IntelligenceCollectionService {
       }
       let productClusterId = listing.productId;
       if (!productClusterId) {
-        // Anúncio novo da descoberta: vincula via matching com o TÍTULO REAL
-        // do anúncio (linha de IntelligenceProduct da descoberta, que carrega
-        // título/canonicalTitle, GTIN, marca e atributos) e pelo caminho com
-        // vetos (`findOrCreateClusterForProduct`: GTIN → similaridade com
-        // vetos de kg/marca/preço), nunca pelo atalho trivial nem pela URL.
         const discovered = await this.prisma.intelligenceProduct.findFirst({
           where: { source: listing.source, recordId: listing.nativeId },
           orderBy: { capturedAt: 'desc' },
         });
-        productClusterId = discovered
-          ? await this.matching.findOrCreateClusterForProduct(discovered)
-          : await this.matching.findOrCreateTrivialCluster({
-              marketplace: listing.source,
-              sourceType: 'marketplace',
-              externalProductId: listing.nativeId,
-              titleOriginal: listing.canonicalUrl,
-              titleNormalized: listing.canonicalUrl,
-              imageUrls: [],
-              collectedAt: observation.observedAt,
-            } as CanonicalProductListing);
-        await this.prisma.trackedListing.update({
-          where: { id: listing.id },
-          data: { productId: productClusterId },
+        const specific = this.asRecord(discovered?.sourceSpecific);
+        await this.fichas.registerListing({
+          marketplace: listing.source,
+          externalProductId: listing.nativeId,
+          title: discovered?.title ?? listing.canonicalUrl,
+          excerpt: typeof specific['page_excerpt'] === 'string' ? (specific['page_excerpt'] as string) : null,
         });
-        matched += 1;
+        productClusterId = await this.fichas.currentCardId({ marketplace: listing.source, externalProductId: listing.nativeId });
+        registered += 1;
       }
       const soldRaw = observation.soldCountLower;
       const data = {
@@ -576,7 +563,7 @@ export class IntelligenceCollectionService {
     if (snapshots > 0) {
       await this.cache?.delPattern('dashboard:trends:products:*');
     }
-    return { analytical_snapshots: snapshots, matched_listings: matched };
+    return { analytical_snapshots: snapshots, registered_listings: registered };
   }
 
   /**
@@ -729,8 +716,15 @@ export class IntelligenceCollectionService {
       );
       const writes = [];
       for (const product of products) {
-        const clusterId = await this.matching.findOrCreateClusterForProduct(product);
         const evidence = this.asRecord(product.sourceSpecific);
+        const listingRef = { marketplace: product.source, externalProductId: product.recordId };
+        const specificForFicha = this.asRecord(product.sourceSpecific);
+        await this.fichas.registerListing({
+          ...listingRef,
+          title: product.title,
+          excerpt: typeof specificForFicha['page_excerpt'] === 'string' ? (specificForFicha['page_excerpt'] as string) : null,
+        });
+        const clusterId = await this.fichas.currentCardId(listingRef);
         const rawFields = this.asRecord(evidence['_raw_record_fields']);
         const imageUrl =
           this.firstString(rawFields['image_url']) ||

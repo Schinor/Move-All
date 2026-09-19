@@ -72,6 +72,18 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
 }
+
+.provisional-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--warning-bg, #f5c26b);
+  color: var(--warning-fg, #1a1a1a);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
 .arrow {
   color: var(--text-3);
   transition: color var(--dur-base) var(--ease), transform var(--dur-base) var(--ease);
@@ -178,3 +190,5 @@
 .pipeline .num {
   color: var(--text);
 }
+
+.listings { font-size: 12px; opacity: 0.8; }

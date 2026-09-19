@@ -4,8 +4,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ImportSourceType, ImportStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
-import { CanonicalProductListing } from '../../shared/types/marketplace.types';
-import { ProductMatchingService } from '../product-matching/product-matching.service';
+import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
 import { parseComex } from './parsers/comex.parser';
 import { parseTradeAtlas } from './parsers/trade-atlas.parser';
@@ -49,7 +48,7 @@ export class ImportsProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly products: ProductsService,
-    private readonly matching: ProductMatchingService,
+    private readonly fichas: FichaService,
     private readonly cache?: RedisCacheService,
   ) {}
 
@@ -276,17 +275,9 @@ export class ImportsProcessor {
     for (const batch of chunk(result.rows, UPSERT_CONCURRENCY)) {
       await Promise.all(
         batch.map(async (listing) => {
-          // Matching unificado (F1.8): o mesmo serviço do restante do backend.
-          const productClusterId = await this.matching.findOrCreateTrivialCluster({
-            marketplace: listing.marketplace,
-            sourceType: 'marketplace',
-            externalProductId: listing.externalProductId,
-            titleOriginal: listing.title,
-            titleNormalized: listing.title,
-            categoryNormalized: listing.category ?? undefined,
-            collectedAt: new Date(),
-            imageUrls: [],
-          } as CanonicalProductListing);
+          const listingRef = { marketplace: listing.marketplace, externalProductId: listing.externalProductId };
+          await this.fichas.registerListing({ ...listingRef, title: listing.title });
+          const productClusterId = await this.fichas.currentCardId(listingRef);
           await this.prisma.productListingSnapshot.create({
             data: {
               marketplace: listing.marketplace,

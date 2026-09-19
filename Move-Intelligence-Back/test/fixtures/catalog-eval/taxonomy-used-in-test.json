@@ -1,0 +1,38 @@
+{
+ "frozen_note": "Lista definida ANTES de coletar ou ver qualquer anúncio do teste cego. Não pode ser alterada depois.",
+ "types": {
+  "treadmill": "full-size electric treadmill with console and side handrails, running speeds",
+  "walking_pad": "compact low-profile walking treadmill, flat deck, walking speeds, under-desk, no console tower",
+  "manual_treadmill": "non-motorized / curved / self-powered treadmill",
+  "spin_bike": "upright indoor cycling / spinning bike with heavy flywheel",
+  "upright_bike": "upright stationary exercise bike or folding X-bike that is not a spinning bike",
+  "recumbent_bike": "recumbent exercise bike with backrest seat",
+  "air_bike": "fan / air resistance bike with moving arms",
+  "elliptical": "elliptical cross trainer",
+  "rowing_machine": "indoor rower",
+  "stair_climber": "stepper, mini stepper or stair climber machine",
+  "vibration_plate": "whole body vibration platform",
+  "adjustable_dumbbell": "dumbbell whose weight can be changed (selector, removable plates, spin-lock)",
+  "fixed_dumbbell": "fixed-weight dumbbell (hex, round, neoprene, vinyl, chrome)",
+  "kettlebell": "kettlebell, fixed or adjustable",
+  "barbell": "barbell bar, EZ bar or fixed barbell",
+  "weight_plate": "loose weight plates / discs",
+  "weight_bench": "flat, adjustable or folding workout bench",
+  "power_rack": "power rack, squat rack, squat stand or cage",
+  "home_gym_station": "multi-station home gym / cable machine / smith machine",
+  "pull_up_bar": "doorway or wall-mounted pull-up / chin-up bar",
+  "resistance_band": "elastic resistance bands, loops or tubes",
+  "jump_rope": "jump rope / skipping rope",
+  "ab_wheel": "ab roller wheel",
+  "yoga_mat": "yoga / exercise / pilates mat",
+  "foam_roller": "foam roller or massage roller stick",
+  "massage_gun": "percussion massage gun",
+  "hand_grip": "hand grip strengthener",
+  "gym_accessory": "small training accessory not listed above (gloves, straps, belts, collars, grips, bottles)"
+ },
+ "flags": {
+  "is_accessory_or_part": "listing sells a part, accessory, spare or cover FOR a machine (e.g. treadmill belt, lubricant, remote, cover, safety key), not the machine itself",
+  "is_kit_or_bundle": "listing sells several different products together",
+  "has_variations": "listing offers several weights, sizes or models to choose from"
+ }
+}

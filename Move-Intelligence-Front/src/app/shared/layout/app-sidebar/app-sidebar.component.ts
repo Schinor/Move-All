@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { AuthService } from '../../../core/auth/auth.service';
+import { CatalogService } from '../../../core/services/catalog.service';
 import { LayoutService } from '../../../core/services/layout.service';
 import { IconComponent, IconName } from '../../ui/icon/icon.component';
 import { BrandMarkComponent } from '../../ui/brand-mark/brand-mark.component';
@@ -33,6 +35,9 @@ interface NavGroup {
 })
 export class AppSidebarComponent {
   readonly layout = inject(LayoutService);
+  readonly auth = inject(AuthService);
+  private readonly catalog = inject(CatalogService);
+  readonly reviewCount = signal<number | null>(null);
 
   readonly groups: NavGroup[] = [
     {
@@ -60,6 +65,21 @@ export class AppSidebarComponent {
       ],
     },
   ];
+
+  readonly visibleGroups = computed<NavGroup[]>(() => {
+    if (this.auth.currentUser()?.role !== 'ADMIN') return this.groups;
+    const count = this.reviewCount();
+    return [...this.groups, {
+      label: 'Administrar',
+      items: [{ path: '/revisao', label: count ? `Revisão (${count})` : 'Revisão', icon: 'bell', synonyms: 'catálogo revisão admin' }],
+    }];
+  });
+
+  constructor() {
+    if (this.auth.currentUser()?.role === 'ADMIN') {
+      this.catalog.reviewCounts().subscribe((counts) => this.reviewCount.set(counts.provisionalListing + counts.suggestedType));
+    }
+  }
 
   closeOnCompact(): void {
     if (window.innerWidth <= 1024) this.layout.closeSidebar();

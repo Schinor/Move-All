@@ -607,6 +607,9 @@ class MarketplaceExtractor:
             "detail_content_chars": len(content),
             "raw_content_preview": content[:4000],
         }
+        from app.etl.extract.marketplace.parsers.base import build_page_excerpt
+
+        source_specific["page_excerpt"] = build_page_excerpt(content, title=str(candidate.get("title") or "") or None)
         # A3.4: a primeira observação da descoberta passa pelo parser da fonte
         # (A2). O preço genérico acima (primeiro match monetário) continua no
         # produto para descoberta/matching, mas o status do parser decide o

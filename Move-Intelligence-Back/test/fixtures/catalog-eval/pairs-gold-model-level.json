@@ -1,0 +1,995 @@
+{
+ "description": "99 pares candidatos a 'mesmo produto' (nível MODELO) com gabarito same/different/unsure. Referência histórica: o catálogo usa agrupamento por CARD (conceito), não por modelo.",
+ "pairs": [
+  {
+   "pair_id": 1,
+   "a_id": 18,
+   "b_id": 104,
+   "a_title": "六角啞鈴男士健身家用鍛煉器材女學生宿舍小啞鈴一對包膠亞玲套裝",
+   "b_title": "Par Halter 2kg Emborrachado Sextavado Colorido Rmg8 Fit",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.797,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 2,
+   "a_id": 33,
+   "b_id": 74,
+   "a_title": "Stationary Exercise Bike for home, Magnetic Resistance, Silence & Smart App",
+   "b_title": "汗馬健身車家用款室內磁控智能運動健身自行車燃脂靜音健身器材",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.804,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 3,
+   "a_id": 42,
+   "b_id": 48,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Halter Par 3 Kg Sextavado Preto Ferro Peso Musculação Treino",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.884,
+   "gold": "different"
+  },
+  {
+   "pair_id": 4,
+   "a_id": 11,
+   "b_id": 137,
+   "a_title": "Halteres Kettlebell 5 Em 1 Design Octogonal Anti-Rolamento Barbell Regulável Até 20kg Joyfox Fitness Cor Laranja",
+   "b_title": "Amazon Basics Adjustable Dumbbell, 25 lb",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.793,
+   "gold": "different"
+  },
+  {
+   "pair_id": 5,
+   "a_id": 53,
+   "b_id": 61,
+   "a_title": "運動腰包跑步手機包袋男女貼身戶外裝備防水隱形超薄迷你腰帶小包",
+   "b_title": "手機收納包運動臂包戶外跑步手腕包輕薄防水晨跑健身裝備男女通用",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.787,
+   "gold": "different"
+  },
+  {
+   "pair_id": 6,
+   "a_id": 30,
+   "b_id": 86,
+   "a_title": "Halter 4kg Emborrachado Sextavado Preto",
+   "b_title": "浸塑實心鑄鐵啞鈴女士健身居家用器材小體積啞鈴鍛煉手臂瑜伽用",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.602,
+   "gold": "different"
+  },
+  {
+   "pair_id": 7,
+   "a_id": 81,
+   "b_id": 100,
+   "a_title": "CAP Rubber Coated Dumbbell Weight Set with Vertical Rack | 100 lb, 150 lb, and 210 lb Options",
+   "b_title": "Adjustable Dumbbell set,20/30/45/70/90lbs Free Weight Set",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.791,
+   "gold": "different"
+  },
+  {
+   "pair_id": 8,
+   "a_id": 15,
+   "b_id": 76,
+   "a_title": "CAP Barbell Neoprene Dumbbell Weights Pairs & Sets | Black",
+   "b_title": "Par Halter Bola Emborrachado De 9kg Musculação Treino",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.712,
+   "gold": "different"
+  },
+  {
+   "pair_id": 9,
+   "a_id": 93,
+   "b_id": 115,
+   "a_title": "啞鈴女士健身家用2kg一對女生器材瘦肚子瑜伽壺鈴兒童男士小啞鈴",
+   "b_title": "Par Halter 2kg Emborrachado Bola Preto",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.728,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 10,
+   "a_id": 116,
+   "b_id": 124,
+   "a_title": "OPPSDECOR Adjustable Dumbbell Set of 2, 10-in-1 Free Weight Set 25/50/55 lb",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.779,
+   "gold": "different"
+  },
+  {
+   "pair_id": 11,
+   "a_id": 69,
+   "b_id": 117,
+   "a_title": "Esteira Elétrica Plana Residencial Preta Cor Preto Bluetooth",
+   "b_title": "LONTEK 18% Incline Treadmills for Home with Handle Bar",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.61,
+   "gold": "different"
+  },
+  {
+   "pair_id": 12,
+   "a_id": 58,
+   "b_id": 124,
+   "a_title": "Halter Bola 6kg Emborrachado PVC RMG8 FIT Preto para Treinos",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.722,
+   "gold": "different"
+  },
+  {
+   "pair_id": 13,
+   "a_id": 59,
+   "b_id": 137,
+   "a_title": "Amazon Basics Vinyl Coated Dumbbell Hand Weights",
+   "b_title": "Amazon Basics Adjustable Dumbbell, 25 lb",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.785,
+   "gold": "different"
+  },
+  {
+   "pair_id": 14,
+   "a_id": 29,
+   "b_id": 64,
+   "a_title": "MERACH Recumbent Exercise Bikes for Home High-end",
+   "b_title": "Bicicleta Ergométrica Horizontal Magnética Winnek Monitor Digital 8 Niveis de ajustes Sensor de pulsaçao Pedal com Cinta Ajustavel",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.579,
+   "gold": "different"
+  },
+  {
+   "pair_id": 15,
+   "a_id": 105,
+   "b_id": 129,
+   "a_title": "Esteira Elétrica JoyRun P2Pro Dobrável com Plataforma Vibratória e Inclinação, para Academia em Casa",
+   "b_title": "Cardirun Foldable Treadmills for Home with 10% Incline, 400 LBS Capacity",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.764,
+   "gold": "different"
+  },
+  {
+   "pair_id": 16,
+   "a_id": 33,
+   "b_id": 78,
+   "a_title": "Stationary Exercise Bike for home, Magnetic Resistance, Silence & Smart App",
+   "b_title": "健身車家用健身器材健身房專用室內運動減肥靜音自行車智能動力",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.753,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 17,
+   "a_id": 42,
+   "b_id": 63,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Par de Halteres 2 kg GL Imports Emborrachado Azul Musculação",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.784,
+   "gold": "different"
+  },
+  {
+   "pair_id": 18,
+   "a_id": 27,
+   "b_id": 122,
+   "a_title": "Bicicleta Ergométrica Dobrável Silenciosa - X-bike",
+   "b_title": "Foldable Exercise Bike for Home - 10dB Quiet Stationary Bike with Ergonomic Backrest, 300LB Capacity, Arm Resistance Bands, and Heart Rate Monitor for Indoor Small Apartment Cardio",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.748,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 19,
+   "a_id": 1,
+   "b_id": 42,
+   "a_title": "Halter 3kg Emborrachado Sextavado Azul",
+   "b_title": "【芭芭農場】1kg啞鈴一對",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.767,
+   "gold": "different"
+  },
+  {
+   "pair_id": 20,
+   "a_id": 16,
+   "b_id": 129,
+   "a_title": "Esteira Ergométrica Elétrica Dobrável com Controle Remoto Treino Cardio Caminhada Casa Academia 150kg",
+   "b_title": "Cardirun Foldable Treadmills for Home with 10% Incline, 400 LBS Capacity",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.756,
+   "gold": "different"
+  },
+  {
+   "pair_id": 21,
+   "a_id": 39,
+   "b_id": 59,
+   "a_title": "Par de Halteres Hexagonal RMG8 Fit 2kg PVC Preto Emborrachado",
+   "b_title": "Amazon Basics Vinyl Coated Dumbbell Hand Weights",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.733,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 22,
+   "a_id": 92,
+   "b_id": 109,
+   "a_title": "汗馬健身車家用款磁控靜音健身車健身房器材減肥鍛煉室內自行車",
+   "b_title": "pooboo Folding Magnetic X‑Bike, Upright Exercise Bike for Home Gym",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.746,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 23,
+   "a_id": 27,
+   "b_id": 109,
+   "a_title": "Bicicleta Ergométrica Dobrável Silenciosa - X-bike",
+   "b_title": "pooboo Folding Magnetic X‑Bike, Upright Exercise Bike for Home Gym",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.816,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 24,
+   "a_id": 30,
+   "b_id": 124,
+   "a_title": "Halter 4kg Emborrachado Sextavado Preto",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.775,
+   "gold": "different"
+  },
+  {
+   "pair_id": 25,
+   "a_id": 106,
+   "b_id": 122,
+   "a_title": "麥瑞克健身車家用靜音健身自行車室內磁控騎行鍛煉器材絕影S3",
+   "b_title": "Foldable Exercise Bike for Home - 10dB Quiet Stationary Bike with Ergonomic Backrest, 300LB Capacity, Arm Resistance Bands, and Heart Rate Monitor for Indoor Small Apartment Cardio",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.621,
+   "gold": "different"
+  },
+  {
+   "pair_id": 26,
+   "a_id": 43,
+   "b_id": 85,
+   "a_title": "啞鈴男士健身家用可調節重量20kg一對男士宿舍鍛煉槓壺鈴套裝組合",
+   "b_title": "Adjustable Dumbbell, 20/30/45/70/90lbs Dumbbells Set, 4-in-1 Free Weights for Women/Men Workout Equipment Used as Barbell/Kettlebells/Push up Stand for Home Gym",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.774,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 27,
+   "a_id": 43,
+   "b_id": 88,
+   "a_title": "啞鈴男士健身家用可調節重量20kg一對男士宿舍鍛煉槓壺鈴套裝組合",
+   "b_title": "FEIERDUN DS2 Adjustable Dumbbells, 20/30/40/45/70/90lbs Free Weight Set with Connector, 5 in1 Dumbbells Set Used as Barbell, Kettlebells, Push up Stand, Weight Plate, Fitness Exercises for Home Gym Suitable Men/Women",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.738,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 28,
+   "a_id": 38,
+   "b_id": 74,
+   "a_title": "PLENY Folding Exercise Bike, 5 IN 1 Indoor Stationary Bikes for Home",
+   "b_title": "汗馬健身車家用款室內磁控智能運動健身自行車燃脂靜音健身器材",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.716,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 29,
+   "a_id": 33,
+   "b_id": 103,
+   "a_title": "Stationary Exercise Bike for home, Magnetic Resistance, Silence & Smart App",
+   "b_title": "健身車磁控超靜音健身自行車運動智能家用家庭室內減肥健身器材",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.796,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 30,
+   "a_id": 35,
+   "b_id": 140,
+   "a_title": "Keep跑步腰包運動專用裝備放手機斜挎包袋戶外騎行男女士款神器",
+   "b_title": "防水工作跑步時尚運動手機腰包女2026新款多功能男士幹活工地斜挎",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.779,
+   "gold": "different"
+  },
+  {
+   "pair_id": 31,
+   "a_id": 73,
+   "b_id": 106,
+   "a_title": "MERACH Exercise Bike, Magnetic Friction Stationary Bike for Home with APP",
+   "b_title": "麥瑞克健身車家用靜音健身自行車室內磁控騎行鍛煉器材絕影S3",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.744,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 32,
+   "a_id": 95,
+   "b_id": 135,
+   "a_title": "朗威啞鈴男士健身家用5KG一對練臂肌3公斤槓鈴女士青少年力量訓練",
+   "b_title": "Par Halter Barra Maciça 40cm Com Rosca Rápida Peso Academia Para Treino Musculação",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.71,
+   "gold": "different"
+  },
+  {
+   "pair_id": 33,
+   "a_id": 42,
+   "b_id": 52,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Par Halter 2kg Emborrachado Sextavado Colorido Azul",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.797,
+   "gold": "different"
+  },
+  {
+   "pair_id": 34,
+   "a_id": 42,
+   "b_id": 133,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Par Halter Bola Emborrachado 5kg/cada Musculação",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.806,
+   "gold": "different"
+  },
+  {
+   "pair_id": 35,
+   "a_id": 42,
+   "b_id": 50,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Halter 4kg Emborrachado Bola Preto",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.784,
+   "gold": "different"
+  },
+  {
+   "pair_id": 36,
+   "a_id": 65,
+   "b_id": 119,
+   "a_title": "Esteira elétrica nakkan nk98 cor preto",
+   "b_title": "Esteira Ergométrica Elétrica Dobrável Residencial Cardio",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.575,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 37,
+   "a_id": 24,
+   "b_id": 39,
+   "a_title": "Fitvids Rubber Coated Hex Dumbbell Set with Storage Rack, 100/150/200/550 LB Hand Weight Set with Anti-Slip Grip for Home Gym",
+   "b_title": "Par de Halteres Hexagonal RMG8 Fit 2kg PVC Preto Emborrachado",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.777,
+   "gold": "different"
+  },
+  {
+   "pair_id": 38,
+   "a_id": 81,
+   "b_id": 124,
+   "a_title": "CAP Rubber Coated Dumbbell Weight Set with Vertical Rack | 100 lb, 150 lb, and 210 lb Options",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.839,
+   "gold": "different"
+  },
+  {
+   "pair_id": 39,
+   "a_id": 33,
+   "b_id": 106,
+   "a_title": "Stationary Exercise Bike for home, Magnetic Resistance, Silence & Smart App",
+   "b_title": "麥瑞克健身車家用靜音健身自行車室內磁控騎行鍛煉器材絕影S3",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.745,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 40,
+   "a_id": 42,
+   "b_id": 137,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Amazon Basics Adjustable Dumbbell, 25 lb",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.776,
+   "gold": "different"
+  },
+  {
+   "pair_id": 41,
+   "a_id": 43,
+   "b_id": 101,
+   "a_title": "啞鈴男士健身家用可調節重量20kg一對男士宿舍鍛煉槓壺鈴套裝組合",
+   "b_title": "Adjustable Dumbbell Set Storage Case Included All Gender Home Gym Weights",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.805,
+   "gold": "different"
+  },
+  {
+   "pair_id": 42,
+   "a_id": 77,
+   "b_id": 137,
+   "a_title": "Amazon Basics Neoprene Dumbbell Hand Weights for Exercise and Muscle Toning",
+   "b_title": "Amazon Basics Adjustable Dumbbell, 25 lb",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.796,
+   "gold": "different"
+  },
+  {
+   "pair_id": 43,
+   "a_id": 43,
+   "b_id": 100,
+   "a_title": "啞鈴男士健身家用可調節重量20kg一對男士宿舍鍛煉槓壺鈴套裝組合",
+   "b_title": "Adjustable Dumbbell set,20/30/45/70/90lbs Free Weight Set",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.778,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 44,
+   "a_id": 48,
+   "b_id": 54,
+   "a_title": "Halter Par 3 Kg Sextavado Preto Ferro Peso Musculação Treino",
+   "b_title": "CAP 550lb Hex Dumbbell Set with 2-Tier Storage Rack, Chrome Grip",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.771,
+   "gold": "different"
+  },
+  {
+   "pair_id": 45,
+   "a_id": 53,
+   "b_id": 111,
+   "a_title": "運動腰包跑步手機包袋男女貼身戶外裝備防水隱形超薄迷你腰帶小包",
+   "b_title": "駱駝跑步運動手機臂包手機袋手臂收納袋手腕包臂套男女戶外手機包",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.781,
+   "gold": "different"
+  },
+  {
+   "pair_id": 46,
+   "a_id": 35,
+   "b_id": 53,
+   "a_title": "Keep跑步腰包運動專用裝備放手機斜挎包袋戶外騎行男女士款神器",
+   "b_title": "運動腰包跑步手機包袋男女貼身戶外裝備防水隱形超薄迷你腰帶小包",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.854,
+   "gold": "different"
+  },
+  {
+   "pair_id": 47,
+   "a_id": 24,
+   "b_id": 81,
+   "a_title": "Fitvids Rubber Coated Hex Dumbbell Set with Storage Rack, 100/150/200/550 LB Hand Weight Set with Anti-Slip Grip for Home Gym",
+   "b_title": "CAP Rubber Coated Dumbbell Weight Set with Vertical Rack | 100 lb, 150 lb, and 210 lb Options",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.822,
+   "gold": "different"
+  },
+  {
+   "pair_id": 48,
+   "a_id": 10,
+   "b_id": 18,
+   "a_title": "Signature Fitness Rubber Coated Hex Dumbbells Hand Weights for Exercises and Fitness Home Gym, 5-50 lbs, Pairs",
+   "b_title": "六角啞鈴男士健身家用鍛煉器材女學生宿舍小啞鈴一對包膠亞玲套裝",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.791,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 49,
+   "a_id": 28,
+   "b_id": 57,
+   "a_title": "Bicicleta Ergométrica Fitness Para Cardio E Musculação Com Base Cor Preto E Azul 6kg Inercia Marca Sevenfit",
+   "b_title": "Bicicleta Ergométrica Bike Spinning 6kg Sensação inércia Fitness Preto e Vermelho Sevenfit Para Cardio E Musculação",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.872,
+   "gold": "same"
+  },
+  {
+   "pair_id": 50,
+   "a_id": 32,
+   "b_id": 42,
+   "a_title": "Halteres 1 Kg Par Pesos",
+   "b_title": "【芭芭農場】1kg啞鈴一對",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.923,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 51,
+   "a_id": 79,
+   "b_id": 137,
+   "a_title": "Halteres 1kg Ferro Preto Evolution Sports Par com Cabo Ergonômico",
+   "b_title": "Amazon Basics Adjustable Dumbbell, 25 lb",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.773,
+   "gold": "different"
+  },
+  {
+   "pair_id": 52,
+   "a_id": 7,
+   "b_id": 85,
+   "a_title": "Kit Halteres 6 Em 1 Peso Musculação Até 40kg Ajustável Halter, Kettlebell, Anilha Cor Preto-Vermelho",
+   "b_title": "Adjustable Dumbbell, 20/30/45/70/90lbs Dumbbells Set, 4-in-1 Free Weights for Women/Men Workout Equipment Used as Barbell/Kettlebells/Push up Stand for Home Gym",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.726,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 53,
+   "a_id": 43,
+   "b_id": 116,
+   "a_title": "啞鈴男士健身家用可調節重量20kg一對男士宿舍鍛煉槓壺鈴套裝組合",
+   "b_title": "OPPSDECOR Adjustable Dumbbell Set of 2, 10-in-1 Free Weight Set 25/50/55 lb",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.776,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 54,
+   "a_id": 26,
+   "b_id": 39,
+   "a_title": "CAP Barbell 150 LB Coated Hex Dumbbell Weight Set with Vertical Rack | Multiple Options",
+   "b_title": "Par de Halteres Hexagonal RMG8 Fit 2kg PVC Preto Emborrachado",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.809,
+   "gold": "different"
+  },
+  {
+   "pair_id": 55,
+   "a_id": 40,
+   "b_id": 131,
+   "a_title": "實心啞鈴女士健身家用女瘦初訓練六角鍛煉力量小巧源頭可調節重量",
+   "b_title": "Lifepro Adjustable Dumbbells & Weights for Home Gym, Quick-Adjust",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.722,
+   "gold": "different"
+  },
+  {
+   "pair_id": 56,
+   "a_id": 32,
+   "b_id": 125,
+   "a_title": "Halteres 1 Kg Par Pesos",
+   "b_title": "Keep小啞鈴女士健身家用練臂肌男士青少年力量訓練器材1kg2kg一對",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.817,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 57,
+   "a_id": 24,
+   "b_id": 80,
+   "a_title": "Fitvids Rubber Coated Hex Dumbbell Set with Storage Rack, 100/150/200/550 LB Hand Weight Set with Anti-Slip Grip for Home Gym",
+   "b_title": "Halter 3kg Emborrachado Sextavado Vermelho",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.749,
+   "gold": "different"
+  },
+  {
+   "pair_id": 58,
+   "a_id": 80,
+   "b_id": 124,
+   "a_title": "Halter 3kg Emborrachado Sextavado Vermelho",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.749,
+   "gold": "different"
+  },
+  {
+   "pair_id": 59,
+   "a_id": 27,
+   "b_id": 121,
+   "a_title": "Bicicleta Ergométrica Dobrável Silenciosa - X-bike",
+   "b_title": "卓熠健身車家用款small小型室內家庭靜音腳蹬減肥運動健身器材",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.737,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 60,
+   "a_id": 33,
+   "b_id": 34,
+   "a_title": "Stationary Exercise Bike for home, Magnetic Resistance, Silence & Smart App",
+   "b_title": "貝德拉健身車磁控靜音家用款小型自行車健身房室內運動減肥器材",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.793,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 61,
+   "a_id": 39,
+   "b_id": 42,
+   "a_title": "Par de Halteres Hexagonal RMG8 Fit 2kg PVC Preto Emborrachado",
+   "b_title": "【芭芭農場】1kg啞鈴一對",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.846,
+   "gold": "different"
+  },
+  {
+   "pair_id": 62,
+   "a_id": 29,
+   "b_id": 114,
+   "a_title": "MERACH Recumbent Exercise Bikes for Home High-end",
+   "b_title": "Bicicleta Ergométrica Magnética Horizontal Soft Ride 5000 Preto",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.647,
+   "gold": "different"
+  },
+  {
+   "pair_id": 63,
+   "a_id": 128,
+   "b_id": 133,
+   "a_title": "小啞鈴女士兒童槓鈴實心鑄鐵健身跳操瑜伽練臂肌家用鍛煉器材浸塑",
+   "b_title": "Par Halter Bola Emborrachado 5kg/cada Musculação",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.608,
+   "gold": "different"
+  },
+  {
+   "pair_id": 64,
+   "a_id": 21,
+   "b_id": 42,
+   "a_title": "Par de Halteres Emborrachados de 2 Kg para Treino Cor Azul",
+   "b_title": "【芭芭農場】1kg啞鈴一對",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.862,
+   "gold": "different"
+  },
+  {
+   "pair_id": 65,
+   "a_id": 5,
+   "b_id": 53,
+   "a_title": "跑步手機臂套專業男女臂套神器斜挎包手臂袋手腕包散步運動手機包",
+   "b_title": "運動腰包跑步手機包袋男女貼身戶外裝備防水隱形超薄迷你腰帶小包",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.778,
+   "gold": "different"
+  },
+  {
+   "pair_id": 66,
+   "a_id": 52,
+   "b_id": 112,
+   "a_title": "Par Halter 2kg Emborrachado Sextavado Colorido Azul",
+   "b_title": "361啞鈴青少年男士健身家用槓鈴女士壺鈴練臂肌組合5/10/20kg一對",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.564,
+   "gold": "different"
+  },
+  {
+   "pair_id": 67,
+   "a_id": 55,
+   "b_id": 129,
+   "a_title": "Esteira Elétrica Ergométrica Dobravel e Inclinação com Controle Remoto para Treinos Fitness, Corridas e Caminhadas Residencial até 100kg - Bivolt 110/220v - APFER",
+   "b_title": "Cardirun Foldable Treadmills for Home with 10% Incline, 400 LBS Capacity",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.771,
+   "gold": "different"
+  },
+  {
+   "pair_id": 68,
+   "a_id": 76,
+   "b_id": 77,
+   "a_title": "Par Halter Bola Emborrachado De 9kg Musculação Treino",
+   "b_title": "Amazon Basics Neoprene Dumbbell Hand Weights for Exercise and Muscle Toning",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.778,
+   "gold": "different"
+  },
+  {
+   "pair_id": 69,
+   "a_id": 20,
+   "b_id": 86,
+   "a_title": "Par De Halteres Emborrachado Exercício Academia Em Casa Peso 2kg Rosa",
+   "b_title": "浸塑實心鑄鐵啞鈴女士健身居家用器材小體積啞鈴鍛煉手臂瑜伽用",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.695,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 70,
+   "a_id": 32,
+   "b_id": 93,
+   "a_title": "Halteres 1 Kg Par Pesos",
+   "b_title": "啞鈴女士健身家用2kg一對女生器材瘦肚子瑜伽壺鈴兒童男士小啞鈴",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.802,
+   "gold": "different"
+  },
+  {
+   "pair_id": 71,
+   "a_id": 32,
+   "b_id": 123,
+   "a_title": "Halteres 1 Kg Par Pesos",
+   "b_title": "啞鈴女士健身家用2kg3kg一對女生力量鍛煉塑形男女青少年小巧啞鈴",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.802,
+   "gold": "different"
+  },
+  {
+   "pair_id": 72,
+   "a_id": 100,
+   "b_id": 124,
+   "a_title": "Adjustable Dumbbell set,20/30/45/70/90lbs Free Weight Set",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.788,
+   "gold": "different"
+  },
+  {
+   "pair_id": 73,
+   "a_id": 115,
+   "b_id": 128,
+   "a_title": "Par Halter 2kg Emborrachado Bola Preto",
+   "b_title": "小啞鈴女士兒童槓鈴實心鑄鐵健身跳操瑜伽練臂肌家用鍛煉器材浸塑",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.592,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 74,
+   "a_id": 109,
+   "b_id": 130,
+   "a_title": "pooboo Folding Magnetic X‑Bike, Upright Exercise Bike for Home Gym",
+   "b_title": "健身車家用健身器材腳踏有氧鍛煉自行車運動室內房專用減肥騎車",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.72,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 75,
+   "a_id": 49,
+   "b_id": 140,
+   "a_title": "迪卡儂運動斜揹包男女大容量手機腰包健身跑步多功能休閒胸包CSH4",
+   "b_title": "防水工作跑步時尚運動手機腰包女2026新款多功能男士幹活工地斜挎",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.773,
+   "gold": "different"
+  },
+  {
+   "pair_id": 76,
+   "a_id": 94,
+   "b_id": 127,
+   "a_title": "Treadmills for Home Walking Pad Machine- Foldable Compact Treadmill with Handle Bar Portable Small Caminadora for Running Jogging Gym Electrica Folding Tred Mills Motor & LED Dispay Pcrignbm",
+   "b_title": "Esteira Ergométrica Elétrica Dobrável Bluetooth Tela Led",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.773,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 77,
+   "a_id": 43,
+   "b_id": 132,
+   "a_title": "啞鈴男士健身家用可調節重量20kg一對男士宿舍鍛煉槓壺鈴套裝組合",
+   "b_title": "Adjustable Dumbbell Set Pair 25 lb or 50lb,10-in-1 Free Weight",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.771,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 78,
+   "a_id": 70,
+   "b_id": 117,
+   "a_title": "MCRG Walking Pad with Incline, Portable Treadmill with Handle Bar for Home",
+   "b_title": "LONTEK 18% Incline Treadmills for Home with Handle Bar",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.812,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 79,
+   "a_id": 18,
+   "b_id": 20,
+   "a_title": "六角啞鈴男士健身家用鍛煉器材女學生宿舍小啞鈴一對包膠亞玲套裝",
+   "b_title": "Par De Halteres Emborrachado Exercício Academia Em Casa Peso 2kg Rosa",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.751,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 80,
+   "a_id": 26,
+   "b_id": 81,
+   "a_title": "CAP Barbell 150 LB Coated Hex Dumbbell Weight Set with Vertical Rack | Multiple Options",
+   "b_title": "CAP Rubber Coated Dumbbell Weight Set with Vertical Rack | 100 lb, 150 lb, and 210 lb Options",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.835,
+   "gold": "same"
+  },
+  {
+   "pair_id": 81,
+   "a_id": 18,
+   "b_id": 68,
+   "a_title": "六角啞鈴男士健身家用鍛煉器材女學生宿舍小啞鈴一對包膠亞玲套裝",
+   "b_title": "Halter Sextavado 5kg Emborrachado Preto RMG8 Fit Treino",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.745,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 82,
+   "a_id": 32,
+   "b_id": 113,
+   "a_title": "Halteres 1 Kg Par Pesos",
+   "b_title": "啞鈴女士小重量健身家用2kg一對啞鈴青少年兒童健身訓練小啞鈴",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.822,
+   "gold": "different"
+  },
+  {
+   "pair_id": 83,
+   "a_id": 39,
+   "b_id": 124,
+   "a_title": "Par de Halteres Hexagonal RMG8 Fit 2kg PVC Preto Emborrachado",
+   "b_title": "Rubber Hex Dumbbell Set with Rack, 150/200/230/540 lb Options",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.812,
+   "gold": "different"
+  },
+  {
+   "pair_id": 84,
+   "a_id": 32,
+   "b_id": 95,
+   "a_title": "Halteres 1 Kg Par Pesos",
+   "b_title": "朗威啞鈴男士健身家用5KG一對練臂肌3公斤槓鈴女士青少年力量訓練",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.847,
+   "gold": "different"
+  },
+  {
+   "pair_id": 85,
+   "a_id": 42,
+   "b_id": 79,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Halteres 1kg Ferro Preto Evolution Sports Par com Cabo Ergonômico",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.79,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 86,
+   "a_id": 19,
+   "b_id": 104,
+   "a_title": "Par Halteres Flutuantes De Espuma Para Hidroginástica",
+   "b_title": "Par Halter 2kg Emborrachado Sextavado Colorido Rmg8 Fit",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.689,
+   "gold": "different"
+  },
+  {
+   "pair_id": 87,
+   "a_id": 12,
+   "b_id": 140,
+   "a_title": "裏海狼跑步腰包男女士防汗水運動手機腰包馬拉鬆健身腰帶手機袋",
+   "b_title": "防水工作跑步時尚運動手機腰包女2026新款多功能男士幹活工地斜挎",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.775,
+   "gold": "different"
+  },
+  {
+   "pair_id": 88,
+   "a_id": 11,
+   "b_id": 131,
+   "a_title": "Halteres Kettlebell 5 Em 1 Design Octogonal Anti-Rolamento Barbell Regulável Até 20kg Joyfox Fitness Cor Laranja",
+   "b_title": "Lifepro Adjustable Dumbbells & Weights for Home Gym, Quick-Adjust",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.763,
+   "gold": "different"
+  },
+  {
+   "pair_id": 89,
+   "a_id": 33,
+   "b_id": 109,
+   "a_title": "Stationary Exercise Bike for home, Magnetic Resistance, Silence & Smart App",
+   "b_title": "pooboo Folding Magnetic X‑Bike, Upright Exercise Bike for Home Gym",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.699,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 90,
+   "a_id": 55,
+   "b_id": 65,
+   "a_title": "Esteira Elétrica Ergométrica Dobravel e Inclinação com Controle Remoto para Treinos Fitness, Corridas e Caminhadas Residencial até 100kg - Bivolt 110/220v - APFER",
+   "b_title": "Esteira elétrica nakkan nk98 cor preto",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.582,
+   "gold": "unsure"
+  },
+  {
+   "pair_id": 91,
+   "a_id": 39,
+   "b_id": 62,
+   "a_title": "Par de Halteres Hexagonal RMG8 Fit 2kg PVC Preto Emborrachado",
+   "b_title": "Yes4All Neoprene Dumbbells, Pairs and Sets with Rack for Home Workouts",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.79,
+   "gold": "different"
+  },
+  {
+   "pair_id": 92,
+   "a_id": 42,
+   "b_id": 115,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Par Halter 2kg Emborrachado Bola Preto",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.835,
+   "gold": "different"
+  },
+  {
+   "pair_id": 93,
+   "a_id": 15,
+   "b_id": 54,
+   "a_title": "CAP Barbell Neoprene Dumbbell Weights Pairs & Sets | Black",
+   "b_title": "CAP 550lb Hex Dumbbell Set with 2-Tier Storage Rack, Chrome Grip",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.693,
+   "gold": "different"
+  },
+  {
+   "pair_id": 94,
+   "a_id": 75,
+   "b_id": 76,
+   "a_title": "HulkFit Rubber Coated Hex Dumbbells, Anti-Roll Hand Weights Set of 2, Non-Slip Ergonomic Handle Low Odor for Home Gym",
+   "b_title": "Par Halter Bola Emborrachado De 9kg Musculação Treino",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.801,
+   "gold": "different"
+  },
+  {
+   "pair_id": 95,
+   "a_id": 6,
+   "b_id": 134,
+   "a_title": "Treadmill with Speaker, 6-in-1 7.5MPH Foldable Treadmill for Home with App Compatible, Walking Pad with 10% Incline, LED Display, 3.0HP Brushless Drive, 350 LB Weight Capacity, 12 HIIT Programs",
+   "b_title": "Esteira Elétrica Residencial / Caminhador – Esteira Compacta e Dobrável com Barra de Apoio, 6%,Max 12km/h; Portátil, para Caminhada, Corrida e Exercícios; com Display LED",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.732,
+   "gold": "different"
+  },
+  {
+   "pair_id": 96,
+   "a_id": 66,
+   "b_id": 102,
+   "a_title": "OLIXIS Exercise Bike with APP Control, Brake Pad Stationary Bikes with Quiet Magnetic Resistance, Indoor Cycling Spin Workout Bike with 300.0 lbs Weight Capacity,Orange/Red/Blue",
+   "b_title": "Bicicleta Ergométrica Spinning Sevenfit com Volante de 6kg e Porta Garrafa",
+   "bucket": "same_type_mid_similarity",
+   "similarity": 0.632,
+   "gold": "different"
+  },
+  {
+   "pair_id": 97,
+   "a_id": 42,
+   "b_id": 135,
+   "a_title": "【芭芭農場】1kg啞鈴一對",
+   "b_title": "Par Halter Barra Maciça 40cm Com Rosca Rápida Peso Academia Para Treino Musculação",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.729,
+   "gold": "different"
+  },
+  {
+   "pair_id": 98,
+   "a_id": 12,
+   "b_id": 53,
+   "a_title": "裏海狼跑步腰包男女士防汗水運動手機腰包馬拉鬆健身腰帶手機袋",
+   "b_title": "運動腰包跑步手機包袋男女貼身戶外裝備防水隱形超薄迷你腰帶小包",
+   "bucket": "diff_type_high_similarity",
+   "similarity": 0.841,
+   "gold": "different"
+  },
+  {
+   "pair_id": 99,
+   "a_id": 116,
+   "b_id": 118,
+   "a_title": "OPPSDECOR Adjustable Dumbbell Set of 2, 10-in-1 Free Weight Set 25/50/55 lb",
+   "b_title": "Kit Halteres Musculação Kettlebell 6 Em 1 Peso 40kg Odin Fit",
+   "bucket": "nearest_cross_source",
+   "similarity": 0.73,
+   "gold": "different"
+  }
+ ]
+}

@@ -24,6 +24,62 @@ export interface Block<T> {
 /** Estágio na curva de adoção. */
 export type TrendStage = 'emerging' | 'rising' | 'peaking' | 'mainstream';
 
+export type CardStatus = 'legacy' | 'provisional' | 'confirmed' | 'merged';
+
+export interface CardComparison {
+  listingCount: number;
+  storeCount: number;
+  brandCount: number;
+  priceMedianBr: number | null;
+  priceMinBr: number | null;
+  priceMaxBr: number | null;
+  ranges: Array<{ attr: string; labelPt: string; unit: string | null; min: number; max: number }>;
+  counts: Array<{ attr: string; labelPt: string; total: number; values: Array<{ value: string; count: number }> }>;
+  techWarning: string | null;
+}
+
+export interface CardListing {
+  marketplace: string;
+  externalProductId: string;
+  title: string;
+  url: string | null;
+  price: number | null;
+  currency: string | null;
+  rating: number | null;
+  status: 'confirmed' | 'auto' | 'provisional';
+  variation: string | null;
+  brand: string | null;
+}
+
+export interface ReviewCounts { provisionalListing: number; suggestedType: number }
+
+export interface ReviewListingItem {
+  id: string;
+  kind: 'provisional_listing';
+  reason: string;
+  marketplace: string;
+  externalProductId: string;
+  title: string;
+  url: string | null;
+  price: number | null;
+  currency: string | null;
+  suggestedCard: { id: string; name: string; category: string | null } | null;
+  ficha: { typeKey: string | null; cardKeyValues: Record<string, string>; missingKeyAttrs: string[]; comparisonValues: Record<string, unknown>; brand: string | null } | null;
+}
+
+export interface ReviewTypeItem {
+  id: string;
+  kind: 'suggested_type';
+  reason: string;
+  suggestedTypeKey: string;
+  aliases: string[];
+  listingCount: number;
+  samples: Array<{ title: string; marketplace: string }>;
+  similarTypes: Array<{ key: string; namePt: string }>;
+}
+
+export interface CatalogFamily { key: string; namePt: string }
+
 export interface TrendProduct {
   productClusterId: string;
   canonicalName: string;
@@ -73,6 +129,17 @@ export interface TrendProduct {
   detectedOn?: string[];
   topSupplier?: { name: string; source: string; verified: boolean; years: number | null } | null;
   reviewSummary?: { by_band: Record<string, { summary: string; top_reasons: unknown; sample_size: number }>; distribution: Record<string, number> | null } | null;
+  /** Catálogo (subprojeto A): o cluster é o card. */
+  cardStatus?: CardStatus | null;
+  familyName?: string | null;
+  typeName?: string | null;
+  cardChips?: string[];
+  listingCount?: number | null;
+  storeCount?: number | null;
+  brandCount?: number | null;
+  priceMedianBr?: number | null;
+  priceMinBr?: number | null;
+  priceMaxBr?: number | null;
 }
 
 /** Resumo do dashboard executivo (KPIs de topo + ticker). */
@@ -95,6 +162,8 @@ export interface DashboardSummary {
 export interface TrendProductDetail extends TrendProduct {
   imageUrls: string[];
   signals: Record<string, Indicator>;
+  comparison?: CardComparison | null;
+  mergedIntoId?: string;
 }
 
 export interface SeriesPoint {

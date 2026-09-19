@@ -26,7 +26,7 @@
   </div>
 
   <nav class="nav" aria-label="Módulos">
-    @for (group of groups; track group.label) {
+    @for (group of visibleGroups(); track group.label) {
       <section class="nav-group" [attr.aria-labelledby]="'nav-' + group.label">
         <h2 class="section-label" [id]="'nav-' + group.label">{{ group.label }}</h2>
         <ul>

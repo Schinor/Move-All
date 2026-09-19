@@ -28,6 +28,11 @@ import {
 } from '../../shared/contract/supplier';
 import { DEFAULT_BUSINESS_RULES } from '../../shared/business-rules/business-rules.defaults';
 import { ACTION_LABEL } from '../scoring/decision-quadrant';
+import { buildCardComparison } from '../catalog/card-comparison';
+import { COUNTED_ITEM_STATUSES } from '../catalog/catalog.constants';
+import { TaxonomyService } from '../catalog/taxonomy.service';
+import { CardKeyAttr } from '../catalog/taxonomy.types';
+import { CardRowInput, cardListFields, provisionalScoreOverride } from './card-fields';
 
 function actionLabel(action: string): string {
   return (ACTION_LABEL as Record<string, string>)[action] ?? action;
@@ -170,6 +175,7 @@ type ClusterRollup = {
   /** Crescimento Δlog do TikTok (contagem bruta); null sem 2+ semanas. */
   tiktokGrowth: number | null;
   sellers: string[];
+  card: CardRowInput;
 };
 
 type TrendListSort =
@@ -229,6 +235,17 @@ type ClusterRollupRow = {
   demand_score: unknown;
   tiktok_growth: unknown;
   sellers: string[] | null;
+  card_status: string | null;
+  card_key_values: unknown;
+  type_name: string | null;
+  card_key_attrs: unknown;
+  family_name: string | null;
+  listing_count: unknown;
+  store_count: unknown;
+  brand_count: unknown;
+  price_median_br: unknown;
+  price_min_br: unknown;
+  price_max_br: unknown;
 };
 
 const TREND_SORTS: Record<string, TrendListSort> = {
@@ -287,6 +304,7 @@ export class DashboardApiService {
     private readonly connectors: ConnectorsRegistry,
     private readonly cache?: RedisCacheService,
     @Optional() private readonly openRouter?: OpenRouterService,
+    @Optional() private readonly taxonomy?: TaxonomyService,
   ) {}
 
   private async cached<T>(key: string, ttlSeconds: number, factory: () => Promise<T>): Promise<T> {
@@ -676,6 +694,41 @@ export class DashboardApiService {
             ${syntheticFilterS}
         ) ranked
         GROUP BY product_cluster_id
+      ),
+      card_stats AS (
+        SELECT
+          i.cluster_id AS product_cluster_id,
+          COUNT(*)::int AS listing_count,
+          COUNT(DISTINCT i.marketplace)::int AS store_count,
+          (COUNT(DISTINCT lf.brand) FILTER (WHERE lf.brand IS NOT NULL))::int AS brand_count
+        FROM product_cluster_items i
+        LEFT JOIN listing_fichas lf
+          ON lf.marketplace = i.marketplace AND lf.external_product_id = i.external_product_id
+        WHERE i.status IN (${Prisma.join(COUNTED_ITEM_STATUSES)})
+        GROUP BY i.cluster_id
+      ),
+      br_price AS (
+        SELECT
+          latest.product_cluster_id,
+          (percentile_cont(0.5) WITHIN GROUP (ORDER BY latest.price_min))::float8 AS price_median_br,
+          MIN(latest.price_min)::float8 AS price_min_br,
+          MAX(latest.price_min)::float8 AS price_max_br
+        FROM (
+          SELECT DISTINCT ON (s.product_cluster_id, s.marketplace, s.external_product_id)
+            s.product_cluster_id, s.price_min
+          FROM product_listing_snapshots s
+          JOIN product_cluster_items i
+            ON i.cluster_id = s.product_cluster_id
+            AND i.marketplace = s.marketplace
+            AND i.external_product_id = s.external_product_id
+          WHERE s.product_cluster_id IS NOT NULL
+            AND s.price_min > 0
+            AND s.marketplace IN ('amazon_br', 'mercado_livre', 'mercadolivre', 'shopee_br')
+            AND i.status IN (${Prisma.join(COUNTED_ITEM_STATUSES)})
+            ${syntheticFilterS}
+          ORDER BY s.product_cluster_id, s.marketplace, s.external_product_id, s.collected_at DESC
+        ) latest
+        GROUP BY latest.product_cluster_id
       )
       SELECT
         c.id,
@@ -712,7 +765,18 @@ export class DashboardApiService {
         COALESCE(dsp.demand_spark, '{}'::float8[]) AS demand_spark,
         da.demand_score,
         tg.tiktok_growth,
-        w.sellers
+        w.sellers,
+        c.card_status,
+        c.card_key_values,
+        t.name_pt AS type_name,
+        t.card_key_attrs,
+        f.name_pt AS family_name,
+        cs.listing_count,
+        cs.store_count,
+        cs.brand_count,
+        bp.price_median_br,
+        bp.price_min_br,
+        bp.price_max_br
       FROM product_clusters c
       JOIN bounds b ON b.product_cluster_id = c.id
       JOIN windowed w ON w.product_cluster_id = c.id
@@ -722,8 +786,13 @@ export class DashboardApiService {
       LEFT JOIN demand_agg da ON da.product_cluster_id = c.id
       LEFT JOIN demand_spark dsp ON dsp.product_cluster_id = c.id
       LEFT JOIN tiktok_growth tg ON tg.product_cluster_id = c.id
+      LEFT JOIN catalog_types t ON t.id = c.type_id
+      LEFT JOIN catalog_families f ON f.id = t.family_id
+      LEFT JOIN card_stats cs ON cs.product_cluster_id = c.id
+      LEFT JOIN br_price bp ON bp.product_cluster_id = c.id
       WHERE 1 = 1
         ${categoryFilter}
+        AND c.card_status <> 'merged'
       ORDER BY c.created_at ASC, c.id ASC
       LIMIT ${MAX_RANKED_CLUSTERS}
     `);
@@ -772,12 +841,32 @@ export class DashboardApiService {
       demandScore: this.toNumber(row.demand_score),
       tiktokGrowth: this.toNumber(row.tiktok_growth),
       sellers: row.sellers ?? [],
+      card: {
+        cardStatus: row.card_status ?? null,
+        familyName: row.family_name ?? null,
+        typeName: row.type_name ?? null,
+        cardKeyAttrs: (row.card_key_attrs as CardKeyAttr[] | null) ?? null,
+        cardKeyValues: (row.card_key_values as Record<string, string> | null) ?? null,
+        listingCount: this.toNumber(row.listing_count),
+        storeCount: this.toNumber(row.store_count),
+        brandCount: this.toNumber(row.brand_count),
+        priceMedianBr: this.toNumber(row.price_median_br),
+        priceMinBr: this.toNumber(row.price_min_br),
+        priceMaxBr: this.toNumber(row.price_max_br),
+      },
     };
   }
 
   // ---- /trends/products/:id -------------------------------------------
 
   async getTrendProduct(id: string) {
+    const card = await this.prisma.productCluster.findUnique({
+      where: { id },
+      select: { cardStatus: true, mergedIntoId: true, typeId: true, cardKeyValues: true },
+    });
+    if (card?.cardStatus === 'merged' && card.mergedIntoId) {
+      return { merged_into_id: card.mergedIntoId };
+    }
     const cluster = (await this.prisma.productCluster.findUnique({
       where: { id },
       include: {
@@ -817,12 +906,72 @@ export class DashboardApiService {
     return {
       ...base,
       ...this.toMoveScoreFields(moveScore),
+      ...provisionalScoreOverride(card?.cardStatus ?? null),
+      ...(await this.cardDetailFields(id, card?.typeId ?? null, card?.cardStatus ?? null,
+        (card?.cardKeyValues ?? null) as Record<string, string> | null)),
       image_urls: [...new Set(cluster.snapshots.map((row) => row.imageUrl).filter(Boolean))],
       // F2.7: sinais de demanda + sub-sinais do radar calculados dos anúncios.
       signals: {
         ...this.demandToSignals(this.demandSignals(cluster)),
         ...this.subSignalIndicators(cluster),
       },
+    };
+  }
+
+  private async cardDetailFields(
+    clusterId: string,
+    typeId: string | null,
+    cardStatus: string | null,
+    cardKeyValues: Record<string, string> | null,
+  ): Promise<Record<string, unknown>> {
+    const type = typeId && this.taxonomy
+      ? [...(await this.taxonomy.getTypeMap()).values()].find((t) => t.id === typeId) ?? null
+      : null;
+    if (!type) {
+      return cardListFields({ cardStatus, familyName: null, typeName: null, cardKeyAttrs: null, cardKeyValues: null,
+        listingCount: null, storeCount: null, brandCount: null, priceMedianBr: null, priceMinBr: null, priceMaxBr: null });
+    }
+    const items = await this.prisma.productClusterItem.findMany({ where: { clusterId } });
+    const refs = items.map((i) => ({ marketplace: i.marketplace, externalProductId: i.externalProductId }));
+    const [fichas, snapshots] = refs.length
+      ? await Promise.all([
+          this.prisma.listingFicha.findMany({ where: { OR: refs } }),
+          this.prisma.productListingSnapshot.findMany({
+            where: { productClusterId: clusterId, priceMin: { gt: 0 } },
+            orderBy: { collectedAt: 'desc' },
+            distinct: ['marketplace', 'externalProductId'],
+            select: { marketplace: true, externalProductId: true, priceMin: true },
+          }),
+        ])
+      : [[], []];
+    const k = (m: string, e: string) => `${m}::${e}`;
+    const fichaBy = new Map(fichas.map((f) => [k(f.marketplace, f.externalProductId), f]));
+    const priceBy = new Map(snapshots.map((s) => [k(s.marketplace, s.externalProductId), Number(s.priceMin)]));
+    const comparison = buildCardComparison(type, items.map((i) => {
+      const f = fichaBy.get(k(i.marketplace, i.externalProductId));
+      return {
+        marketplace: i.marketplace,
+        brand: f?.brand ?? null,
+        price: priceBy.get(k(i.marketplace, i.externalProductId)) ?? null,
+        status: i.status === 'provisional' ? 'provisional' : i.status === 'auto' ? 'auto' : 'confirmed',
+        comparisonValues: (f?.comparisonValues ?? {}) as Record<string, unknown>,
+      };
+    }));
+    return {
+      ...cardListFields({
+        cardStatus,
+        familyName: type.familyNamePt,
+        typeName: type.namePt,
+        cardKeyAttrs: type.cardKeyAttrs,
+        cardKeyValues,
+        listingCount: comparison.listing_count,
+        storeCount: comparison.store_count,
+        brandCount: comparison.brand_count,
+        priceMedianBr: comparison.price_median_br,
+        priceMinBr: comparison.price_min_br,
+        priceMaxBr: comparison.price_max_br,
+      }),
+      comparison,
     };
   }
 
@@ -1111,6 +1260,7 @@ export class DashboardApiService {
             translate(lower(canonical_name), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO}) AS name_norm,
             translate(lower(COALESCE(category, '')), ${SEARCH_ACCENTS_FROM}, ${SEARCH_ACCENTS_TO}) AS category_norm
           FROM product_clusters
+          WHERE card_status <> 'merged'
         ), ranked AS (
           SELECT id, canonical_name, category,
             (strpos(name_norm, ${term}) > 0 OR strpos(category_norm, ${term}) > 0) AS contains,
@@ -1128,6 +1278,7 @@ export class DashboardApiService {
       // Sem pg_trgm: parcial por ILIKE + categorias do objetivo.
       const clusters = await this.prisma.productCluster.findMany({
         where: {
+          cardStatus: { not: 'merged' },
           OR: [
             { canonicalName: { contains: q, mode: 'insensitive' } },
             { canonicalName: { contains: term, mode: 'insensitive' } },
@@ -1981,6 +2132,8 @@ export class DashboardApiService {
       image_url: row.latestImageUrl,
       // Move Score oficial (F2.7: único score do contrato).
       ...this.toMoveScoreFields(moveScore),
+      ...provisionalScoreOverride(row.card.cardStatus),
+      ...cardListFields(row.card),
       margin_estimate: pendingIndicator(),
       risk: this.simulatedRisk(row.riskLevel) ?? this.riskFromStats(row),
       main_sources: mainSources,

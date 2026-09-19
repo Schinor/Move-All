@@ -21,6 +21,11 @@
       >
         <app-icon name="bar-chart" [size]="16" /> Exportar CSV
       </button>
+      @if (isAdmin()) {
+        <button type="button" class="export-btn" (click)="rename($any(product()).data.canonicalName)">
+          <app-icon name="edit" [size]="16" /> Renomear card
+        </button>
+      }
       <span [attr.title]="riskTitle($any(product()).data)" [attr.aria-label]="riskTitle($any(product()).data)">
         <app-risk-badge [level]="$any(product()).data.risk" of="de mercado" />
       </span>
@@ -38,6 +43,17 @@
         [alt]="$any(product()).data.canonicalName"
       />
       <div class="hero-main">
+        @if ($any(product()).data.familyName) {
+          <div class="card-type">{{ $any(product()).data.familyName }} › {{ $any(product()).data.typeName }}</div>
+        }
+        @if ($any(product()).data.cardStatus === 'provisional') {
+          <span class="provisional-badge">Provisório</span>
+        }
+        @if ($any(product()).data.cardChips?.length) {
+          <div class="card-chips">
+            @for (chip of $any(product()).data.cardChips; track chip) { <span class="chip">{{ chip }}</span> }
+          </div>
+        }
         <div class="action-line" [attr.data-action]="$any(product()).data.action">
           <span class="action-chip">{{ moveDecisionText($any(product()).data) }}</span>
           @if ($any(product()).data.scoreBand) {
@@ -72,8 +88,12 @@
             <strong class="num">{{ signalEntries().length }} indicadores</strong>
           </div>
           <div>
-            <span>Fontes principais</span>
-            <strong class="num">{{ $any(product()).data.mainSources?.length ?? '—' }}</strong>
+            <span>Anúncios</span>
+            <strong class="num">{{ listingsText($any(product()).data) ?? ($any(product()).data.mainSources?.length ?? '—') }}</strong>
+          </div>
+          <div>
+            <span>Marcas</span>
+            <strong class="num">{{ $any(product()).data.brandCount ?? '—' }}</strong>
           </div>
           <div>
             <span>Social</span>
@@ -85,6 +105,22 @@
             [data]="$any(product()).data.spark"
             [up]="($any(product()).data.growthPct ?? 0) >= 0"
           />
+        }
+        @if ($any(product()).data.comparison; as cmp) {
+          <div class="card-comparison">
+            <strong>Comparação dentro do card</strong>
+            <div class="cmp-lines">
+              @for (r of cmp.ranges; track r.attr) {
+                <span>{{ r.labelPt }}: {{ r.min }}–{{ r.max }} {{ r.unit ?? '' }}</span>
+              }
+              @for (c of cmp.counts; track c.attr) {
+                <span>{{ countText(c) }}</span>
+              }
+            </div>
+            @if (cmp.techWarning) {
+              <p class="tech-warning">{{ cmp.techWarning }}</p>
+            }
+          </div>
         }
       </div>
       <app-score-gauge [value]="$any(product()).data.moveScore" [size]="88" />
@@ -218,6 +254,7 @@
 
       @case ('competitors') {
         <section class="block">
+          <app-card-listings-table [productClusterId]="id" />
           <app-competitor-matrix [productClusterId]="id" />
         </section>
       }

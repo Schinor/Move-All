@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
 import { combineLatest } from 'rxjs';
@@ -32,8 +32,12 @@ import { MonteCarloHistogramComponent } from '../../shared/components/intel/mont
 import { PriceCurveChartComponent } from '../../shared/components/intel/price-curve-chart/price-curve-chart.component';
 import { UnitEconomicsCalculatorComponent } from '../../shared/components/intel/unit-economics-calculator/unit-economics-calculator.component';
 import { CompetitorMatrixComponent } from '../../shared/components/intel/competitor-matrix/competitor-matrix.component';
+import { CardListingsTableComponent } from '../../shared/components/intel/card-listings-table/card-listings-table.component';
 import { SeasonalityForecastComponent } from '../../shared/components/intel/seasonality-forecast/seasonality-forecast.component';
 import { IconComponent } from '../../shared/ui/icon/icon.component';
+import { AuthService } from '../../core/auth/auth.service';
+import { CatalogService } from '../../core/services/catalog.service';
+import { comparisonCountText, listingsText } from '../../shared/util/card-format';
 import { categoryLabel, dataConfidenceLabel, decisionLabel, premiseSourceLabel, actionTooltip, scoreBandLabel, socialSignalLabel, sourceLabel } from '../../shared/util/format';
 
 type PremiseKey = keyof MonteCarloPremises;
@@ -66,6 +70,7 @@ interface PremiseField {
     PriceCurveChartComponent,
     UnitEconomicsCalculatorComponent,
     CompetitorMatrixComponent,
+    CardListingsTableComponent,
     SeasonalityForecastComponent,
     IconComponent,
   ],
@@ -75,6 +80,8 @@ interface PremiseField {
 export class TendenciaComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly trends = inject(TrendsService);
+  private readonly auth = inject(AuthService);
+  private readonly catalog = inject(CatalogService);
 
   readonly id = this.route.snapshot.paramMap.get('id') ?? '';
   readonly window = signal<TimeWindow>(DEFAULT_WINDOW);
@@ -89,7 +96,7 @@ export class TendenciaComponent {
   readonly tabs: TabItem[] = [
     { id: 'adoption', label: 'Adoção' },
     { id: 'economics', label: 'Unit Economics' },
-    { id: 'competitors', label: 'Concorrência' },
+    { id: 'competitors', label: 'Anúncios' },
     { id: 'seasonality', label: 'Sazonalidade' },
     { id: 'sourcing', label: 'Sourcing' },
     { id: 'simulation', label: 'Simulação' },
@@ -100,6 +107,13 @@ export class TendenciaComponent {
   readonly comparePrevious = signal(false);
 
   readonly product = toAsyncState(this.trends.getProduct(this.id));
+  readonly isAdmin = computed(() => this.auth.currentUser()?.role === 'ADMIN');
+  readonly countText = comparisonCountText;
+  readonly listingsText = listingsText;
+  private readonly redirectMerged = effect(() => {
+    const target = (this.product() as unknown as { data?: { mergedIntoId?: string } })?.data?.mergedIntoId;
+    if (target && typeof window !== 'undefined') window.location.replace(`/tendencia/${target}`);
+  });
   readonly suppliers = toAsyncState(this.trends.suppliers(this.id));
   private readonly historyParams$ = combineLatest([toObservable(this.window), toObservable(this.comparePrevious)]).pipe(
     map(([w, c]) => ({ w, c: c ? ('previous' as const) : undefined })),
@@ -300,6 +314,12 @@ export class TendenciaComponent {
     const sources: string[] = data?.detectedOn ?? data?.detected_on ?? data?.mainSources ?? [];
     if (!sources.length) return '—';
     return sources.map((s) => sourceLabel(s)).join(' · ');
+  }
+
+  rename(currentName: string): void {
+    const name = window.prompt('Novo nome do card', currentName)?.trim();
+    if (!name || name === currentName || name.length < 3) return;
+    this.catalog.renameCard(this.id, name).subscribe({ next: () => window.location.reload() });
   }
 
   runMonteCarlo(): void {

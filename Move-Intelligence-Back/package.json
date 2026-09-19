@@ -16,10 +16,15 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:sync": "prisma db push",
     "prisma:studio": "prisma studio",
+    "catalog:seed": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-seed.ts",
+    "catalog:auto-resolve": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-auto-resolve.ts",
+    "catalog:reprocess": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-reprocess.ts",
+    "catalog:import-fichas": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-import-fichas.ts",
+    "catalog:eval": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-eval.ts",
+    "user:make-admin": "node --env-file-if-exists=.env -r ts-node/register scripts/user-make-admin.ts",
     "seed:tradeatlas": "node --env-file-if-exists=.env -r ts-node/register scripts/seed-tradeatlas.ts",
     "seed:fitness-6m": "node --env-file-if-exists=.env -r ts-node/register scripts/seed-6months-fitness-dataset.ts",
     "collect:week": "node --env-file-if-exists=.env scripts/start-weekly-collection.mjs",
-    "products:recluster": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/recluster-products.ts",
     "products:cleanup-non-fitness": "node --env-file-if-exists=.env scripts/cleanup-non-fitness.mjs"
   },
   "dependencies": {

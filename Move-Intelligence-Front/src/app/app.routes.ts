@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
+import { adminGuard } from './core/auth/admin.guard';
 
 /** As 9 rotas do produto + auth + fallback. Componentes lazy-loaded (standalone). */
 export const routes: Routes = [
@@ -65,6 +66,11 @@ export const routes: Routes = [
       import('./features/tendencia/tendencia.component').then((m) => m.TendenciaComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'revisao',
+    loadComponent: () => import('./features/revisao/revisao.component').then((m) => m.RevisaoComponent),
+    canActivate: [authGuard, adminGuard],
+  },
   /* ── Autenticação ─────────────────────────────────────── */
   {
     path: 'login',
@@ -83,4 +89,3 @@ export const routes: Routes = [
       import('./features/not-found/not-found.component').then((m) => m.NotFoundComponent),
   },
 ];
-

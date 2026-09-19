@@ -460,7 +460,10 @@ export class ProductsService {
     // lote só consideram snapshots reais — senão o batch simula clusters cujo
     // único histórico é a curva sintética do historical-collection.
     const clusters = (await this.prisma.productCluster.findMany({
-      where: { snapshots: { some: syntheticSnapshotWhere() } },
+      where: {
+        cardStatus: { notIn: ['provisional', 'merged'] },
+        snapshots: { some: syntheticSnapshotWhere() },
+      },
       include: {
         snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' }, take: 1_000 },
       },

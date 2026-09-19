@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import {
   includeSyntheticData,
   syntheticProductWhere,
@@ -20,21 +21,21 @@ describe('synthetic-data.filter', () => {
   it('com env ausente, o filtro fica ativo (exclui sintéticos)', () => {
     delete process.env.INCLUDE_SYNTHETIC_DATA;
     expect(includeSyntheticData()).toBe(false);
-    expect(syntheticSnapshotWhere()).toEqual({ isSynthetic: false });
+    expect(syntheticSnapshotWhere()).toEqual({ isSynthetic: false, analyticsExcluded: false });
     expect(syntheticProductWhere()).toEqual({ isSynthetic: false });
   });
 
   it("com env 'true', o filtro fica vazio (inclui sintéticos)", () => {
     process.env.INCLUDE_SYNTHETIC_DATA = 'true';
     expect(includeSyntheticData()).toBe(true);
-    expect(syntheticSnapshotWhere()).toEqual({});
+    expect(syntheticSnapshotWhere()).toEqual({ analyticsExcluded: false });
     expect(syntheticProductWhere()).toEqual({});
   });
 
   it("com env 'false', o filtro fica ativo (exclui sintéticos)", () => {
     process.env.INCLUDE_SYNTHETIC_DATA = 'false';
     expect(includeSyntheticData()).toBe(false);
-    expect(syntheticSnapshotWhere()).toEqual({ isSynthetic: false });
+    expect(syntheticSnapshotWhere()).toEqual({ isSynthetic: false, analyticsExcluded: false });
     expect(syntheticProductWhere()).toEqual({ isSynthetic: false });
   });
 
@@ -44,5 +45,19 @@ describe('synthetic-data.filter', () => {
     // Prisma.Sql expõe strings/values; o texto precisa citar a coluna.
     const text = JSON.stringify(fragment);
     expect(text).toContain('is_synthetic');
+  });
+
+  it('SQL inclui analytics_excluded com alias', () => {
+    delete process.env.INCLUDE_SYNTHETIC_DATA;
+    const sql = syntheticSnapshotFilterSql('s') as Prisma.Sql;
+    expect(sql.sql).toContain('s.is_synthetic = false');
+    expect(sql.sql).toContain('s.analytics_excluded = false');
+  });
+
+  it("com env 'true', SQL mantém só analytics_excluded", () => {
+    process.env.INCLUDE_SYNTHETIC_DATA = 'true';
+    const sql = syntheticSnapshotFilterSql() as Prisma.Sql;
+    expect(sql.sql).not.toContain('is_synthetic');
+    expect(sql.sql).toContain('analytics_excluded = false');
   });
 });

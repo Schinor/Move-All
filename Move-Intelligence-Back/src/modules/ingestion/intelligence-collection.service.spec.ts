@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { ProductMatchingService } from '../product-matching/product-matching.service';
+import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
 import { IntelligenceCollectionService } from './intelligence-collection.service';
 import { RunTrackListingsDto } from './dto/run-track-listings.dto';
@@ -32,19 +32,19 @@ function buildService() {
     intelligenceProduct: { findFirst: jest.fn().mockResolvedValue(null) },
     watchlistItem: { findMany: jest.fn().mockResolvedValue([]) },
   };
-  const matching = {
-    findOrCreateTrivialCluster: jest.fn().mockResolvedValue('cluster-novo'),
-    findOrCreateClusterForProduct: jest.fn().mockResolvedValue('cluster-novo'),
+  const fichas = {
+    registerListing: jest.fn().mockResolvedValue('created'),
+    currentCardId: jest.fn().mockResolvedValue(null),
   };
   const products = {
     simulateBatchForRanking: jest.fn().mockResolvedValue({ simulated: 0 }),
   };
   const service = new IntelligenceCollectionService(
     prisma as unknown as PrismaService,
-    matching as unknown as ProductMatchingService,
+    fichas as unknown as FichaService,
     products as unknown as ProductsService,
   );
-  return { service, prisma, matching, products };
+  return { service, prisma, fichas, products };
 }
 
 describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
@@ -58,8 +58,8 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
     expect(prisma.collectionJob.create).not.toHaveBeenCalled();
   });
 
-  it('syncObservationsToSnapshots grava snapshot real e vincula via matching', async () => {
-    const { service, prisma, matching } = buildService();
+  it('syncObservationsToSnapshots grava snapshot real e registra o anúncio na ficha', async () => {
+    const { service, prisma, fichas } = buildService();
     const observedAt = new Date('2026-09-14T12:00:00.000Z');
     prisma.listingObservation.findMany.mockResolvedValue([
       {
@@ -81,17 +81,14 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
       },
     ]);
     prisma.productListingSnapshot.findFirst.mockResolvedValue(null);
-    // A3.2: sem linha de descoberta, cai no atalho trivial com a URL.
     const result = await (service as any).syncObservationsToSnapshots(['obs-1']);
 
-    expect(result).toEqual({ analytical_snapshots: 1, matched_listings: 1 });
-    expect(matching.findOrCreateTrivialCluster).toHaveBeenCalledWith(
-      expect.objectContaining({ marketplace: 'amazon_br', externalProductId: 'B000000001' }),
-    );
-    expect(matching.findOrCreateClusterForProduct).not.toHaveBeenCalled();
-    expect(prisma.trackedListing.update).toHaveBeenCalledWith({
-      where: { id: 'listing-1' },
-      data: { productId: 'cluster-novo' },
+    expect(result).toEqual({ analytical_snapshots: 1, registered_listings: 1 });
+    expect(fichas.registerListing).toHaveBeenCalledWith({
+      marketplace: 'amazon_br',
+      externalProductId: 'B000000001',
+      title: 'https://www.amazon.com.br/dp/B000000001',
+      excerpt: null,
     });
     expect(prisma.productListingSnapshot.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -100,13 +97,13 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
         // Coleta real: nunca sintético; vendedor desconhecido: null.
         isSynthetic: false,
         sellerName: null,
-        productClusterId: 'cluster-novo',
+        productClusterId: null,
       }),
     });
   });
 
-  it('syncObservationsToSnapshots usa o título real via findOrCreateClusterForProduct (A3.2)', async () => {
-    const { service, prisma, matching } = buildService();
+  it('syncObservationsToSnapshots usa o título real na ficha (A3.2)', async () => {
+    const { service, prisma, fichas } = buildService();
     const observedAt = new Date('2026-09-14T12:00:00.000Z');
     const discovered = {
       id: 'prod-1',
@@ -138,13 +135,17 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
 
     const result = await (service as any).syncObservationsToSnapshots(['obs-2']);
 
-    expect(result).toEqual({ analytical_snapshots: 1, matched_listings: 1 });
+    expect(result).toEqual({ analytical_snapshots: 1, registered_listings: 1 });
     expect(prisma.intelligenceProduct.findFirst).toHaveBeenCalledWith({
       where: { source: 'amazon_br', recordId: 'B000000001' },
       orderBy: { capturedAt: 'desc' },
     });
-    expect(matching.findOrCreateClusterForProduct).toHaveBeenCalledWith(discovered);
-    expect(matching.findOrCreateTrivialCluster).not.toHaveBeenCalled();
+    expect(fichas.registerListing).toHaveBeenCalledWith({
+      marketplace: 'amazon_br',
+      externalProductId: 'B000000001',
+      title: 'Halter Ajustável 24kg Par',
+      excerpt: null,
+    });
   });
 
   it('syncObservationsToSnapshots pula observação sem preço', async () => {
@@ -161,7 +162,7 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
 
     const result = await (service as any).syncObservationsToSnapshots(['obs-blocked']);
 
-    expect(result).toEqual({ analytical_snapshots: 0, matched_listings: 0 });
+    expect(result).toEqual({ analytical_snapshots: 0, registered_listings: 0 });
     expect(prisma.productListingSnapshot.create).not.toHaveBeenCalled();
   });
 
@@ -180,7 +181,7 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
 
     const result = await (service as any).syncObservationsToSnapshots(['obs-partial']);
 
-    expect(result).toEqual({ analytical_snapshots: 0, matched_listings: 0 });
+    expect(result).toEqual({ analytical_snapshots: 0, registered_listings: 0 });
     expect(prisma.productListingSnapshot.create).not.toHaveBeenCalled();
   });
 

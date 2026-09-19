@@ -4,7 +4,7 @@ import { PrismaService } from '../../shared/database/prisma.service';
 import { SearchParams } from '../../shared/types/marketplace.types';
 import { ConnectorsRegistry } from '../connectors/connectors.registry';
 import { NormalizationService } from '../normalization/normalization.service';
-import { ProductMatchingService } from '../product-matching/product-matching.service';
+import { FichaService } from '../catalog/ficha.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 import { RunCollectionDto } from './dto/run-collection.dto';
 
@@ -13,7 +13,7 @@ export class IngestionService {
   constructor(
     private readonly connectors: ConnectorsRegistry,
     private readonly normalization: NormalizationService,
-    private readonly matching: ProductMatchingService,
+    private readonly fichas: FichaService,
     private readonly snapshots: SnapshotsService,
     private readonly prisma: PrismaService,
   ) {}
@@ -68,10 +68,14 @@ export class IngestionService {
 
         for (const rawProduct of rawProducts) {
           const normalized = await this.normalization.normalize(rawProduct);
-          const clusterId =
-            await this.matching.findOrCreateTrivialCluster(normalized);
+          const listing = { marketplace: normalized.marketplace, externalProductId: normalized.externalProductId };
+          await this.fichas.registerListing({
+            ...listing,
+            title: normalized.titleOriginal ?? normalized.titleNormalized,
+          });
+          const clusterId = await this.fichas.currentCardId(listing);
 
-          await this.snapshots.persist(normalized, clusterId);
+          await this.snapshots.persist(normalized, clusterId ?? undefined);
           stats.snapshotsCreated += 1;
         }
       } catch (error) {

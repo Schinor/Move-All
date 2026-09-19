@@ -1,0 +1,5 @@
+.card-listings { margin-bottom: 16px; overflow-x: auto; }
+.card-listings table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.card-listings th, .card-listings td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #e5e7eb); }
+.status[data-status='provisional'] { background: var(--warning-bg, #f5c26b); color: var(--warning-fg, #1a1a1a); border-radius: 4px; padding: 0 5px; }
+.status[data-status='auto'] { background: var(--surface-2, #f3f4f6); color: var(--text-2, #4b5563); border-radius: 4px; padding: 0 5px; }

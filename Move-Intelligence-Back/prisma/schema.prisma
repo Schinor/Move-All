@@ -91,6 +91,8 @@ model ProductListingSnapshot {
   // seed-6months), propagado a partir de IntelligenceProduct.isSynthetic em
   // syncAnalyticalModels. Ver RELATORIO_ANALISE_DADOS_E_SCORES.md seção 2.1 A5.
   isSynthetic       Boolean              @default(false) @map("is_synthetic")
+  /// true = fora de score/séries/Monte Carlo/ranking (anúncio provisório de card confirmado).
+  analyticsExcluded Boolean              @default(false) @map("analytics_excluded")
   cluster           ProductCluster?      @relation(fields: [productClusterId], references: [id])
   importJob         ImportJob?           @relation(fields: [importJobId], references: [id])
   rawProduct        IntelligenceProduct? @relation(fields: [rawProductId], references: [id])
@@ -242,6 +244,14 @@ model ProductCluster {
   riskLevel       String?                  @map("risk_level")
   financialScore  Int?                     @map("financial_score")
   simulatedAt     DateTime?                @map("simulated_at")
+  // Catálogo (subprojeto A): o cluster É o card.
+  typeId          String?             @map("type_id") @db.Uuid
+  cardKey         String?             @map("card_key")
+  cardKeyValues   Json?               @map("card_key_values")
+  /// legacy | provisional | confirmed | merged
+  cardStatus      String              @default("legacy") @map("card_status")
+  nameLocked      Boolean             @default(false) @map("name_locked")
+  mergedIntoId    String?             @map("merged_into_id") @db.Uuid
   items           ProductClusterItem[]
   snapshots       ProductListingSnapshot[]
   alerts          Alert[]
@@ -249,10 +259,16 @@ model ProductCluster {
   matchReviews    ProductMatchReview[]
   aiRecommendations AiRecommendation[]
   reviewSummaries ReviewSummary[]
+  type            CatalogType?        @relation(fields: [typeId], references: [id])
+  mergedInto      ProductCluster?     @relation("ClusterMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom      ProductCluster[]    @relation("ClusterMerge")
+  reviewItems     CatalogReviewItem[]
 
   @@index([createdAt])
   @@index([canonicalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_clusters_canonical_trgm")
   @@index([category], map: "idx_clusters_category")
+  @@index([cardKey], map: "idx_clusters_card_key")
+  @@index([typeId, cardStatus], map: "idx_clusters_type_status")
   @@map("product_clusters")
 }
 
@@ -264,6 +280,8 @@ model ProductClusterItem {
   similarityScore   Decimal        @map("similarity_score") @db.Decimal(5, 4)
   matchedBy         String         @default("text") @map("matched_by")
   matchedAt         DateTime       @default(now()) @map("matched_at")
+  /// provisional | confirmed | auto (itens antigos ficam confirmed)
+  status            String         @default("confirmed")
   cluster           ProductCluster @relation(fields: [clusterId], references: [id])
 
   @@unique([marketplace, externalProductId])
@@ -512,6 +530,8 @@ model User {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   refreshTokens RefreshToken[]
+  catalogReviewsResolved CatalogReviewItem[] @relation("CatalogReviewResolver")
+  catalogDecisions       CatalogDecision[]   @relation("CatalogDecisionActor")
 
   @@map("users")
 }
@@ -683,4 +703,115 @@ model AiCallLog {
 
   @@index([endpoint, status, createdAt])
   @@map("ai_call_logs")
+}
+
+/// Catálogo (subprojeto A): famílias (as ~20 categorias antigas + novas).
+model CatalogFamily {
+  id        String        @id @default(uuid()) @db.Uuid
+  key       String        @unique
+  namePt    String        @map("name_pt")
+  sortOrder Int           @default(0) @map("sort_order")
+  createdAt DateTime      @default(now()) @map("created_at")
+  types     CatalogType[]
+
+  @@map("catalog_families")
+}
+
+/// Tipo de produto: define a chave do card (card_key_attrs) e o NCM esperado.
+model CatalogType {
+  id              String           @id @default(uuid()) @db.Uuid
+  familyId        String           @map("family_id") @db.Uuid
+  key             String           @unique
+  namePt          String           @map("name_pt")
+  descriptionEn   String           @map("description_en")
+  ncm             String?
+  cardKeyAttrs    Json             @default("[]") @map("card_key_attrs")
+  comparisonAttrs Json             @default("[]") @map("comparison_attrs")
+  variationAttrs  Json             @default("[]") @map("variation_attrs")
+  source          String           @default("seed")
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  family          CatalogFamily    @relation(fields: [familyId], references: [id])
+  clusters        ProductCluster[]
+
+  @@map("catalog_types")
+}
+
+/// Ficha do anúncio gerada pela LLM. Uma por (marketplace, external_product_id).
+model ListingFicha {
+  id                String   @id @default(uuid()) @db.Uuid
+  marketplace       String
+  externalProductId String   @map("external_product_id")
+  title             String
+  inputHash         String   @map("input_hash")
+  status            String   @default("pending")
+  priority          Int      @default(100)
+  attempts          Int      @default(0)
+  lastError         String?  @map("last_error")
+  typeKey           String?  @map("type_key")
+  suggestedType     String?  @map("suggested_type")
+  inScope           Boolean? @map("in_scope")
+  isAccessoryOrPart Boolean? @map("is_accessory_or_part")
+  isKitOrBundle     Boolean? @map("is_kit_or_bundle")
+  hasVariations     Boolean? @map("has_variations")
+  cardKeyValues     Json     @default("{}") @map("card_key_values")
+  newDifferential   String?  @map("new_differential")
+  missingKeyAttrs   String[] @default([]) @map("missing_key_attrs")
+  comparisonValues  Json     @default("{}") @map("comparison_values")
+  variationValues   Json     @default("{}") @map("variation_values")
+  specs             Json     @default("{}")
+  brand             String?
+  model             String?
+  confidence        Decimal? @db.Decimal(4, 3)
+  llmModel          String?  @map("llm_model")
+  promptVersion     String?  @map("prompt_version")
+  copiedFromFichaId String?  @map("copied_from_ficha_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([marketplace, externalProductId])
+  @@index([status, priority(sort: Desc), createdAt])
+  @@index([inputHash])
+  @@map("listing_fichas")
+}
+
+/// Fila de revisão do catálogo (ADMIN).
+model CatalogReviewItem {
+  id                   String          @id @default(uuid()) @db.Uuid
+  kind                 String
+  marketplace          String?
+  externalProductId    String?         @map("external_product_id")
+  suggestedClusterId   String?         @map("suggested_cluster_id") @db.Uuid
+  suggestedTypeKey     String?         @map("suggested_type_key")
+  suggestedTypeAliases String[]        @default([]) @map("suggested_type_aliases")
+  listingCount         Int             @default(0) @map("listing_count")
+  reason               String
+  status               String          @default("pending")
+  resolution           String?
+  resolvedBy           String?         @map("resolved_by") @db.Uuid
+  resolvedAt           DateTime?       @map("resolved_at")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  suggestedCluster     ProductCluster? @relation(fields: [suggestedClusterId], references: [id], onDelete: SetNull)
+  resolver             User?           @relation("CatalogReviewResolver", fields: [resolvedBy], references: [id])
+
+  @@index([kind, status, createdAt])
+  @@index([marketplace, externalProductId])
+  @@map("catalog_review_items")
+}
+
+/// Histórico de decisões da revisão (para desfazer).
+model CatalogDecision {
+  id                 String   @id @default(uuid()) @db.Uuid
+  actorUserId        String?  @map("actor_user_id") @db.Uuid
+  action             String
+  reviewItemId       String?  @map("review_item_id") @db.Uuid
+  before             Json
+  after              Json
+  undoneByDecisionId String?  @map("undone_by_decision_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+  actor              User?    @relation("CatalogDecisionActor", fields: [actorUserId], references: [id])
+
+  @@index([createdAt])
+  @@map("catalog_decisions")
 }

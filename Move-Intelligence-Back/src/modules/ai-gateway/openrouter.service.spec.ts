@@ -102,4 +102,15 @@ describe('OpenRouterService', () => {
       }),
     );
   });
+
+  it('usa timeoutMs das opções no AbortSignal', async () => {
+    process.env.OPENROUTER_API_KEY = 'sk-or-test-token-key';
+    const timeoutSpy = jest.spyOn(AbortSignal, 'timeout');
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }], usage: {} }),
+    });
+    await service.chatCompletion([{ role: 'user', content: 'oi' }], { timeoutMs: 120_000 });
+    expect(timeoutSpy).toHaveBeenCalledWith(120_000);
+  });
 });

@@ -298,6 +298,22 @@ describe('ProductsService — simulateBatchForRanking oficial (F2.4)', () => {
       }),
     });
   });
+
+  it('simulateBatchForRanking não considera cards provisórios nem merged', async () => {
+    const prisma = {
+      productCluster: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new ProductsService(
+      prisma as unknown as PrismaService,
+      {} as OpenRouterService,
+    );
+
+    await service.simulateBatchForRanking(10);
+
+    expect(prisma.productCluster.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ cardStatus: { notIn: ['provisional', 'merged'] } }),
+    }));
+  });
 });
 
 // F2.5: /products/compare anexa o Move Score vigente (legados mantidos).

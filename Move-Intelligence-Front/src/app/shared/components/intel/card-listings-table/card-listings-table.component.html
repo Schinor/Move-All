@@ -1,0 +1,22 @@
+<section class="card-listings">
+  <h3>Anúncios deste card</h3>
+  @if ($any(listings()).data; as rows) {
+    <table>
+      <thead><tr><th>Anúncio</th><th>Loja</th><th>Variação</th><th>Preço</th><th>Nota</th><th>Status</th></tr></thead>
+      <tbody>
+        @for (l of $any(rows); track l.marketplace + l.externalProductId) {
+          <tr>
+            <td>@if (l.url) { <a [href]="l.url" target="_blank" rel="noopener">{{ l.title }}</a> } @else { {{ l.title }} }</td>
+            <td>{{ store(l) }}</td>
+            <td>{{ l.variation ?? '—' }}</td>
+            <td class="num">{{ price(l) }}</td>
+            <td class="num">{{ l.rating ?? '—' }}</td>
+            <td><span class="status" [attr.data-status]="l.status">{{ l.status === 'provisional' ? 'provisório' : l.status === 'auto' ? 'automático' : 'confirmado' }}</span></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else {
+    <app-state-panel [state]="listings()" emptyMessage="Nenhum anúncio neste card ainda." />
+  }
+</section>

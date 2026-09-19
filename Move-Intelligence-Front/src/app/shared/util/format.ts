@@ -110,6 +110,7 @@ export const ACTION_LABEL: Record<string, string> = {
   TESTAR_DEMANDA: 'Testar demanda',
   IGNORAR: 'Ignorar',
   DADOS_INSUFICIENTES: 'Dados insuficientes',
+  AGUARDANDO_REVISAO: 'Aguardando revisão',
 };
 
 export const ACTION_TOOLTIP: Record<string, string> = {
@@ -120,6 +121,7 @@ export const ACTION_TOOLTIP: Record<string, string> = {
     'Financeiro viável, mas a demanda não está crescendo. Testar com lote pequeno ou monitorar.',
   IGNORAR: 'Sem tendência e sem viabilidade financeira no cenário atual.',
   DADOS_INSUFICIENTES: 'Ainda não há histórico mínimo (4 observações em 21 dias) para decidir.',
+  AGUARDANDO_REVISAO: 'Card provisório: falta confirmar a classificação na fila de revisão.',
 };
 
 export function actionLabel(value: string | null | undefined): string {

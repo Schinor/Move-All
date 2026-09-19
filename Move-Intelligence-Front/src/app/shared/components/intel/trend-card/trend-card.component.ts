@@ -6,6 +6,7 @@ import { IconComponent } from '../../../ui/icon/icon.component';
 import { TrendProduct } from '../../../../core/models/contract.models';
 import { STAGE_LABEL, actionLabel, dataConfidenceLabel, formatBRL, momentumArrow, scoreBandLabel } from '../../../util/format';
 import { HumanizePipe } from '../../../util/humanize.pipe';
+import { familyTypeText, listingsText } from '../../../util/card-format';
 
 /** Cartão de tendência (portado do TrendCard do mockup). Dado via @Input. */
 @Component({
@@ -23,7 +24,9 @@ export class TrendCardComponent {
     this.trend().stage ? (STAGE_LABEL[this.trend().stage as string] ?? '') : '',
   );
   readonly scoreValue = computed(() => this.trend().moveScore ?? null);
-  readonly scoreConfidence = computed(() => dataConfidenceLabel(this.trend().dataConfidence));
+  readonly scoreConfidence = computed(() => this.trend().cardStatus === 'provisional' ? 'Aguardando revisão' : dataConfidenceLabel(this.trend().dataConfidence));
+  readonly familyType = computed(() => familyTypeText(this.trend()));
+  readonly listings = computed(() => listingsText(this.trend()));
   readonly actionText = computed(() => actionLabel(this.trend().action) || '—');
   readonly bandText = computed(() => scoreBandLabel(this.trend().scoreBand) || '—');
   readonly momentumArrow = computed(() => momentumArrow(this.trend().momentum?.direction));

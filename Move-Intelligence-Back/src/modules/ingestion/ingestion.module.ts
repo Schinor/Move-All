@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConnectorsModule } from '../connectors/connectors.module';
+import { CatalogModule } from '../catalog/catalog.module';
 import { NormalizationModule } from '../normalization/normalization.module';
-import { ProductMatchingModule } from '../product-matching/product-matching.module';
 import { ProductsModule } from '../products/products.module';
 import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { IngestionController } from './ingestion.controller';
@@ -14,8 +14,8 @@ import { WeeklyCollectionScheduler } from './weekly-collection.scheduler';
 @Module({
   imports: [
     ConnectorsModule,
+    CatalogModule,
     NormalizationModule,
-    ProductMatchingModule,
     ProductsModule,
     SnapshotsModule,
   ],

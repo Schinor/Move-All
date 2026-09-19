@@ -15,7 +15,7 @@ import { ImportsModule } from './modules/imports/imports.module';
 import { IngestionModule } from './modules/ingestion/ingestion.module';
 import { KeywordsModule } from './modules/keywords/keywords.module';
 import { NormalizationModule } from './modules/normalization/normalization.module';
-import { ProductMatchingModule } from './modules/product-matching/product-matching.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { ProductsModule } from './modules/products/products.module';
 import { SnapshotsModule } from './modules/snapshots/snapshots.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
@@ -36,7 +36,7 @@ import { RedisModule } from './shared/redis/redis.module';
     BusinessRulesModule,
     ConnectorsModule,
     NormalizationModule,
-    ProductMatchingModule,
+    CatalogModule,
     SnapshotsModule,
     AlertsModule,
     SuppliersModule,

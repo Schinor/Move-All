@@ -8,7 +8,8 @@ import { Prisma } from '@prisma/client';
  *
  * `INCLUDE_SYNTHETIC_DATA` (default `false`) controla se esses registros
  * entram no ranking/dashboard, no Monte Carlo em lote, nos alertas e no
- * copilot. Documentado em `.env.example` e `docs/production.md`.
+ * copilot. Também exclui snapshots com `analytics_excluded = true`
+ * (catálogo, subprojeto A). Documentado em `.env.example` e `docs/production.md`.
  *
  * Use os helpers abaixo em vez de repetir a condição em cada consulta.
  */
@@ -25,14 +26,18 @@ export function includeSyntheticData(): boolean {
  *   não estiver qualificada.
  */
 export function syntheticSnapshotFilterSql(alias?: string): Prisma.Sql {
-  if (includeSyntheticData()) return Prisma.empty;
-  const column = alias ? `${alias}.is_synthetic` : 'is_synthetic';
-  return Prisma.sql`AND ${Prisma.raw(column)} = false`;
+  const prefix = alias ? `${alias}.` : '';
+  // Catálogo (subprojeto A): anúncio provisório de card confirmado nunca entra nas análises.
+  const excluded = Prisma.sql`AND ${Prisma.raw(`${prefix}analytics_excluded`)} = false`;
+  if (includeSyntheticData()) return excluded;
+  return Prisma.sql`AND ${Prisma.raw(`${prefix}is_synthetic`)} = false ${excluded}`;
 }
 
 /** Filtro Prisma (typed query) para `product_listing_snapshots`. */
 export function syntheticSnapshotWhere(): Prisma.ProductListingSnapshotWhereInput {
-  return includeSyntheticData() ? {} : { isSynthetic: false };
+  return includeSyntheticData()
+    ? { analyticsExcluded: false }
+    : { isSynthetic: false, analyticsExcluded: false };
 }
 
 /** Filtro Prisma (typed query) para `products` (IntelligenceProduct). */

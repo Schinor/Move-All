@@ -32,6 +32,8 @@ export interface OpenRouterChatOptions {
   temperature?: number;
   maxTokens?: number;
   topP?: number;
+  /** Timeout de cada tentativa em ms (padrão 35_000). */
+  timeoutMs?: number;
   responseFormat?: { type: 'json_object' };
   tools?: ChatTool[];
   toolChoice?: 'auto' | 'none' | 'required';
@@ -123,7 +125,7 @@ export class OpenRouterService {
           method: 'POST',
           headers: this.requestHeaders(),
           body: JSON.stringify(requestBody),
-          signal: AbortSignal.timeout(35_000),
+          signal: AbortSignal.timeout(options.timeoutMs ?? 35_000),
         });
 
         const latencyMs = Date.now() - attemptStart;

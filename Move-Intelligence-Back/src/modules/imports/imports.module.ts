@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
+import { CatalogModule } from '../catalog/catalog.module';
 import { ProductsModule } from '../products/products.module';
-import { ProductMatchingModule } from '../product-matching/product-matching.module';
 import { ImportsController } from './imports.controller';
 import { ImportsProcessor } from './imports.processor';
 import { ImportsQueue } from './imports.queue';
@@ -9,7 +9,7 @@ import { TradeDataController } from './trade-data.controller';
 import { TradeDataService } from './trade-data.service';
 
 @Module({
-  imports: [ProductsModule, ProductMatchingModule],
+  imports: [ProductsModule, CatalogModule],
   controllers: [ImportsController, TradeDataController],
   providers: [ImportsService, ImportsProcessor, ImportsQueue, TradeDataService],
   exports: [ImportsService, TradeDataService],

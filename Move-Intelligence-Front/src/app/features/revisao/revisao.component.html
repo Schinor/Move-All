@@ -1,0 +1,89 @@
+<app-page-header title="Revisão do catálogo" />
+<div class="review-tabs">
+  <button type="button" [class.active]="tab() === 'provisional_listing'" (click)="setTab('provisional_listing')">
+    Anúncios provisórios
+    @if (queueError()) { <span aria-label="contagem indisponível">—</span> } @else { ({{ counts().provisionalListing }}) }
+  </button>
+  <button type="button" [class.active]="tab() === 'suggested_type'" (click)="setTab('suggested_type')">
+    Tipos novos sugeridos
+    @if (queueError()) { <span aria-label="contagem indisponível">—</span> } @else { ({{ counts().suggestedType }}) }
+  </button>
+</div>
+
+@if (queueError()) {
+  <div class="queue-error" role="alert">{{ queueError() }}</div>
+}
+
+@if (message()) {
+  <div class="review-message">
+    {{ message() }}
+    @if (lastDecisionId()) { <button type="button" class="link" (click)="undo()">Desfazer</button> }
+  </div>
+}
+
+@if (tab() === 'provisional_listing') {
+  @if (queueError()) {
+    <p class="empty queue-error" role="alert">{{ queueError() }}</p>
+  } @else {
+    @for (item of listingItems(); track item.id) {
+      <article class="review-item">
+        <strong>{{ item.title }}</strong>
+        <span class="meta">{{ sourceLabel(item.marketplace) || item.marketplace }}@if (item.price !== null) { · {{ item.currency === 'BRL' ? 'R$' : item.currency }} {{ item.price }} }
+          @if (item.url) { · <a [href]="item.url" target="_blank" rel="noopener">abrir anúncio</a> }</span>
+        @if (item.suggestedCard) { <div>Card sugerido: <b>{{ item.suggestedCard.name }}</b></div> }
+        <div class="reason">Motivo: {{ item.reason }}</div>
+        <div class="actions">
+          @if (item.suggestedCard) { <button type="button" data-action="confirm" (click)="confirm(item)">✓ Confirmar neste card</button> }
+          <button type="button" data-action="move" (click)="openMove(item)">Mover para outro card…</button>
+          @if (item.ficha?.typeKey && item.ficha?.typeKey !== 'unknown') { <button type="button" data-action="create" (click)="createCard(item)">Criar card novo</button> }
+          <button type="button" data-action="out" (click)="outOfScope(item)">Fora do escopo</button>
+        </div>
+        @if (moveFor() === item.id) {
+          <div class="move-box">
+            <input [(ngModel)]="moveQuery" placeholder="Buscar card pelo nome" (keyup.enter)="searchMove()" />
+            <button type="button" (click)="searchMove()">Buscar</button>
+            @for (card of moveResults(); track card.id) {
+              <button type="button" class="result" (click)="move(item, card.id)">{{ card.name }}</button>
+            }
+          </div>
+        }
+      </article>
+    } @empty {
+      <p class="empty">Nenhum anúncio aguardando revisão.</p>
+    }
+  }
+} @else {
+  @if (queueError()) {
+    <p class="empty queue-error" role="alert">{{ queueError() }}</p>
+  } @else {
+    @for (item of typeItems(); track item.id) {
+      <article class="review-item">
+        <strong>{{ item.suggestedTypeKey }}</strong> <span class="meta">sugerido {{ item.listingCount }}×</span>
+        @if (item.aliases.length > 1) { <div class="meta">também chamado de: {{ item.aliases.join(', ') }}</div> }
+        @if (item.similarTypes.length) { <div class="meta">parecido com: {{ item.similarTypes[0].key }} ({{ item.similarTypes[0].namePt }})</div> }
+        @for (s of item.samples; track s.title) { <div class="sample">• {{ s.title }}</div> }
+        <div class="actions">
+          <button type="button" (click)="openApprove(item)">Aprovar tipo</button>
+          <button type="button" (click)="merge(item)">Juntar com tipo existente…</button>
+          <button type="button" (click)="discard(item)">Descartar</button>
+        </div>
+        @if (approveFor() === item.id) {
+          <div class="approve-box">
+            <label>Família
+              <select [(ngModel)]="approveForm.familyKey">
+                @for (f of families(); track f.key) { <option [value]="f.key">{{ f.namePt }}</option> }
+              </select>
+            </label>
+            <label>Chave <input [(ngModel)]="approveForm.key" /></label>
+            <label>Nome em português <input [(ngModel)]="approveForm.namePt" /></label>
+            <label>NCM (opcional) <input [(ngModel)]="approveForm.ncm" placeholder="9506.91.00" /></label>
+            @if (approveError()) { <span class="form-error" data-role="approve-error" role="alert">{{ approveError() }}</span> }
+            <button type="button" (click)="approve(item)">Salvar tipo</button>
+          </div>
+        }
+      </article>
+    } @empty {
+      <p class="empty">Nenhum tipo novo sugerido.</p>
+    }
+  }
+}
