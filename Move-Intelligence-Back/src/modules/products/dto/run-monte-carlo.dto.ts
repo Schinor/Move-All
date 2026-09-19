@@ -23,6 +23,7 @@ export interface MonteCarloPremisesDto {
   vol_demanda?: number;
   vol_lead?: number;
   corr_cambio_lead?: number;
+  qtd_minima_pedido?: number;
 }
 
 export interface RunMonteCarloDto {
@@ -31,6 +32,7 @@ export interface RunMonteCarloDto {
   seed?: number;
   price_scan?: boolean;
   price_scan_scenarios?: number;
+  offer_key?: string;
 }
 
 export interface RunMonteCarloBatchDto {

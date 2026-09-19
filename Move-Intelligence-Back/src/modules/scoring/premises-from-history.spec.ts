@@ -156,4 +156,42 @@ describe('derivePremisesFromHistory (F2.2)', () => {
 
     expect(dataConfidence).toBe('historico_curto');
   });
+
+  it('B-D7: custo mediano usa o preço no MOQ (price_max) dos fornecedores', () => {
+    const observations = [
+      obs(0, 100),
+      obs(1, 100),
+      obs(2, 100),
+      obs(3, 100),
+      {
+        listingKey: '1688:a',
+        marketplace: '1688',
+        currency: 'USD',
+        priceMin: 10,
+        priceMax: 20,
+        salesSignal: null,
+        collectedAt: new Date('2026-08-25'),
+      },
+      {
+        listingKey: '1688:b',
+        marketplace: '1688',
+        currency: 'USD',
+        priceMin: 12,
+        priceMax: 22,
+        salesSignal: null,
+        collectedAt: new Date('2026-08-26'),
+      },
+      {
+        listingKey: 'alibaba:c',
+        marketplace: 'alibaba',
+        currency: 'USD',
+        priceMin: 14,
+        priceMax: null,
+        salesSignal: null,
+        collectedAt: new Date('2026-08-27'),
+      },
+    ];
+    const result = derivePremisesFromHistory(observations, { fxCnyUsd: 0.14 });
+    expect(result.premises?.custo_usd).toBe(20);
+  });
 });

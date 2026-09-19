@@ -27,6 +27,11 @@ export class ProductsController {
     return this.products.getSuppliers(id);
   }
 
+  @Get(':id/offers')
+  getOffers(@Param('id') id: string) {
+    return this.products.getOffers(id);
+  }
+
   @Get(':id/price-history')
   getPriceHistory(
     @Param('id') id: string,
@@ -61,8 +66,8 @@ export class ProductsController {
   }
 
   @Get(':id/monte-carlo/defaults')
-  getMonteCarloDefaults(@Param('id') id: string) {
-    return this.products.getMonteCarloDefaults(id);
+  getMonteCarloDefaults(@Param('id') id: string, @Query('offer_key') offerKey?: string) {
+    return this.products.getMonteCarloDefaults(id, offerKey || undefined);
   }
 
   @Post(':id/monte-carlo')

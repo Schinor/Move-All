@@ -90,3 +90,30 @@ def test_resposta_traz_hash_e_versao():
     response = json.loads(run_script(base_payload()).stdout)
     assert response["data_version"] == "premises@1"
     assert len(response["premises_hash"]) == 64
+
+
+def test_moq_zero_preserva_resposta_anterior():
+    legado = run_script(base_payload())
+    com_zero = run_script(base_payload(premises={"qtd_minima_pedido": 0}))
+    assert legado.returncode == 0 and com_zero.returncode == 0
+    assert json.loads(legado.stdout) == json.loads(com_zero.stdout)
+    assert "qtd_minima_pedido" not in json.loads(legado.stdout)["premises"]
+
+
+def test_moq_alto_aumenta_capital_e_reduz_vpl():
+    base = json.loads(run_script(base_payload()).stdout)
+    alto = json.loads(run_script(base_payload(premises={"qtd_minima_pedido": 50000})).stdout)
+    assert alto["capital_primeiro_pedido"] > base["capital_primeiro_pedido"]
+    assert alto["metrics"]["vpl_mediano"] < base["metrics"]["vpl_mediano"]
+    assert alto["premises"]["qtd_minima_pedido"] == 50000
+
+
+def test_capital_primeiro_pedido_presente_e_positivo():
+    resposta = json.loads(run_script(base_payload()).stdout)
+    assert resposta["capital_primeiro_pedido"] > 0
+
+
+def test_moq_negativo_e_rejeitado():
+    resultado = run_script(base_payload(premises={"qtd_minima_pedido": -1}))
+    assert resultado.returncode == 1
+    assert "qtd_minima_pedido" in json.loads(resultado.stdout)["error"]

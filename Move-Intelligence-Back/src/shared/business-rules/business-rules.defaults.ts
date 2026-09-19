@@ -90,4 +90,8 @@ export const DEFAULT_BUSINESS_RULES = {
     highImportCostPct: 70,
     highInvestmentMonths: 2,
   },
+  // Subprojeto B: oferta com custo < 30% da mediana do card fica sem score (preço de isca).
+  offers: {
+    suspiciousPriceRatio: 0.3,
+  },
 } as const;

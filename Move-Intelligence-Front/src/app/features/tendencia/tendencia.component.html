@@ -266,24 +266,47 @@
       }
 
       @case ('sourcing') {
-        <section class="block">
-          <h2>Fornecedores do cluster</h2>
-          <p class="detected-line">
-            <span>Detectado em</span>
-            {{ detectedText($any(product()).data) }}
-          </p>
-          @if ($any(product()).data.topSupplier; as top) {
-            <article class="top-supplier surface-panel">
-              <h3>Fornecedor de alto volume</h3>
-              <p><strong>{{ top.name }}</strong> · {{ sourceName(top.source) }}@if (top.verified) { · Verificado }@if (top.years !== null && top.years !== undefined) { · {{ top.years }} anos }</p>
-            </article>
-          }
-          @switch (suppliers().status) {
+        <section class="block offers-block">
+          <h2>Ofertas de fornecedores</h2>
+          @switch (offers().status) {
             @case ('ready') {
-              <app-supplier-comparison-table [suppliers]="$any(suppliers()).data" />
+              @if ($any(offers()).data; as data) {
+                <div class="offers-summary">
+                  <div><span>Score do card</span><strong>{{ data.card.score ?? '—' }}</strong>
+                    @if (data.card.unitCostUsd !== null) { <small>custo mediano US$ {{ data.card.unitCostUsd | number: '1.2-2' }}</small> }</div>
+                  <div><span>Melhor oferta</span>
+                    @if (data.bestOfferKey) {
+                      @for (o of data.offers; track o.key) { @if (o.key === data.bestOfferKey) { <strong class="offer-best">{{ o.score }}</strong><small>{{ o.sellerName ?? o.marketplace }}</small> } }
+                    } @else { <strong>—</strong> }</div>
+                  <div><span>Ofertas</span><strong>{{ data.offers.length }}</strong><small>{{ offerStoreCount(data.offers) }} lojas</small></div>
+                </div>
+                <div class="table-scroll">
+                  <table class="offers-table">
+                    <thead><tr><th>Score</th><th>Oferta</th><th>Fonte</th><th>Preço no MOQ</th><th>MOQ</th><th>Capital 1º pedido</th><th>P(VPL&gt;0)</th><th>Nota</th><th></th></tr></thead>
+                    <tbody>
+                      @for (o of data.offers; track o.key) {
+                        <tr>
+                          <td>@if (o.score !== null) { <strong>{{ o.score }}</strong> } @else { <span class="muted">{{ offerStateLabel(o.state) }}</span> }</td>
+                          <td>{{ offerLabel(o) }}</td>
+                          <td>{{ sourceName(o.marketplace) }}</td>
+                          <td>@if (o.unitCostUsd !== null) { US$ {{ o.unitCostUsd | number: '1.2-2' }} } @else { — }</td>
+                          <td>{{ o.moq | number }}</td>
+                          <td>@if (o.capitalPrimeiroPedido !== null) { R$ {{ o.capitalPrimeiroPedido | number: '1.0-0' }} } @else { — }</td>
+                          <td>@if (o.pVplPositivo !== null) { {{ o.pVplPositivo * 100 | number: '1.0-0' }}% } @else { — }</td>
+                          <td>{{ o.rating ?? '—' }}</td>
+                          <td class="offer-actions">
+                            @if (o.state === 'com_score') { <button type="button" (click)="simulateOffer(o)">Simular</button> }
+                            @if (o.url) { <a [href]="o.url" target="_blank" rel="noopener">abrir</a> }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
             }
             @default {
-              <app-state-panel [state]="suppliers()" emptyMessage="Nenhum fornecedor mapeado ainda." />
+              <app-state-panel [state]="offers()" emptyMessage="Nenhuma oferta de fornecedor neste card." />
             }
           }
         </section>
@@ -333,6 +356,18 @@
               </button>
             </div>
           </div>
+
+          @if (simulatableOffers().length > 0) {
+            <div class="offer-selector" role="group" aria-label="Simular com">
+              <span>Simular com:</span>
+              <button type="button" [class.active]="selectedOfferKey() === null" (click)="selectSimulationOffer(null)">Card (custo mediano)</button>
+              @for (o of simulatableOffers(); track o.key) {
+                <button type="button" [class.active]="selectedOfferKey() === o.key" (click)="selectSimulationOffer(o.key)">
+                  {{ o.sellerName ?? o.marketplace }} — US$ {{ o.unitCostUsd | number: '1.2-2' }}, MOQ {{ o.moq | number }}
+                </button>
+              }
+            </div>
+          }
 
           @switch (simulationDefaults().status) {
             @case ('ready') {

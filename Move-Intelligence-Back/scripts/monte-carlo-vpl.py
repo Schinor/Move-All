@@ -66,6 +66,9 @@ class Premissas:
     # antes da curva de rampa. Zero por padrão (resultado idêntico ao anterior).
     crescimento_demanda_mensal: float = 0.0
     vol_crescimento: float = 0.0
+    # Pedido mínimo do fornecedor (Subprojeto B): o 1º pedido nunca é menor
+    # que o MOQ. Zero = comportamento anterior (resultado bit a bit idêntico).
+    qtd_minima_pedido: float = 0.0
 
     def __post_init__(self):
         h = int(max(1, self.horizonte_meses))
@@ -176,7 +179,7 @@ class SimuladorVPL:
         demanda = np.maximum(dem_crescimento * (1 + p.vol_demanda * z_demanda), 0.0)
 
         dem_planejada = p.demanda_referencia * (p.preco_referencia / p.preco_venda) ** p.elasticidade
-        qty = np.round(dem_planejada * (1 + p.folga_estoque))
+        qty = np.maximum(np.round(dem_planejada * (1 + p.folga_estoque)), p.qtd_minima_pedido)
 
         custo_usd_efetivo = p.custo_usd * (p.cambio_cny_usd if p.moeda_custo == "CNY" else 1.0)
         custo_unit = custo_usd_efetivo * cambio
@@ -228,6 +231,7 @@ NUMERIC_PREMISES = (
     "custo_fixo_mensal", "lead_time_dias", "fracao_salvage", "vol_cambio",
     "vol_preco", "vol_demanda", "vol_lead", "corr_cambio_lead",
     "cambio_cny_usd", "crescimento_demanda_mensal", "vol_crescimento",
+    "qtd_minima_pedido",
 )
 
 
@@ -241,7 +245,7 @@ def validar_premissas(premissas: Premissas) -> None:
             raise ValueError(f"Premissa {campo!r} inválida (NaN ou infinita)")
     for campo in (
         "preco_venda", "preco_referencia", "demanda_referencia", "custo_usd",
-        "cambio_base", "cambio_cny_usd", "vol_crescimento",
+        "cambio_base", "cambio_cny_usd", "vol_crescimento", "qtd_minima_pedido",
     ):
         if getattr(premissas, campo) < 0:
             raise ValueError(f"Premissa {campo!r} não pode ser negativa")
@@ -252,9 +256,15 @@ def validar_premissas(premissas: Premissas) -> None:
 
 
 def premises_dict(premissas: Premissas) -> Dict[str, object]:
-    """Premissas efetivas como dict JSON-estável (listas, sem tuplas)."""
+    """Premissas efetivas como dict JSON-estável (listas, sem tuplas).
+
+    `qtd_minima_pedido = 0` é omitido para manter o hash das premissas
+    idêntico ao de antes do Subprojeto B.
+    """
     data = dict(premissas.__dict__)
     data["curva_rampa"] = list(premissas.curva_rampa)
+    if not data.get("qtd_minima_pedido"):
+        data.pop("qtd_minima_pedido", None)
     return data
 
 
@@ -262,6 +272,15 @@ def premises_hash(payload: Mapping[str, object] | Dict[str, object]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
     ).hexdigest()
+
+
+def capital_primeiro_pedido(p: Premissas) -> float:
+    """Capital do 1º pedido em BRL no câmbio base (sem choques): qty × custo posto."""
+    dem_planejada = p.demanda_referencia * (p.preco_referencia / p.preco_venda) ** p.elasticidade
+    qty = max(float(np.round(dem_planejada * (1 + p.folga_estoque))), float(p.qtd_minima_pedido))
+    custo_usd_efetivo = p.custo_usd * (p.cambio_cny_usd if p.moeda_custo == "CNY" else 1.0)
+    landed = custo_usd_efetivo * p.cambio_base * (1 + p.imposto_importacao) + p.frete_usd_unidade * p.cambio_base
+    return float(qty * landed)
 
 
 def _rank(a: np.ndarray) -> np.ndarray:
@@ -354,6 +373,7 @@ def main():
         # B1: Move Score = P(VPL>0)*100. Faixa (green/yellow/red, 70/50) é
         # aplicada no backend via business-rules (nunca 85/70 aqui).
         "financial_score": round(metricas["p_vpl_positivo"] * 100),
+        "capital_primeiro_pedido": capital_primeiro_pedido(premissas),
         # B4: contribuição de cada choque para a variância do VPL (adicional;
         # com a mesma seed, as métricas não mudam).
         "risk_drivers": drivers,

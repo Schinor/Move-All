@@ -53,6 +53,7 @@ export const PREMISE_SOURCE_LABEL: Record<string, string> = {
   derived_default: 'Derivado dos dados',
   csv: 'Base coletada',
   ai_suggestion: 'Sugerido pela IA',
+  offer: 'Oferta selecionada',
 };
 
 export function premiseSourceLabel(value: string | null | undefined): string {

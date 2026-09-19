@@ -4,6 +4,7 @@ import { ApiClient } from '../api/api-client';
 import { ReviewSentiment, ExecutiveRecommendationItem,
   DEFAULT_WINDOW,
   AiRecommendationResult,
+  CardOffers,
   MonteCarloAiPremisesRequest,
   MonteCarloAiPremisesResult,
   MonteCarloDefaults,
@@ -78,8 +79,15 @@ export class TrendsService {
     return this.api.get<Supplier[]>(`/products/${id}/suppliers`);
   }
 
-  monteCarloDefaults(id: string): Observable<MonteCarloDefaults> {
-    return this.api.get<MonteCarloDefaults>(`/products/${id}/monte-carlo/defaults`);
+  offers(id: string): Observable<CardOffers> {
+    return this.api.get<CardOffers>(`/products/${id}/offers`);
+  }
+
+  monteCarloDefaults(id: string, offerKey?: string): Observable<MonteCarloDefaults> {
+    return this.api.get<MonteCarloDefaults>(
+      `/products/${id}/monte-carlo/defaults`,
+      offerKey ? { offer_key: offerKey } : undefined,
+    );
   }
 
   monteCarloSimulation(

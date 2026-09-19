@@ -381,6 +381,74 @@
   color: var(--text);
 }
 
+.offers-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+
+.offers-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.offers-summary span,
+.offers-summary small {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.offers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.offers-table th,
+.offers-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.offers-table .muted {
+  color: var(--text-3);
+}
+
+.offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.offer-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.offer-selector button {
+  padding: 4px 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.offer-selector button.active {
+  border-color: var(--brand);
+}
+
 .tab-grid,
 .decision-grid {
   display: grid;

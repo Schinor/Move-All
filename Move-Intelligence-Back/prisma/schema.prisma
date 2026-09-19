@@ -256,6 +256,7 @@ model ProductCluster {
   snapshots       ProductListingSnapshot[]
   alerts          Alert[]
   scores          ProductScore[]
+  offerScores     OfferScore[]
   matchReviews    ProductMatchReview[]
   aiRecommendations AiRecommendation[]
   reviewSummaries ReviewSummary[]
@@ -436,6 +437,30 @@ model ProductScore {
 
   @@index([productClusterId, computedAt])
   @@map("product_scores")
+}
+
+model OfferScore {
+  id                    String         @id @default(uuid()) @db.Uuid
+  productClusterId      String         @map("product_cluster_id") @db.Uuid
+  marketplace           String
+  externalProductId     String         @map("external_product_id")
+  score                 Int?
+  state                 String
+  unitCostUsd           Decimal?       @map("unit_cost_usd") @db.Decimal(14, 4)
+  moq                   Int
+  capitalPrimeiroPedido Float?         @map("capital_primeiro_pedido")
+  pVplPositivo          Float?         @map("p_vpl_positivo")
+  vplMediano            Float?         @map("vpl_mediano")
+  cvar5                 Float?
+  premises              Json           @default("{}")
+  premisesHash          String         @default("") @map("premises_hash")
+  dataVersion           String         @map("data_version")
+  scenarioCount         Int            @default(0) @map("scenario_count")
+  computedAt            DateTime       @default(now()) @map("computed_at")
+  cluster               ProductCluster @relation(fields: [productClusterId], references: [id], onDelete: Cascade)
+
+  @@index([productClusterId, marketplace, externalProductId, computedAt], map: "offer_scores_cluster_offer_computed_idx")
+  @@map("offer_scores")
 }
 
 /// Resumo de avaliações por faixa (B5, decisão 10): 1–2 baixo, 3 neutro,

@@ -10,6 +10,8 @@
  * (o lote oficial F2.4 grava apenas a confiança nesses casos).
  */
 
+import { offerUnitCostUsd, SUPPLIER_MARKETPLACES } from '../products/offers/offer-rules';
+
 export interface HistoryObservation {
   /** Chave estável do anúncio (ex.: `marketplace:nativeId`). */
   listingKey: string;
@@ -17,6 +19,7 @@ export interface HistoryObservation {
   currency?: string | null;
   /** Preço à vista observado. */
   priceMin: number | null;
+  priceMax?: number | null;
   /** Vendas mensais estimadas do anúncio. */
   salesSignal: number | null;
   collectedAt: Date;
@@ -50,9 +53,6 @@ const MIN_HISTORY_DAYS = 21;
 const WINDOW_DAYS = 28;
 const MIN_VALID_BUCKETS = 3;
 const DAYS_PER_MONTH = 30.44;
-
-// Custo só de atacado (1688/Alibaba/AliExpress); nunca varejo BR (F2.2, A4).
-const COST_MARKETPLACES = ['1688', 'alibaba', 'aliexpress'];
 
 function isBrPrice(obs: HistoryObservation): boolean {
   if (obs.currency === 'BRL') return true;
@@ -184,13 +184,8 @@ export function derivePremisesFromHistory(
   const vol_preco = brPrices.length >= 2 ? std(brPrices) / mean(brPrices) : 0;
 
   const costUsd = inWindow
-    .filter((obs) => COST_MARKETPLACES.includes(obs.marketplace))
-    .map((obs) => {
-      if (obs.priceMin === null || obs.priceMin === undefined || obs.priceMin <= 0) return null;
-      if (obs.currency === 'CNY') return obs.priceMin * opts.fxCnyUsd;
-      if (obs.currency === 'USD' || !obs.currency) return obs.priceMin;
-      return null;
-    })
+    .filter((obs) => (SUPPLIER_MARKETPLACES as readonly string[]).includes(obs.marketplace))
+    .map((obs) => offerUnitCostUsd({ priceMin: obs.priceMin, priceMax: obs.priceMax, currency: obs.currency }, opts.fxCnyUsd))
     .filter((price): price is number => price !== null && price > 0);
   const custoMediano = median(costUsd);
   if (custoMediano === null) {

@@ -1,3 +1,4 @@
+import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { toObservable } from '@angular/core/rxjs-interop';
@@ -6,6 +7,8 @@ import { map, switchMap } from 'rxjs/operators';
 import { AsyncState, toAsyncState } from '../../core/api/async-state';
 import { TrendsService } from '../../core/services/trends.service';
 import {
+  CardOffer,
+  CardOffers,
   DEFAULT_WINDOW,
   MonteCarloAiPremisesResult,
   MonteCarloDefaults,
@@ -25,7 +28,6 @@ import { ScoreGaugeComponent } from '../../shared/components/intel/score-gauge/s
 import { OpportunityRadarComponent } from '../../shared/components/intel/opportunity-radar/opportunity-radar.component';
 import { AdoptionCurveChartComponent } from '../../shared/components/intel/adoption-curve-chart/adoption-curve-chart.component';
 import { ReviewSentimentChartComponent } from '../../shared/components/intel/review-sentiment-chart/review-sentiment-chart.component';
-import { SupplierComparisonTableComponent } from '../../shared/components/intel/supplier-comparison-table/supplier-comparison-table.component';
 import { AiRecommendationCardComponent } from '../../shared/components/intel/ai-recommendation-card/ai-recommendation-card.component';
 import { SignalSourceCardComponent } from '../../shared/components/intel/signal-source-card/signal-source-card.component';
 import { MonteCarloHistogramComponent } from '../../shared/components/intel/monte-carlo-histogram/monte-carlo-histogram.component';
@@ -39,6 +41,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { comparisonCountText, listingsText } from '../../shared/util/card-format';
 import { categoryLabel, dataConfidenceLabel, decisionLabel, premiseSourceLabel, actionTooltip, scoreBandLabel, socialSignalLabel, sourceLabel } from '../../shared/util/format';
+import { offerLabel, offerStateLabel, offerStoreCount } from '../../shared/util/offer-format';
 
 type PremiseKey = keyof MonteCarloPremises;
 
@@ -64,7 +67,6 @@ interface PremiseField {
     OpportunityRadarComponent,
     AdoptionCurveChartComponent,
     ReviewSentimentChartComponent,
-    SupplierComparisonTableComponent,
     AiRecommendationCardComponent,
     MonteCarloHistogramComponent,
     PriceCurveChartComponent,
@@ -73,6 +75,7 @@ interface PremiseField {
     CardListingsTableComponent,
     SeasonalityForecastComponent,
     IconComponent,
+    DecimalPipe,
   ],
   templateUrl: './tendencia.component.html',
   styleUrl: './tendencia.component.css',
@@ -88,7 +91,12 @@ export class TendenciaComponent {
   readonly activeTab = signal('adoption');
   readonly simulation = signal<AsyncState<MonteCarloSimulationResult> | null>(null);
   readonly aiPremises = signal<AsyncState<MonteCarloAiPremisesResult> | null>(null);
-  readonly simulationDefaults = toAsyncState(this.trends.monteCarloDefaults(this.id));
+  readonly selectedOfferKey = signal<string | null>(null);
+  readonly simulationDefaults = toAsyncState(
+    toObservable(this.selectedOfferKey).pipe(
+      switchMap((key) => this.trends.monteCarloDefaults(this.id, key ?? undefined)),
+    ),
+  );
   readonly premiseForm = signal<Partial<Record<PremiseKey, number>>>({});
   readonly scenarioCount = signal(1_000_000);
   readonly priceScan = signal(true);
@@ -98,7 +106,7 @@ export class TendenciaComponent {
     { id: 'economics', label: 'Unit Economics' },
     { id: 'competitors', label: 'Anúncios' },
     { id: 'seasonality', label: 'Sazonalidade' },
-    { id: 'sourcing', label: 'Sourcing' },
+    { id: 'sourcing', label: 'Ofertas' },
     { id: 'simulation', label: 'Simulação' },
     { id: 'decision', label: 'Decisão' },
   ];
@@ -114,7 +122,14 @@ export class TendenciaComponent {
     const target = (this.product() as unknown as { data?: { mergedIntoId?: string } })?.data?.mergedIntoId;
     if (target && typeof window !== 'undefined') window.location.replace(`/tendencia/${target}`);
   });
-  readonly suppliers = toAsyncState(this.trends.suppliers(this.id));
+  readonly offers = toAsyncState(this.trends.offers(this.id), (v: CardOffers) => v.offers.length === 0);
+  readonly offerLabel = offerLabel;
+  readonly offerStateLabel = offerStateLabel;
+  readonly offerStoreCount = offerStoreCount;
+  readonly simulatableOffers = computed(() => {
+    const state = this.offers();
+    return state.status === 'ready' ? state.data.offers.filter((o) => o.state === 'com_score') : [];
+  });
   private readonly historyParams$ = combineLatest([toObservable(this.window), toObservable(this.comparePrevious)]).pipe(
     map(([w, c]) => ({ w, c: c ? ('previous' as const) : undefined })),
   );
@@ -170,6 +185,7 @@ export class TendenciaComponent {
       title: 'Importação',
       fields: [
         { key: 'custoUsd', label: 'Custo unitário (US$)', step: '0.01' },
+        { key: 'qtdMinimaPedido', label: 'Pedido mínimo (un.)', step: '1' },
         { key: 'freteUsdUnidade', label: 'Frete internacional (US$)', step: '0.01' },
         { key: 'impostoImportacao', label: 'Imposto importação', step: '0.01' },
         { key: 'cambioBase', label: 'Câmbio USD/BRL', step: '0.01' },
@@ -258,6 +274,18 @@ export class TendenciaComponent {
     this.activeTab.set(tab);
   }
 
+  selectSimulationOffer(key: string | null): void {
+    this.selectedOfferKey.set(key);
+    this.premiseForm.set({});
+    this.simulation.set(null);
+    this.aiPremises.set(null);
+  }
+
+  simulateOffer(offer: CardOffer): void {
+    this.selectSimulationOffer(offer.key);
+    this.setTab('simulation');
+  }
+
   setHistoryMetric(metric: 'volume' | 'price' | 'review'): void {
     this.historyMetric.set(metric);
   }
@@ -328,6 +356,7 @@ export class TendenciaComponent {
       scenario_count: this.scenarioCount(),
       price_scan: this.priceScan(),
       price_scan_scenarios: 4_000,
+      offer_key: this.selectedOfferKey() ?? undefined,
     };
     this.simulation.set({ status: 'loading' });
     this.trends.monteCarloSimulation(this.id, request).subscribe({

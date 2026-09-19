@@ -165,6 +165,37 @@ describe('ProductsService — runMonteCarloSimulation (S7)', () => {
     );
     expect(cache.delPattern).toHaveBeenCalledWith('dashboard:trends:products:*');
   });
+
+  it('B: offer_key troca custo e MOQ e NÃO grava score oficial', async () => {
+    const { service, prisma } = buildMonteCarloService();
+    const runPython = jest.spyOn(service as never, 'runMonteCarloPython');
+    runPython.mockResolvedValue({
+      risk_level: 'Baixo',
+      financial_score: 91,
+    } as never);
+    jest.spyOn(service as never, 'offerRepo', 'get').mockReturnValue({
+      listOfferListings: jest.fn().mockResolvedValue([
+        { key: 'alibaba:A', marketplace: 'alibaba', externalProductId: 'A', itemStatus: 'confirmed', priceMin: 90, priceMax: 96, currency: 'USD', moq: 50 },
+      ]),
+    } as never);
+    jest.spyOn(service as never, 'fxCnyUsd').mockResolvedValue(0.14 as never);
+
+    const out = await service.runMonteCarloSimulation('cluster-1', { offer_key: 'alibaba:A' });
+
+    expect(runPython).toHaveBeenCalledWith(expect.objectContaining({
+      premises: expect.objectContaining({ custo_usd: 96, qtd_minima_pedido: 50 }),
+    }));
+    expect(out.is_user_scenario).toBe(true);
+    expect(prisma.productCluster.update).not.toHaveBeenCalled();
+  });
+
+  it('B: offer_key inexistente → 400', async () => {
+    const { service } = buildMonteCarloService();
+    jest.spyOn(service as never, 'offerRepo', 'get').mockReturnValue({
+      listOfferListings: jest.fn().mockResolvedValue([]),
+    } as never);
+    await expect(service.runMonteCarloSimulation('cluster-1', { offer_key: 'alibaba:X' })).rejects.toThrow('Oferta não encontrada');
+  });
 });
 
 // F2.4: o lote oficial deriva premissas do histórico (F2.2), roda 50.000
@@ -207,6 +238,9 @@ describe('ProductsService — simulateBatchForRanking oficial (F2.4)', () => {
       },
       productScore: { create: jest.fn().mockResolvedValue({}) },
       exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
+      productClusterItem: { findMany: jest.fn().mockResolvedValue([]) },
+      productListingSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      offerScore: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn().mockResolvedValue({}) },
     };
     const cache = { delPattern: jest.fn().mockResolvedValue(undefined) };
 
@@ -299,6 +333,87 @@ describe('ProductsService — simulateBatchForRanking oficial (F2.4)', () => {
     });
   });
 
+  it('B: simula cada oferta com custo e MOQ dela e grava offer_scores', async () => {
+    const snapshots = [
+      snapshot(0, { salesSignalRaw: 100 }),
+      snapshot(1, { salesSignalRaw: 110 }),
+      snapshot(2, { salesSignalRaw: 120 }),
+      snapshot(3, { salesSignalRaw: 130 }),
+      {
+        marketplace: '1688',
+        currency: 'USD',
+        priceMin: 100,
+        priceMax: 110,
+        salesSignalRaw: null,
+        salesSignalType: null,
+        reviewCount: null,
+        rating: null,
+        moq: 50,
+        collectedAt: new Date(BASE + 21 * DAY),
+        externalProductId: 'C1',
+        sellerName: null,
+      },
+    ];
+    const { service, prisma, runPython } = buildBatchService(snapshots);
+    prisma.productClusterItem.findMany.mockResolvedValue([
+      { marketplace: '1688', externalProductId: 'C1', status: 'confirmed' },
+      { marketplace: 'alibaba', externalProductId: 'C2', status: 'auto' },
+      { marketplace: 'alibaba', externalProductId: 'C3', status: 'confirmed' },
+    ]);
+    prisma.productListingSnapshot.findMany.mockResolvedValue([
+      { marketplace: '1688', externalProductId: 'C1', title: 't1', sellerName: 'X', productUrl: null, priceMin: 100, priceMax: 110, currency: 'USD', moq: 50, rating: null, salesSignalRaw: null, collectedAt: new Date(BASE + 21 * DAY) },
+      { marketplace: 'alibaba', externalProductId: 'C2', title: 't2', sellerName: 'Y', productUrl: null, priceMin: null, priceMax: null, currency: 'USD', moq: 10, rating: null, salesSignalRaw: null, collectedAt: new Date(BASE + 21 * DAY) },
+      { marketplace: 'alibaba', externalProductId: 'C3', title: 't3', sellerName: 'Z', productUrl: null, priceMin: 5, priceMax: 5, currency: 'USD', moq: 10, rating: null, salesSignalRaw: null, collectedAt: new Date(BASE + 21 * DAY) },
+    ]);
+
+    await service.simulateBatchForRanking(10);
+
+    // 1 chamada do card + 1 da oferta C1 (C2 sem preço, C3 suspeito: sem Python)
+    expect(runPython).toHaveBeenCalledTimes(2);
+    expect(runPython).toHaveBeenLastCalledWith(expect.objectContaining({
+      premises: expect.objectContaining({ custo_usd: 110, qtd_minima_pedido: 50 }),
+      scenario_count: 50_000, seed: 7, price_scan: false,
+    }));
+    const states = prisma.offerScore.create.mock.calls.map((call: any[]) => [call[0].data.externalProductId, call[0].data.state]);
+    expect(states).toEqual(expect.arrayContaining([['C1', 'com_score'], ['C2', 'sem_preco'], ['C3', 'suspeito']]));
+  });
+
+  it('B: falha na oferta não derruba o card', async () => {
+    const snapshots = [
+      snapshot(0, { salesSignalRaw: 100 }), snapshot(1, { salesSignalRaw: 110 }),
+      snapshot(2, { salesSignalRaw: 120 }), snapshot(3, { salesSignalRaw: 130 }),
+      {
+        marketplace: '1688',
+        currency: 'USD',
+        priceMin: 100,
+        priceMax: 110,
+        salesSignalRaw: null,
+        salesSignalType: null,
+        reviewCount: null,
+        rating: null,
+        moq: 50,
+        collectedAt: new Date(BASE + 21 * DAY),
+        externalProductId: 'C1',
+        sellerName: null,
+      },
+    ];
+    const { service, prisma } = buildBatchService(snapshots);
+    prisma.productClusterItem.findMany.mockRejectedValue(new Error('boom'));
+
+    const summary = await service.simulateBatchForRanking(10);
+
+    expect(summary.simulated).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(prisma.productScore.create).toHaveBeenCalled();
+  });
+
+  it('B: card sem premissas não simula ofertas', async () => {
+    const { service, prisma } = buildBatchService([]);
+    await service.simulateBatchForRanking(10);
+    expect(prisma.productClusterItem.findMany).not.toHaveBeenCalled();
+    expect(prisma.offerScore.create).not.toHaveBeenCalled();
+  });
+
   it('simulateBatchForRanking não considera cards provisórios nem merged', async () => {
     const prisma = {
       productCluster: { findMany: jest.fn().mockResolvedValue([]) },
@@ -313,6 +428,65 @@ describe('ProductsService — simulateBatchForRanking oficial (F2.4)', () => {
     expect(prisma.productCluster.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ cardStatus: { notIn: ['provisional', 'merged'] } }),
     }));
+  });
+});
+
+describe('ProductsService — getOffers (Subprojeto B)', () => {
+  function build(latestScore: unknown, listings: unknown[], scores: Map<string, unknown>) {
+    const prisma = {
+      productCluster: { findUnique: jest.fn().mockResolvedValue({ id: 'card-1' }) },
+      productScore: { findFirst: jest.fn().mockResolvedValue(latestScore) },
+      exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new ProductsService(prisma as unknown as PrismaService, {} as OpenRouterService);
+    jest.spyOn(service as never, 'offerRepo', 'get').mockReturnValue({
+      listOfferListings: jest.fn().mockResolvedValue(listings),
+      latestOfferScores: jest.fn().mockResolvedValue(scores),
+    } as never);
+    jest.spyOn(service as never, 'fxCnyUsd').mockResolvedValue(0.14 as never);
+    return service;
+  }
+  const listing = (id: string, over: Record<string, unknown> = {}) => ({
+    key: `alibaba:${id}`, marketplace: 'alibaba', externalProductId: id, itemStatus: 'confirmed',
+    title: `t${id}`, sellerName: `S${id}`, url: null, priceMin: 90, priceMax: 100, currency: 'USD',
+    moq: 10, rating: 4.5, salesSignal: 10, collectedAt: new Date('2026-09-10'), ...over,
+  });
+
+  it('ordena por score, aponta a melhor oferta e marca aguardando_lote', async () => {
+    const service = build(
+      { score: 74, dataConfidence: 'suficiente', premises: { custo_usd: 110 } },
+      [listing('A'), listing('B'), listing('C')],
+      new Map([
+        ['alibaba:A', { key: 'alibaba:A', score: 60, state: 'com_score', unitCostUsd: 100, moq: 10, capitalPrimeiroPedido: 1000, pVplPositivo: 0.6, computedAt: new Date() }],
+        ['alibaba:B', { key: 'alibaba:B', score: 81, state: 'com_score', unitCostUsd: 100, moq: 10, capitalPrimeiroPedido: 900, pVplPositivo: 0.8, computedAt: new Date() }],
+      ]),
+    );
+    const out = await service.getOffers('card-1');
+    expect(out.card).toEqual({ score: 74, unit_cost_usd: 110, data_confidence: 'suficiente' });
+    expect(out.best_offer_key).toBe('alibaba:B');
+    expect(out.offers.map((o) => o.key)).toEqual(['alibaba:B', 'alibaba:A', 'alibaba:C']);
+    expect(out.offers[2]).toMatchObject({ state: 'aguardando_lote', score: null, unit_cost_usd: 100 });
+  });
+
+  it('card sem score → ofertas com preço ficam sem_score_card', async () => {
+    const service = build(
+      { score: null, dataConfidence: 'historico_curto', premises: {} },
+      [listing('A'), listing('B', { priceMin: null, priceMax: null })],
+      new Map(),
+    );
+    const out = await service.getOffers('card-1');
+    expect(out.best_offer_key).toBeNull();
+    expect(out.offers.map((o) => o.state).sort()).toEqual(['sem_preco', 'sem_score_card']);
+  });
+
+  it('sem registro e com preço de isca → suspeito calculado na hora', async () => {
+    const service = build(
+      { score: 74, dataConfidence: 'suficiente', premises: { custo_usd: 110 } },
+      [listing('A', { priceMin: 5, priceMax: 5 })],
+      new Map(),
+    );
+    const out = await service.getOffers('card-1');
+    expect(out.offers[0].state).toBe('suspeito');
   });
 });
 
@@ -516,8 +690,9 @@ describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
 
     expect(openRouter.chatCompletion).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ responseFormat: { type: 'json_object' }, maxTokens: 1500 }),
+      expect.objectContaining({ maxTokens: 1500 }),
     );
+    expect(openRouter.chatCompletion.mock.calls[0][1]).not.toHaveProperty('responseFormat');
     expect(result.action).toBe('DECIDIR_AGORA');
     expect(result.rationale).toContain('Move Score 82');
     expect(result.rationale).not.toContain('```');
@@ -531,14 +706,14 @@ describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
   });
 
   it('JSON válido usa o rationale da IA mas mantém a ação das regras', async () => {
-    const { service } = buildAiService(
-      JSON.stringify({
-        action: 'IGNORAR',
-        rationale: 'Margem apertada no custo atual.',
-        key_drivers: ['custo alto'],
-        recommended_next_step: 'Renegociar.',
-      }),
-    );
+    const { service } = buildAiService(`Aqui está a análise em texto:\n\`\`\`json
+${JSON.stringify({
+  action: 'IGNORAR',
+  rationale: 'Margem apertada no custo atual.',
+  key_drivers: ['custo alto'],
+  recommended_next_step: 'Renegociar.',
+})}
+\`\`\``);
 
     const result = await service.getAiRecommendation('c1');
 

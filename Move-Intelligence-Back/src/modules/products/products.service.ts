@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -22,6 +23,8 @@ import {
 import { MONTE_CARLO_ANALYST_SYSTEM_PROMPT } from './monte-carlo-ai.prompt';
 import { OpenRouterService } from '../ai-gateway/openrouter.service';
 import { DEFAULT_BUSINESS_RULES } from '../../shared/business-rules/business-rules.defaults';
+import { OfferRepository } from './offers/offer-repository';
+import { normalizedMoq, offerState, offerUnitCostUsd, parseOfferKey, sortOffers } from './offers/offer-rules';
 import { computeMomentum } from '../scoring/momentum';
 import { classifyQuadrant, scoreBandFromScore } from '../scoring/decision-quadrant';
 import { buildRiskExplanation } from '../scoring/risk-explanation';
@@ -52,7 +55,8 @@ type PremiseSource =
   | 'default'
   | 'derived_default'
   | 'override'
-  | 'ai_suggestion';
+  | 'ai_suggestion'
+  | 'offer';
 
 type MonteCarloPremises = Required<MonteCarloPremisesDto>;
 
@@ -65,6 +69,7 @@ type ClusterForSimulation = {
     marketplace: string;
     currency?: string | null;
     priceMin: unknown;
+    priceMax?: unknown;
     salesSignalRaw: unknown;
     salesSignalType: string | null;
     reviewCount: number | null;
@@ -164,6 +169,13 @@ export class ProductsService {
     private readonly cache?: RedisCacheService,
   ) {}
 
+  private offerRepository?: OfferRepository;
+
+  private get offerRepo(): OfferRepository {
+    this.offerRepository ??= new OfferRepository(this.prisma);
+    return this.offerRepository;
+  }
+
   private async cached<T>(key: string, ttlSeconds: number, factory: () => Promise<T>): Promise<T> {
     if (!this.cache) return factory();
     return this.cache.wrap(key, ttlSeconds, factory);
@@ -178,16 +190,18 @@ export class ProductsService {
     });
   }
 
-  async getMonteCarloDefaults(productClusterId: string) {
-    return this.cached(`monte-carlo:defaults:${productClusterId}`, 3600, async () => {
+  async getMonteCarloDefaults(productClusterId: string, offerKey?: string) {
+    return this.cached(`monte-carlo:defaults:${productClusterId}:${offerKey ?? 'card'}`, 3600, async () => {
       const cluster = await this.getSimulationCluster(productClusterId);
       const { premises, sources } = await this.defaultMonteCarloPremises(cluster);
+      if (offerKey) await this.applyOfferPremises(productClusterId, offerKey, premises, sources);
 
       return {
         product_cluster_id: productClusterId,
         canonical_name: cluster.canonicalName,
         premises,
         premise_sources: sources,
+        offer_key: offerKey ?? null,
         scenario_count: 1_000_000,
         seed: 7,
         price_scan: true,
@@ -197,10 +211,11 @@ export class ProductsService {
   }
 
   async runMonteCarloSimulation(productClusterId: string, dto: RunMonteCarloDto = {}) {
-    const hasOverrides = Boolean(dto.premises && Object.keys(dto.premises).length > 0);
+    const hasOverrides = Boolean(dto.offer_key) || Boolean(dto.premises && Object.keys(dto.premises).length > 0);
     const compute = async () => {
       const cluster = await this.getSimulationCluster(productClusterId);
       const { premises, sources } = await this.defaultMonteCarloPremises(cluster);
+      if (dto.offer_key) await this.applyOfferPremises(productClusterId, dto.offer_key, premises, sources);
       this.applyPremiseOverrides(premises, sources, dto.premises ?? {});
 
       const payload = {
@@ -232,6 +247,7 @@ export class ProductsService {
         canonical_name: cluster.canonicalName,
         premise_sources: sources,
         is_user_scenario: hasOverrides,
+        offer_key: dto.offer_key ?? null,
         ...result,
       };
     };
@@ -381,6 +397,15 @@ export class ProductsService {
             scenarioCount: OFFICIAL_SCENARIO_COUNT,
           },
         });
+        const offers = await this.simulateCardOffers(
+          cluster.id,
+          (result.premises ?? scriptPremises) as Record<string, unknown>,
+          derived.custo_usd,
+          fxCnyUsd,
+        );
+        if (offers.failed > 0) {
+          this.logger.warn(`Ofertas do cluster ${cluster.id}: ${offers.failed} falharam, ${offers.simulated} simuladas.`);
+        }
         summary.simulated += 1;
         summary.results.push({
           product_cluster_id: cluster.id,
@@ -418,6 +443,7 @@ export class ProductsService {
       marketplace: snapshot.marketplace,
       currency: snapshot.currency,
       priceMin: this.toPositiveNumber(snapshot.priceMin),
+      priceMax: this.toPositiveNumber(snapshot.priceMax),
       salesSignal: this.toPositiveNumber(snapshot.salesSignalRaw),
       collectedAt: snapshot.collectedAt,
     }));
@@ -506,6 +532,90 @@ export class ProductsService {
     return outcome;
   }
 
+  /**
+   * Subprojeto B: simula cada oferta (anúncio de fornecedor contado) com as
+   * premissas do card, trocando só o custo (preço no MOQ) e o MOQ. Nunca lança:
+   * falha de oferta não afeta o score do card.
+   */
+  private async simulateCardOffers(
+    clusterId: string,
+    cardPremises: Record<string, unknown>,
+    cardUnitCostUsd: number,
+    fxCnyUsd: number,
+  ): Promise<{ simulated: number; failed: number }> {
+    const outcome = { simulated: 0, failed: 0 };
+    let listings;
+    try {
+      listings = await this.offerRepo.listOfferListings(clusterId);
+    } catch (error) {
+      this.logger.warn(`Ofertas do cluster ${clusterId} não carregaram: ${error instanceof Error ? error.message : error}`);
+      return outcome;
+    }
+    const ratio = DEFAULT_BUSINESS_RULES.offers.suspiciousPriceRatio;
+    for (const listing of listings) {
+      try {
+        const unitCostUsd = offerUnitCostUsd(listing, fxCnyUsd);
+        const moq = normalizedMoq(listing.moq);
+        const state = offerState({ unitCostUsd, cardUnitCostUsd, suspiciousRatio: ratio });
+        const base = {
+          productClusterId: clusterId,
+          marketplace: listing.marketplace,
+          externalProductId: listing.externalProductId,
+          unitCostUsd,
+          moq,
+          dataVersion: PREMISES_DATA_VERSION,
+        };
+        if (state !== 'com_score' || unitCostUsd === null) {
+          await this.offerRepo.createOfferScore({
+            ...base,
+            state,
+            score: null,
+            capitalPrimeiroPedido: null,
+            pVplPositivo: null,
+            vplMediano: null,
+            cvar5: null,
+            premises: {},
+            premisesHash: '',
+            scenarioCount: 0,
+          });
+          continue;
+        }
+        const premises = {
+          ...cardPremises,
+          custo_usd: Math.round(unitCostUsd * 100) / 100,
+          moeda_custo: 'USD',
+          qtd_minima_pedido: moq,
+        };
+        const result = await this.runMonteCarloPython({
+          premises,
+          scenario_count: OFFICIAL_SCENARIO_COUNT,
+          seed: OFFICIAL_SEED,
+          price_scan: false,
+          data_version: PREMISES_DATA_VERSION,
+        });
+        const metrics = (result.metrics ?? {}) as Record<string, number>;
+        const score = Number(result.financial_score);
+        await this.offerRepo.createOfferScore({
+          ...base,
+          state,
+          score: Number.isFinite(score) ? Math.round(score) : null,
+          capitalPrimeiroPedido: Number.isFinite(Number(result.capital_primeiro_pedido)) ? Number(result.capital_primeiro_pedido) : null,
+          pVplPositivo: Number.isFinite(metrics.p_vpl_positivo) ? metrics.p_vpl_positivo : null,
+          vplMediano: Number.isFinite(metrics.vpl_mediano) ? metrics.vpl_mediano : null,
+          cvar5: Number.isFinite(metrics.cvar_5) ? metrics.cvar_5 : null,
+          premises: (result.premises ?? premises) as Record<string, unknown>,
+          premisesHash: typeof result.premises_hash === 'string' ? result.premises_hash : '',
+          scenarioCount: OFFICIAL_SCENARIO_COUNT,
+        });
+        outcome.simulated += 1;
+      } catch (error) {
+        outcome.failed += 1;
+        this.logger.warn(`Oferta ${listing.key} falhou: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return outcome;
+  }
+
   async fillMonteCarloPremisesWithAi(
     productClusterId: string,
     dto: FillMonteCarloPremisesWithAiDto = {},
@@ -570,6 +680,79 @@ export class ProductsService {
     })) as unknown as SupplierClusterRow | null;
 
     return cluster ? suppliersFromCluster(cluster) : [];
+  }
+
+  /** Subprojeto B: ofertas do card (anúncios de fornecedor contados) com o score mais recente. */
+  async getOffers(productClusterId: string) {
+    const cluster = await this.prisma.productCluster.findUnique({
+      where: { id: productClusterId },
+      select: { id: true },
+    });
+    if (!cluster) throw new NotFoundException(`Produto não encontrado: ${productClusterId}`);
+    const latest = await this.prisma.productScore.findFirst({
+      where: { productClusterId },
+      orderBy: { computedAt: 'desc' },
+      select: { score: true, dataConfidence: true, premises: true },
+    });
+    const cardPremises = (latest?.premises ?? {}) as Record<string, unknown>;
+    const cardUnitCost = Number(cardPremises.custo_usd);
+    const cardUnitCostUsd = Number.isFinite(cardUnitCost) && cardUnitCost > 0 ? cardUnitCost : null;
+    const cardHasScore = latest?.score !== null && latest?.score !== undefined;
+    const [listings, scores, fx] = await Promise.all([
+      this.offerRepo.listOfferListings(productClusterId),
+      this.offerRepo.latestOfferScores(productClusterId),
+      this.fxCnyUsd(),
+    ]);
+    const ratio = DEFAULT_BUSINESS_RULES.offers.suspiciousPriceRatio;
+    const offers = sortOffers(
+      listings.map((listing) => {
+        const stored = scores.get(listing.key);
+        const liveCost = offerUnitCostUsd(listing, fx);
+        let state: string;
+        let score: number | null = null;
+        if (liveCost === null) state = 'sem_preco';
+        else if (!cardHasScore) state = 'sem_score_card';
+        else if (stored) {
+          state = stored.state;
+          score = stored.score;
+        } else {
+          state = offerState({ unitCostUsd: liveCost, cardUnitCostUsd, suspiciousRatio: ratio }) === 'suspeito'
+            ? 'suspeito'
+            : 'aguardando_lote';
+        }
+        return {
+          key: listing.key,
+          marketplace: listing.marketplace,
+          external_product_id: listing.externalProductId,
+          title: listing.title,
+          seller_name: listing.sellerName,
+          url: listing.url,
+          unit_cost_usd: stored?.unitCostUsd ?? liveCost,
+          currency: listing.currency,
+          moq: normalizedMoq(listing.moq),
+          rating: listing.rating,
+          sales_signal: listing.salesSignal,
+          item_status: listing.itemStatus,
+          state,
+          score,
+          p_vpl_positivo: state === 'com_score' ? stored?.pVplPositivo ?? null : null,
+          capital_primeiro_pedido: state === 'com_score' ? stored?.capitalPrimeiroPedido ?? null : null,
+          computed_at: stored?.computedAt ?? null,
+          // campo camel usado só pela ordenação
+          unitCostUsd: stored?.unitCostUsd ?? liveCost,
+        };
+      }),
+    ).map(({ unitCostUsd: _ignored, ...rest }) => rest);
+    const best = offers.find((o) => o.state === 'com_score' && o.score !== null) ?? null;
+    return {
+      card: {
+        score: latest?.score ?? null,
+        unit_cost_usd: cardUnitCostUsd,
+        data_confidence: latest?.dataConfidence ?? null,
+      },
+      best_offer_key: best?.key ?? null,
+      offers,
+    };
   }
 
   /** Série de preço no formato do contrato (Series { window, points }). */
@@ -824,6 +1007,7 @@ export class ProductsService {
       vol_demanda: volDemanda,
       vol_lead: 0.2,
       corr_cambio_lead: 0.35,
+      qtd_minima_pedido: 0,
     };
 
     const sources = Object.fromEntries(
@@ -870,6 +1054,26 @@ export class ProductsService {
         sources[key] = 'override';
       }
     }
+  }
+
+  /** Subprojeto B: custo (preço no MOQ) e MOQ de uma oferta do card, para premissas "e se". */
+  private async applyOfferPremises(
+    productClusterId: string,
+    offerKeyValue: string,
+    premises: MonteCarloPremises,
+    sources: Record<keyof MonteCarloPremises, PremiseSource>,
+  ): Promise<void> {
+    const parsed = parseOfferKey(offerKeyValue);
+    const listing = parsed
+      ? (await this.offerRepo.listOfferListings(productClusterId)).find((o) => o.key === offerKeyValue)
+      : undefined;
+    if (!listing) throw new BadRequestException('Oferta não encontrada neste card.');
+    const cost = offerUnitCostUsd(listing, await this.fxCnyUsd());
+    if (cost === null) throw new BadRequestException('Oferta sem preço: não dá para simular.');
+    premises.custo_usd = this.round(cost);
+    premises.qtd_minima_pedido = normalizedMoq(listing.moq);
+    sources.custo_usd = 'offer';
+    sources.qtd_minima_pedido = 'offer';
   }
 
   private runMonteCarloPython(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
@@ -1045,7 +1249,6 @@ Responda APENAS um objeto JSON com o seguinte formato:
       ],
       {
         endpointName: 'ai_recommendation_card',
-        responseFormat: { type: 'json_object' },
         temperature: 0.2,
         maxTokens: 1500,
         metadata: { productClusterId },

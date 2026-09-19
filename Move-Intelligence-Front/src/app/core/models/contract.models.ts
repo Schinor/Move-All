@@ -244,13 +244,42 @@ export interface SourcingSummary {
   topOrigin: string | null;
 }
 
+export type OfferState = 'com_score' | 'sem_preco' | 'suspeito' | 'aguardando_lote' | 'sem_score_card';
+
+export interface CardOffer {
+  key: string;
+  marketplace: string;
+  externalProductId: string;
+  title: string | null;
+  sellerName: string | null;
+  url: string | null;
+  unitCostUsd: number | null;
+  currency: string | null;
+  moq: number;
+  rating: number | null;
+  salesSignal: number | null;
+  itemStatus: string;
+  state: OfferState;
+  score: number | null;
+  pVplPositivo: number | null;
+  capitalPrimeiroPedido: number | null;
+  computedAt: string | null;
+}
+
+export interface CardOffers {
+  card: { score: number | null; unitCostUsd: number | null; dataConfidence: string | null };
+  bestOfferKey: string | null;
+  offers: CardOffer[];
+}
+
 export type PremiseSource =
   | 'csv'
   | 'exchange_rate'
   | 'default'
   | 'derived_default'
   | 'override'
-  | 'ai_suggestion';
+  | 'ai_suggestion'
+  | 'offer';
 
 export interface MonteCarloPremises {
   precoVenda: number;
@@ -277,6 +306,7 @@ export interface MonteCarloPremises {
   volDemanda: number;
   volLead: number;
   corrCambioLead: number;
+  qtdMinimaPedido: number;
 }
 
 export interface MonteCarloMetrics {
@@ -332,6 +362,7 @@ export interface MonteCarloDefaults {
   seed: number;
   priceScan: boolean;
   priceScanScenarios: number;
+  offerKey: string | null;
 }
 
 export interface MonteCarloSimulationRequest {
@@ -340,6 +371,7 @@ export interface MonteCarloSimulationRequest {
   seed?: number;
   price_scan?: boolean;
   price_scan_scenarios?: number;
+  offer_key?: string;
 }
 
 export interface MonteCarloAiPremisesResult {
