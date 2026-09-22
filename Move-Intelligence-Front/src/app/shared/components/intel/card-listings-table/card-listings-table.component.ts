@@ -17,6 +17,14 @@ import { filterByMarketplace, marketplaceChips } from '../../../util/marketplace
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CardListingsTableComponent {
+  private static readonly REASONS: Record<string, string> = {
+    watchlist: 'Card na watchlist',
+    top50: 'Entre os 50 cards de maior score',
+    descoberta: 'Veio da descoberta por termo em alta',
+    radar: 'Tipo com buscas em alta no radar',
+    demais: 'Demais anúncios',
+  };
+
   private readonly catalog = inject(CatalogService);
   readonly productClusterId = input.required<string>();
   readonly listings = toAsyncState(
@@ -35,6 +43,23 @@ export class CardListingsTableComponent {
   );
 
   store(l: CardListing): string { return sourceLabel(l.marketplace) || l.marketplace; }
+  tracking(l: CardListing): string {
+    const t = l.tracking;
+    if (!t) return '—';
+    if (t.status === 'IGNORED') return 'Fora do acompanhamento';
+    if (t.status === 'DEAD') return 'Anúncio encerrado';
+    const freq = t.tier === 1 ? 'a cada 3,5 dias' : t.tier === 2 ? 'semanal' : 'mensal';
+    return `Nível ${t.tier} · ${freq}`;
+  }
+  trackingReason(l: CardListing): string {
+    const reason = l.tracking?.reason;
+    return reason ? (CardListingsTableComponent.REASONS[reason] ?? reason) : '';
+  }
+  lastCollected(l: CardListing): string {
+    const iso = l.tracking?.lastSuccessAt;
+    if (!iso) return '';
+    return `última: ${new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`;
+  }
   price(l: CardListing): string {
     if (l.price === null) return '—';
     const value = l.price.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

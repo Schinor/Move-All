@@ -10,7 +10,7 @@
       </div>
     }
     <table>
-      <thead><tr><th>Anúncio</th><th>Loja</th><th>Variação</th><th>Preço</th><th>Nota</th><th>Status</th></tr></thead>
+      <thead><tr><th>Anúncio</th><th>Loja</th><th>Variação</th><th>Preço</th><th>Nota</th><th>Status</th><th>Acompanhamento</th></tr></thead>
       <tbody>
         @for (l of visibleRows(); track l.marketplace + l.externalProductId) {
           <tr>
@@ -20,6 +20,10 @@
             <td class="num">{{ price(l) }}</td>
             <td class="num">{{ l.rating ?? '—' }}</td>
             <td><span class="status" [attr.data-status]="l.status">{{ l.status === 'provisional' ? 'provisório' : l.status === 'auto' ? 'automático' : 'confirmado' }}</span></td>
+            <td class="tracking">
+              <span class="tier" [attr.data-tier]="l.tracking?.tier ?? null" [attr.title]="trackingReason(l) || null">{{ tracking(l) }}</span>
+              @if (lastCollected(l)) { <small>{{ lastCollected(l) }}</small> }
+            </td>
           </tr>
         }
       </tbody>

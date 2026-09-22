@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { CatalogService } from '../../core/services/catalog.service';
+import { DiscoveryTermsService } from '../../core/services/discovery-terms.service';
 import { RevisaoComponent } from './revisao.component';
 
 describe('RevisaoComponent', () => {
@@ -86,5 +87,26 @@ describe('RevisaoComponent', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Não foi possível carregar a fila (erro 403).');
     expect(text).not.toContain('Nenhum anúncio aguardando revisão.');
+  });
+
+  it('tem a aba Termos em alta', () => {
+    const catalog = createCatalog();
+    TestBed.configureTestingModule({
+      imports: [RevisaoComponent],
+      providers: [
+        { provide: CatalogService, useValue: catalog },
+        { provide: DiscoveryTermsService, useValue: {
+          counts: () => of({ new: 0, approved: 0, searched: 0, ignored: 0 }), list: () => of([]),
+        } },
+      ],
+    });
+    const fixture = TestBed.createComponent(RevisaoComponent);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const tab = [...el.querySelectorAll('.review-tabs button')].find((b) => b.textContent?.includes('Termos em alta')) as HTMLButtonElement;
+    expect(tab).toBeTruthy();
+    tab.click();
+    fixture.detectChanges();
+    expect(el.querySelector('app-discovery-terms')).not.toBeNull();
   });
 });

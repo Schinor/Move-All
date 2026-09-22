@@ -270,3 +270,9 @@ def test_candidate_nao_promove_com_partial_ou_bloqueio(tmp_path):
         assert updated.status == "CANDIDATE"
     finally:
         db.close()
+
+
+def test_cadencia_nivel_3_mensal():
+    from app.pipelines.run_track_listings import TIER_CADENCE_DAYS
+
+    assert TIER_CADENCE_DAYS == {1: 3.5, 2: 7.0, 3: 30.0}

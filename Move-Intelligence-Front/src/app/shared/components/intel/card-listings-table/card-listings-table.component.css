@@ -6,3 +6,6 @@
 .mp-chip.active { border-color: var(--accent, #7c3aed); }
 .status[data-status='provisional'] { background: var(--warning-bg, #f5c26b); color: var(--warning-fg, #1a1a1a); border-radius: 4px; padding: 0 5px; }
 .status[data-status='auto'] { background: var(--surface-2, #f3f4f6); color: var(--text-2, #4b5563); border-radius: 4px; padding: 0 5px; }
+.tracking { white-space: nowrap; }
+.tracking small { display: block; color: var(--text-muted, #6b7280); font-size: 11px; }
+.tier[data-tier='1'] { color: var(--success, #2f855a); font-weight: 600; }

@@ -27,6 +27,7 @@ function build() {
     catalogFamily: { findUnique: jest.fn() },
     catalogType: { create: jest.fn().mockResolvedValue({ id: 'type-new' }), findUnique: jest.fn() },
     productListingSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+    trackedListing: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const assigner = {
     moveListing: jest.fn().mockResolvedValue({ fromClusterId: 'c1', touched: [] }),
@@ -172,5 +173,23 @@ describe('CatalogReviewService', () => {
     prisma.productCluster.findUnique.mockResolvedValue({ id: 'c1', canonicalName: 'Bike spinning magnética', nameLocked: false });
     await service.renameCard('c1', 'Bike spinning magnética 13 kg', 'admin-1');
     expect(prisma.productCluster.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { canonicalName: 'Bike spinning magnética 13 kg', nameLocked: true } });
+  });
+
+  it('listCardListings devolve o acompanhamento de cada anúncio', async () => {
+    const { service, prisma } = build();
+    prisma.productClusterItem.findMany.mockResolvedValue([
+      { marketplace: 'amazon_br', externalProductId: 'A1', status: 'confirmed' },
+      { marketplace: 'alibaba', externalProductId: 'B1', status: 'auto' },
+    ]);
+    prisma.listingFicha.findMany.mockResolvedValue([]);
+    prisma.productListingSnapshot.findMany.mockResolvedValue([]);
+    prisma.trackedListing.findMany.mockResolvedValue([
+      { source: 'amazon_br', nativeId: 'A1', status: 'ACTIVE', tier: 1, tierReason: 'top50', lastSuccessAt: new Date('2026-09-20T00:00:00.000Z') },
+    ]);
+
+    const out = await service.listCardListings('c1');
+
+    expect(out[0].tracking).toEqual({ status: 'ACTIVE', tier: 1, reason: 'top50', cadence_days: 3.5, last_success_at: '2026-09-20T00:00:00.000Z' });
+    expect(out[1].tracking).toBeNull();
   });
 });

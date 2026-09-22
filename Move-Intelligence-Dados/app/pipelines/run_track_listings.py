@@ -36,7 +36,9 @@ MAX_BACKOFF_HOURS = 48
 
 # Cadência por tier (sugestão D2: tier 1 2x/semana, tier 2 semanal,
 # tier 3 quinzenal). D2 pendente: ajuste aqui quando o usuário decidir.
-TIER_CADENCE_DAYS = {1: 3.5, 2: 7.0, 3: 14.0}
+# Cadência por nível (Subprojeto D): 1 = 2x/semana, 2 = semanal, 3 = mensal.
+# Espelho de TRACK_CADENCE_DAYS em Move-Intelligence-Back/src/modules/ingestion/tracking-tiers.ts.
+TIER_CADENCE_DAYS = {1: 3.5, 2: 7.0, 3: 30.0}
 
 SOURCE_COUNTRY = {
     "amazon_br": "br",
@@ -241,13 +243,13 @@ def _record_outcome(db, listing: TrackedListingModel, moment: datetime, outcome:
     if outcome == "success":
         listing.last_success_at = moment
         listing.consecutive_failures = 0
-        cadence = TIER_CADENCE_DAYS.get(listing.tier or 3, 14.0)
+        cadence = TIER_CADENCE_DAYS.get(listing.tier or 3, 30.0)
         listing.next_due_at = moment + timedelta(days=cadence)
     elif outcome == "not_found":
         listing.consecutive_failures = (listing.consecutive_failures or 0) + 1
         if listing.consecutive_failures >= NOT_FOUND_AFTER_FAILURES:
             listing.status = "DEAD"
-        cadence = TIER_CADENCE_DAYS.get(listing.tier or 3, 14.0)
+        cadence = TIER_CADENCE_DAYS.get(listing.tier or 3, 30.0)
         listing.next_due_at = moment + timedelta(days=cadence)
     else:  # blocked / error: backoff exponencial, sem contar para DEAD
         streak = _trailing_blocked_count(db, listing.id) + 1

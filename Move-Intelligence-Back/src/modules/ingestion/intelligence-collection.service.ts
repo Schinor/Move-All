@@ -7,6 +7,8 @@ import { PrismaService } from '../../shared/database/prisma.service';
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
 import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
+import { DiscoverySearchService } from '../radar-discovery/discovery-search.service';
+import { TrackingTiersService } from './tracking-tiers.service';
 import { RunIntelligenceCollectionDto } from './dto/run-intelligence-collection.dto';
 import { RunTrackListingsDto } from './dto/run-track-listings.dto';
 import { RunWeeklyIntelligenceCollectionDto } from './dto/run-weekly-intelligence-collection.dto';
@@ -29,14 +31,11 @@ const FULL_WEEKLY_CLUSTER_COUNT = 16;
 const FULL_WEEKLY_TERM_COUNT = 47;
 const TRACK_LISTINGS_CATEGORY = 'track_listings';
 const TRACK_BATCH_LIMIT = 50;
-// Promoção de tier após o lote de score: top 50 → tier 1, 51–300 → tier 2,
-// restante vinculado → tier 3; watchlist sempre tier 1.
-const TIER_1_CUTOFF = 50;
-const TIER_2_CUTOFF = 300;
 const COLLECTION_CATEGORIES = [
   'bright_data_etl_v2',
   'bright_data_etl_v2_weekly',
   TRACK_LISTINGS_CATEGORY,
+  'radar_discovery',
 ];
 
 @Injectable()
@@ -45,6 +44,8 @@ export class IntelligenceCollectionService {
     private readonly prisma: PrismaService,
     private readonly fichas: FichaService,
     private readonly products: ProductsService,
+    private readonly discovery: DiscoverySearchService,
+    private readonly tiers: TrackingTiersService,
     private readonly cache?: RedisCacheService,
   ) {}
 
@@ -70,6 +71,29 @@ export class IntelligenceCollectionService {
       void this.execute(job.id, dto);
     });
     return job;
+  }
+
+  /** Subprojeto D: coleta de um termo com categoria própria, esperando terminar (busca do radar). */
+  async runTermAndWait(dto: RunIntelligenceCollectionDto, category: string) {
+    const job = await this.prisma.collectionJob.create({
+      data: {
+        source: dto.sources.join(','),
+        queryTerm: dto.term.trim(),
+        category,
+        status: CollectionStatus.QUEUED,
+        requestedBy: 'radar-discovery',
+        stats: this.toJson({
+          sources: dto.sources,
+          limit: dto.limit,
+          geos: dto.geos ?? ['BR'],
+          include_demand: dto.includeDemand === true,
+          exact_term: dto.exactTerm === true,
+          window_days: dto.windowDays,
+        }),
+      },
+    });
+    await this.execute(job.id, dto);
+    return this.prisma.collectionJob.findUniqueOrThrow({ where: { id: job.id } });
   }
 
   async startWeekly(dto: RunWeeklyIntelligenceCollectionDto) {
@@ -187,6 +211,17 @@ export class IntelligenceCollectionService {
       data: { status: CollectionStatus.RUNNING, startedAt: new Date() },
     });
 
+    // Subprojeto D: termos aprovados do radar antes da rotação normal. Falha aqui não derruba a semanal.
+    let radarDiscovery: unknown;
+    try {
+      radarDiscovery = await this.discovery.runApproved({
+        runTerm: (request, category) =>
+          this.runTermAndWait(request as unknown as RunIntelligenceCollectionDto, category),
+      });
+    } catch (error) {
+      radarDiscovery = { error: error instanceof Error ? error.message : String(error) };
+    }
+
     let progressUpdate = Promise.resolve();
     try {
       const summary = await this.runPythonWeekly(dto, (progress) => {
@@ -211,7 +246,7 @@ export class IntelligenceCollectionService {
         data: {
           status,
           finishedAt: new Date(),
-          stats: this.toJson({ ...summary, analytical_snapshots: analyticalSnapshots }),
+          stats: this.toJson({ ...summary, analytical_snapshots: analyticalSnapshots, radar_discovery: radarDiscovery }),
           errorMessage:
             status === CollectionStatus.PARTIAL
               ? summary.failures.map((failure) => failure.message).slice(0, 3).join('; ')
@@ -261,7 +296,7 @@ export class IntelligenceCollectionService {
         : [];
       const synced = await this.syncObservationsToSnapshots(observationIds);
       const batch = await this.products.simulateBatchForRanking(TRACK_BATCH_LIMIT);
-      const tiers = await this.promoteTiers();
+      const tiers = await this.tiers.recalculate();
       await this.cache?.delPattern('dashboard:trends:products:*');
       const failures = Array.isArray(summary.failures) ? summary.failures : [];
       const status =
@@ -340,24 +375,7 @@ export class IntelligenceCollectionService {
     }
 
     const python = process.env.PYTHON_BIN || 'python3';
-    const args = [
-      mainFile,
-      '--pipeline',
-      'live-intelligence',
-      '--term',
-      dto.term.trim(),
-      '--sources',
-      dto.sources.join(','),
-      '--limit',
-      String(dto.limit),
-      '--geos',
-      (dto.geos ?? ['BR']).join(','),
-      '--window-days',
-      String(dto.windowDays),
-    ];
-    if (dto.includeDemand === false) {
-      args.push('--skip-demand');
-    }
+    const args = this.buildLiveArgs(mainFile, dto);
 
     return new Promise((resolvePromise, reject) => {
       const child = spawn(python, args, {
@@ -399,6 +417,29 @@ export class IntelligenceCollectionService {
         }
       });
     });
+  }
+
+  private buildLiveArgs(mainFile: string, dto: RunIntelligenceCollectionDto): string[] {
+    const args = [
+      mainFile,
+      '--pipeline',
+      'live-intelligence',
+      '--term',
+      dto.term.trim(),
+      '--sources',
+      dto.sources.join(','),
+      '--limit',
+      String(dto.limit),
+      '--geos',
+      (dto.geos ?? ['BR']).join(','),
+      '--window-days',
+      String(dto.windowDays),
+    ];
+    if (dto.includeDemand === false) {
+      args.push('--skip-demand');
+    }
+    if (dto.exactTerm === true) args.push('--exact-term');
+    return args;
   }
 
   private runPythonWeekly(
@@ -566,74 +607,6 @@ export class IntelligenceCollectionService {
     return { analytical_snapshots: snapshots, registered_listings: registered };
   }
 
-  /**
-   * Promoção e rebaixamento de tier pelo score oficial: top 50 (pelo último
-   * `ProductScore.score` de cada cluster, nulos por último) → tier 1,
-   * 51–300 → tier 2, restante vinculado → tier 3; watchlist sempre tier 1.
-   */
-  private async promoteTiers(): Promise<{ tier1: number; tier2: number; tier3: number }> {
-    const watchlisted = await this.prisma.watchlistItem.findMany({
-      select: { productClusterId: true },
-    });
-    const watchIds = [...new Set(watchlisted.map((item) => item.productClusterId))];
-    // Último score por cluster (maior computedAt vence); ordena pelo score
-    // oficial com nulos por último (cluster sem score cai para o tier 3).
-    const scoreRows = await this.prisma.productScore.findMany({
-      select: { productClusterId: true, score: true, computedAt: true },
-      orderBy: [{ computedAt: 'desc' }],
-    });
-    const latestByCluster = new Map<string, number | null>();
-    for (const row of scoreRows) {
-      if (!latestByCluster.has(row.productClusterId)) {
-        latestByCluster.set(row.productClusterId, row.score);
-      }
-    }
-    const ranked = [...latestByCluster.entries()]
-      .sort(([idA, scoreA], [idB, scoreB]) => {
-        if (scoreA === null && scoreB === null) return idA.localeCompare(idB);
-        if (scoreA === null) return 1;
-        if (scoreB === null) return -1;
-        if (scoreB !== scoreA) return scoreB - scoreA;
-        return idA.localeCompare(idB);
-      })
-      .map(([id]) => id)
-      .slice(0, TIER_2_CUTOFF);
-    const tier1 = [...new Set([...ranked.slice(0, TIER_1_CUTOFF), ...watchIds])];
-    const tier2 = ranked
-      .slice(TIER_1_CUTOFF)
-      .filter((id) => !tier1.includes(id));
-
-    if (tier1.length > 0) {
-      await this.prisma.trackedListing.updateMany({
-        where: { productId: { in: tier1 } },
-        data: { tier: 1 },
-      });
-    }
-    if (tier2.length > 0) {
-      await this.prisma.trackedListing.updateMany({
-        where: { productId: { in: tier2 } },
-        data: { tier: 2 },
-      });
-    }
-    const rankedIds = new Set([...tier1, ...tier2]);
-    const linked = await this.prisma.trackedListing.findMany({
-      where: { NOT: { productId: null } },
-      select: { id: true, productId: true },
-    });
-    const demoteIds = linked
-      .filter((row) => row.productId && !rankedIds.has(row.productId))
-      .map((row) => row.id);
-    let demoted = 0;
-    if (demoteIds.length > 0) {
-      const result = await this.prisma.trackedListing.updateMany({
-        where: { id: { in: demoteIds } },
-        data: { tier: 3 },
-      });
-      demoted = result.count;
-    }
-    return { tier1: tier1.length, tier2: tier2.length, tier3: demoted };
-  }
-
   private spawnPython(
     dataDirectory: string,
     args: string[],
@@ -694,6 +667,7 @@ export class IntelligenceCollectionService {
       });
     });
   }
+
 
   private async syncAnalyticalModels(productIds: string[]): Promise<number> {
     if (productIds.length === 0) {

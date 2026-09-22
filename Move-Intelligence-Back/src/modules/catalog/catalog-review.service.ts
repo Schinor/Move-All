@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { CardAssignerService, ItemStatus, ListingRef } from './card-assigner.service';
 import { ACTIVE_CARD_STATUSES, PRIORITY, UNKNOWN_TYPE } from './catalog.constants';
+import { TRACK_CADENCE_DAYS } from '../ingestion/tracking-tiers';
 
 type Kind = 'provisional_listing' | 'suggested_type';
 interface ListingState {
@@ -24,6 +25,13 @@ export interface CardListingView {
   status: ItemStatus;
   variation: string | null;
   brand: string | null;
+  tracking: {
+    status: string;
+    tier: number;
+    reason: string | null;
+    cadence_days: number | null;
+    last_success_at: string | null;
+  } | null;
 }
 
 @Injectable()
@@ -116,17 +124,22 @@ export class CatalogReviewService {
     const items = await this.prisma.productClusterItem.findMany({ where: { clusterId }, orderBy: { matchedAt: 'asc' } });
     if (items.length === 0) return [];
     const refs = items.map((i) => ({ marketplace: i.marketplace, externalProductId: i.externalProductId }));
-    const [fichas, snapshots] = await Promise.all([
+    const [fichas, snapshots, trackedRows] = await Promise.all([
       this.prisma.listingFicha.findMany({ where: { OR: refs } }),
       this.prisma.productListingSnapshot.findMany({
         where: { productClusterId: clusterId },
         orderBy: { collectedAt: 'desc' },
         distinct: ['marketplace', 'externalProductId'],
       }),
+      this.prisma.trackedListing.findMany({
+        where: { OR: refs.map((i) => ({ source: i.marketplace, nativeId: i.externalProductId })) },
+        select: { source: true, nativeId: true, status: true, tier: true, tierReason: true, lastSuccessAt: true },
+      }),
     ]);
     const key = (m: string, e: string) => `${m}::${e}`;
     const fichaBy = new Map(fichas.map((f) => [key(f.marketplace, f.externalProductId), f]));
     const snapBy = new Map(snapshots.map((s) => [key(s.marketplace, s.externalProductId), s]));
+    const trackedBy = new Map(trackedRows.map((t) => [key(t.source, t.nativeId), t]));
     return items.map((item) => {
       const f = fichaBy.get(key(item.marketplace, item.externalProductId));
       const s = snapBy.get(key(item.marketplace, item.externalProductId));
@@ -144,6 +157,17 @@ export class CatalogReviewService {
         status: item.status as ItemStatus,
         variation: variation || null,
         brand: f?.brand ?? null,
+        tracking: (() => {
+          const t = trackedBy.get(key(item.marketplace, item.externalProductId));
+          if (!t) return null;
+          return {
+            status: t.status,
+            tier: t.tier,
+            reason: t.tierReason ?? null,
+            cadence_days: TRACK_CADENCE_DAYS[t.tier as 1 | 2 | 3] ?? null,
+            last_success_at: t.lastSuccessAt?.toISOString() ?? null,
+          };
+        })(),
       };
     });
   }

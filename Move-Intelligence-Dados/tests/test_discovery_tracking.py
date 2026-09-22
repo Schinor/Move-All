@@ -437,3 +437,35 @@ def test_primeira_execucao_tambem_respeita_o_teto(tmp_path):
     # Custo por termo: 1 busca + 1 raspagem = 2; teto 3 → 1 termo.
     assert result["budget_capped"] is True
     assert result["terms_requested"] == 1
+
+
+def test_exact_term_busca_o_termo_literal_em_todas_as_fontes():
+    from app.pipelines.run_live_intelligence import _source_term
+
+    keyword_map = {"spin": {"keywords": {"BR": ["bike spinning"], "US": ["spin bike"]}}}
+    # Sem a opção: comportamento de hoje (termo padrão do grupo por país).
+    assert _source_term("spin bike dobrável", "amazon", "spin", keyword_map) == "spin bike"
+    assert _source_term("spin bike dobrável", "amazon_br", "spin", keyword_map) == "bike spinning"
+    # Com a opção: o termo pedido, literal, em qualquer fonte.
+    assert _source_term("spin bike dobrável", "amazon", "spin", keyword_map, exact=True) == "spin bike dobrável"
+    assert _source_term("spin bike dobrável", "1688", "spin", keyword_map, exact=True) == "spin bike dobrável"
+
+
+def test_main_aceita_exact_term(monkeypatch):
+    import main as entrypoint
+
+    captured = {}
+
+    def fake_run(**kwargs):
+        captured.update(kwargs)
+        return {"term": kwargs["term"], "failures": []}
+
+    monkeypatch.setattr(entrypoint.run_live_intelligence, "run", fake_run)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["main.py", "--pipeline", "live-intelligence", "--term", "nike adjustable dumbbells",
+         "--sources", "amazon", "--skip-demand", "--exact-term"],
+    )
+    entrypoint.main()
+    assert captured["exact_term"] is True
+    assert captured["term"] == "nike adjustable dumbbells"

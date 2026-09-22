@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { CopilotModule } from './modules/copilot/copilot.module';
 import { DiscoveryModule } from './modules/discovery/discovery.module';
+import { RadarDiscoveryModule } from './modules/radar-discovery/radar-discovery.module';
 import { HealthModule } from './modules/health/health.module';
 import { AiGatewayModule } from './modules/ai-gateway/ai-gateway.module';
 import { AlertsModule } from './modules/alerts/alerts.module';
@@ -47,6 +48,7 @@ import { RedisModule } from './shared/redis/redis.module';
     ImportsModule,
     AuthModule,
     DiscoveryModule,
+    RadarDiscoveryModule,
     CopilotModule,
     HealthModule,
     AiGatewayModule,

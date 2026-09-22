@@ -38,6 +38,14 @@ export interface CardComparison {
   techWarning: string | null;
 }
 
+export interface CardListingTracking {
+  status: string;
+  tier: number;
+  reason: string | null;
+  cadenceDays: number | null;
+  lastSuccessAt: string | null;
+}
+
 export interface CardListing {
   marketplace: string;
   externalProductId: string;
@@ -49,7 +57,27 @@ export interface CardListing {
   status: 'confirmed' | 'auto' | 'provisional';
   variation: string | null;
   brand: string | null;
+  tracking?: CardListingTracking | null;
 }
+
+export interface DiscoveryTerm {
+  id: string;
+  term: string;
+  geo: 'BR' | 'US';
+  typeKey: string;
+  typeName: string | null;
+  familyKey: string | null;
+  risingLabel: string;
+  breakout: boolean;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  status: 'new' | 'approved' | 'searched' | 'ignored';
+  searchedAt: string | null;
+  newListings: number | null;
+  searchError: string | null;
+}
+
+export interface DiscoveryTermCounts { new: number; approved: number; searched: number; ignored: number }
 
 export interface ReviewCounts { provisionalListing: number; suggestedType: number }
 

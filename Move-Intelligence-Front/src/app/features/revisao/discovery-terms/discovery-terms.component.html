@@ -1,0 +1,54 @@
+<div class="terms-toolbar">
+  <div class="chips" role="group" aria-label="Situação dos termos">
+    <button type="button" data-chip="new" [class.active]="chip() === 'new'" (click)="setChip('new')">Novos ({{ counts().new }})</button>
+    <button type="button" data-chip="approved" [class.active]="chip() === 'approved'" (click)="setChip('approved')">Aprovados ({{ counts().approved + counts().searched }})</button>
+    <button type="button" data-chip="ignored" [class.active]="chip() === 'ignored'" (click)="setChip('ignored')">Ignorados ({{ counts().ignored }})</button>
+  </div>
+  <select aria-label="País" [value]="geo()" (change)="setGeo($any($event.target).value)">
+    <option value="">BR e US</option>
+    <option value="BR">BR</option>
+    <option value="US">US</option>
+  </select>
+  <select aria-label="Família" [value]="family()" (change)="setFamily($any($event.target).value)">
+    <option value="">Todas as famílias</option>
+    @for (f of families(); track f.key) { <option [value]="f.key">{{ f.namePt }}</option> }
+  </select>
+</div>
+
+@if (error()) { <div class="queue-error" role="alert">{{ error() }}</div> }
+
+@if (items().length === 0) {
+  <p class="empty">Nenhum termo aqui.</p>
+} @else {
+  <table class="terms-table">
+    <thead>
+      <tr>
+        <th>Tipo</th><th>País</th><th>Termo em alta</th><th>Alta</th>
+        @if (chip() === 'approved') { <th>Situação</th> } @else { <th>Visto</th><th></th> }
+      </tr>
+    </thead>
+    <tbody>
+      @for (t of items(); track t.id) {
+        <tr>
+          <td>{{ t.typeName ?? t.typeKey }}</td>
+          <td>{{ t.geo }}</td>
+          <td>{{ t.term }}</td>
+          <td class="rise" [class.breakout]="t.breakout">{{ t.risingLabel }}</td>
+          @if (chip() === 'approved') {
+            <td>{{ situation(t) }}</td>
+          } @else {
+            <td>{{ seen(t) }}</td>
+            <td class="actions">
+              @if (chip() === 'new') {
+                <button type="button" data-action="approve" (click)="approve(t)">Buscar produtos</button>
+                <button type="button" data-action="ignore" class="secondary" (click)="ignore(t)">Ignorar</button>
+              } @else {
+                <button type="button" data-action="restore" class="secondary" (click)="restore(t)">Restaurar</button>
+              }
+            </td>
+          }
+        </tr>
+      }
+    </tbody>
+  </table>
+}

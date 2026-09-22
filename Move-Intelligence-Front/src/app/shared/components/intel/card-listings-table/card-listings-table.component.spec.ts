@@ -50,4 +50,32 @@ describe('CardListingsTableComponent', () => {
     expect(el.querySelectorAll('tbody tr')).toHaveLength(2);
     expect(el.textContent).not.toContain('Remo ML');
   });
+
+  it('mostra a coluna Acompanhamento', () => {
+    TestBed.resetTestingModule();
+    const base = { url: null, currency: 'BRL', rating: null, status: 'confirmed', variation: null, brand: null };
+    TestBed.configureTestingModule({
+      imports: [CardListingsTableComponent],
+      providers: [{ provide: CatalogService, useValue: { cardListings: () => of([
+        { ...base, marketplace: 'amazon_br', externalProductId: 'A', title: 'Bike A', price: 100,
+          tracking: { status: 'ACTIVE', tier: 1, reason: 'top50', cadenceDays: 3.5, lastSuccessAt: '2026-09-20T12:00:00.000Z' } },
+        { ...base, marketplace: 'alibaba', externalProductId: 'B', title: 'Bike B', price: 90,
+          tracking: { status: 'ACTIVE', tier: 3, reason: 'demais', cadenceDays: 30, lastSuccessAt: null } },
+        { ...base, marketplace: 'shopee_br', externalProductId: 'C', title: 'Bike C', price: 80,
+          tracking: { status: 'IGNORED', tier: 3, reason: 'demais', cadenceDays: 30, lastSuccessAt: null } },
+        { ...base, marketplace: 'mercado_livre', externalProductId: 'D', title: 'Bike D', price: 70, tracking: null },
+      ]) } }],
+    });
+    const fixture = TestBed.createComponent(CardListingsTableComponent);
+    fixture.componentRef.setInput('productClusterId', 'c1');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    const text = el.textContent ?? '';
+    expect(text).toContain('Acompanhamento');
+    expect(text).toContain('Nível 1 · a cada 3,5 dias');
+    expect(text).toContain('última: 20/09');
+    expect(text).toContain('Nível 3 · mensal');
+    expect(text).toContain('Fora do acompanhamento');
+    expect(el.querySelector('[title="Entre os 50 cards de maior score"]')).not.toBeNull();
+  });
 });

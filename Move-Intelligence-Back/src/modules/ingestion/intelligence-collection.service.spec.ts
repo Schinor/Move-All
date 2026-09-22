@@ -2,14 +2,19 @@ import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
+import { DiscoverySearchService } from '../radar-discovery/discovery-search.service';
 import { IntelligenceCollectionService } from './intelligence-collection.service';
 import { RunTrackListingsDto } from './dto/run-track-listings.dto';
+import { RunIntelligenceCollectionDto } from './dto/run-intelligence-collection.dto';
+import { RunWeeklyIntelligenceCollectionDto } from './dto/run-weekly-intelligence-collection.dto';
+import { TrackingTiersService } from './tracking-tiers.service';
 
 function buildService() {
   const collectionJob = {
     findFirst: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    findUniqueOrThrow: jest.fn(),
   };
   const prisma = {
     $transaction: jest.fn(async (callback: (tx: unknown) => unknown) =>
@@ -39,12 +44,16 @@ function buildService() {
   const products = {
     simulateBatchForRanking: jest.fn().mockResolvedValue({ simulated: 0 }),
   };
+  const discovery = { runApproved: jest.fn().mockResolvedValue({ skipped: 'disabled', searched: 0, failed: 0, terms: [] }) };
+  const tiers = { recalculate: jest.fn().mockResolvedValue({ tier1: 0, tier2: 0, tier3: 0 }) };
   const service = new IntelligenceCollectionService(
     prisma as unknown as PrismaService,
     fichas as unknown as FichaService,
     products as unknown as ProductsService,
+    discovery as unknown as DiscoverySearchService,
+    tiers as unknown as TrackingTiersService,
   );
-  return { service, prisma, fichas, products };
+  return { service, prisma, fichas, products, discovery, tiers };
 }
 
 describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
@@ -185,89 +194,44 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
     expect(prisma.productListingSnapshot.create).not.toHaveBeenCalled();
   });
 
-  it('promoteTiers: top 50 → 1, 51–300 → 2, restante → 3, watchlist sempre 1 (A3.3: pelo ProductScore)', async () => {
-    const { service, prisma } = buildService();
-    const now = new Date('2026-09-14T12:00:00.000Z');
-    // Último score por cluster vence: cluster-1 tem linha antiga alta e linha
-    // nova baixa (vale a nova); cluster-100 tem score de tier 2 mas é watchlist.
-    const scoreRows: Array<{ productClusterId: string; score: number | null; computedAt: Date }> =
-      Array.from({ length: 300 }, (_, index) => ({
-        productClusterId: `cluster-${index}`,
-        score: 100 - Math.floor(index / 3),
-        computedAt: now,
-      }));
-    scoreRows.push({
-      productClusterId: 'cluster-1',
-      score: 5,
-      computedAt: new Date('2026-09-15T12:00:00.000Z'),
+  describe('descoberta pelo radar (Subprojeto D)', () => {
+    it('buildLiveArgs passa --exact-term só quando pedido', () => {
+      const { service } = buildService();
+      const dto = Object.assign(new RunIntelligenceCollectionDto(), {
+        term: 'nike adjustable dumbbells', sources: ['amazon'], limit: 10, geos: ['US'], includeDemand: false,
+      });
+      expect((service as any).buildLiveArgs('main.py', dto)).not.toContain('--exact-term');
+      const args = (service as any).buildLiveArgs('main.py', { ...dto, exactTerm: true });
+      expect(args).toEqual(expect.arrayContaining(['--term', 'nike adjustable dumbbells', '--skip-demand', '--exact-term']));
     });
-    scoreRows.push({
-      productClusterId: 'cluster-null',
-      score: null,
-      computedAt: now,
+
+    it('runTermAndWait cria o job com a categoria, espera o execute e devolve o job final', async () => {
+      const { service, prisma } = buildService();
+      prisma.collectionJob.create.mockResolvedValue({ id: 'job-1' });
+      prisma.collectionJob.findUniqueOrThrow.mockResolvedValue({ id: 'job-1', status: 'SUCCESS', stats: { tracked_new: 3 }, errorMessage: null });
+      const execute = jest.spyOn(service as any, 'execute').mockResolvedValue(undefined);
+      const dto = Object.assign(new RunIntelligenceCollectionDto(), { term: 'x', sources: ['amazon'], limit: 10, geos: ['US'], includeDemand: false, exactTerm: true });
+      const job = await service.runTermAndWait(dto, 'radar_discovery');
+      expect(prisma.collectionJob.create.mock.calls[0][0].data).toEqual(expect.objectContaining({ category: 'radar_discovery', queryTerm: 'x' }));
+      expect(execute).toHaveBeenCalledWith('job-1', dto);
+      expect(job).toEqual(expect.objectContaining({ id: 'job-1', stats: { tracked_new: 3 } }));
     });
-    prisma.productScore.findMany.mockResolvedValue(scoreRows);
-    prisma.watchlistItem.findMany.mockResolvedValue([{ productClusterId: 'cluster-100' }]);
-    // 300 vinculados ranqueados + 20 vinculados fora do ranking (caem para tier 3).
-    const rankedIds = Array.from({ length: 300 }, (_, index) => `cluster-${index}`);
-    prisma.trackedListing.findMany.mockResolvedValue([
-      ...rankedIds.map((clusterId) => ({ id: `listing-${clusterId}`, productId: clusterId })),
-      ...Array.from({ length: 20 }, (_, index) => ({
-        id: `listing-extra-${index}`,
-        productId: `cluster-extra-${index}`,
-      })),
-    ]);
-    prisma.trackedListing.updateMany
-      .mockResolvedValueOnce({ count: 51 })
-      .mockResolvedValueOnce({ count: 249 })
-      .mockResolvedValueOnce({ count: 20 });
 
-    const result = await (service as any).promoteTiers();
-
-    // Ordenação pelo score oficial, não pela coluna legada financialScore.
-    expect(prisma.productScore.findMany).toHaveBeenCalled();
-    expect(prisma.productCluster.findMany).not.toHaveBeenCalled();
-    // cluster-100 estava no tier 2 mas é watchlist: sobe para o tier 1.
-    const tier1Call = prisma.trackedListing.updateMany.mock.calls[0][0];
-    expect(tier1Call.data).toEqual({ tier: 1 });
-    expect(tier1Call.where.productId.in).toHaveLength(51);
-    expect(tier1Call.where.productId.in).toContain('cluster-100');
-    const tier2Call = prisma.trackedListing.updateMany.mock.calls[1][0];
-    expect(tier2Call.data).toEqual({ tier: 2 });
-    expect(tier2Call.where.productId.in).toHaveLength(249);
-    expect(tier2Call.where.productId.in).not.toContain('cluster-100');
-    expect(result).toEqual({ tier1: 51, tier2: 249, tier3: 20 });
-  });
-
-  it('promoteTiers: nulo ordena por último e não rouba vaga do tier 1', async () => {
-    const { service, prisma } = buildService();
-    const now = new Date('2026-09-14T12:00:00.000Z');
-    // 51 clusters com 90 + 1 com score nulo: o nulo fica depois de todos os
-    // 90 (não entra no top 50) e o vinculado sem linha de score cai ao tier 3.
-    const scoredIds = Array.from({ length: 51 }, (_, index) => `c-${String(index).padStart(2, '0')}`);
-    prisma.productScore.findMany.mockResolvedValue([
-      ...scoredIds.map((productClusterId) => ({ productClusterId, score: 90, computedAt: now })),
-      { productClusterId: 'cluster-b', score: null, computedAt: now },
-    ]);
-    prisma.watchlistItem.findMany.mockResolvedValue([]);
-    prisma.trackedListing.findMany.mockResolvedValue([
-      ...scoredIds.map((productClusterId) => ({ id: `listing-${productClusterId}`, productId: productClusterId })),
-      { id: 'listing-b', productId: 'cluster-b' },
-      { id: 'listing-c', productId: 'cluster-sem-score' },
-    ]);
-    prisma.trackedListing.updateMany
-      .mockResolvedValueOnce({ count: 50 })
-      .mockResolvedValueOnce({ count: 2 })
-      .mockResolvedValueOnce({ count: 1 });
-
-    const result = await (service as any).promoteTiers();
-
-    const tier1Call = prisma.trackedListing.updateMany.mock.calls[0][0];
-    expect(tier1Call.where.productId.in).toHaveLength(50);
-    expect(tier1Call.where.productId.in).not.toContain('cluster-b');
-    const tier2Call = prisma.trackedListing.updateMany.mock.calls[1][0];
-    // c-50 (90, fora do top 50) + cluster-b (nulo, por último).
-    expect(tier2Call.where.productId.in).toEqual(['c-50', 'cluster-b']);
-    expect(result).toEqual({ tier1: 50, tier2: 2, tier3: 1 });
+    it('coleta semanal roda a descoberta antes e não cai se ela falhar', async () => {
+      const { service, prisma, discovery } = buildService();
+      const order: string[] = [];
+      discovery.runApproved.mockImplementation(async () => { order.push('discovery'); throw new Error('boom'); });
+      jest.spyOn(service as any, 'runPythonWeekly').mockImplementation(async () => {
+        order.push('weekly');
+        return { term: '', cluster: '', products: 0, demand_signals: 0, product_demand_links: 0, product_ids: [], failures: [] };
+      });
+      jest.spyOn(service as any, 'syncAnalyticalModels').mockResolvedValue(0);
+      jest.spyOn(service as any, 'scheduleRankingSimulation').mockImplementation(() => undefined);
+      await (service as any).executeWeekly('job-w', new RunWeeklyIntelligenceCollectionDto());
+      expect(order).toEqual(['discovery', 'weekly']);
+      const finalUpdate = prisma.collectionJob.update.mock.calls.at(-1)![0];
+      expect(finalUpdate.data.status).toBe('SUCCESS');
+      expect(finalUpdate.data.stats).toEqual(expect.objectContaining({ radar_discovery: { error: 'boom' } }));
+    });
   });
 });

@@ -4,13 +4,14 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { CatalogFamily, ReviewCounts, ReviewListingItem, ReviewTypeItem } from '../../core/models/contract.models';
 import { PageHeaderComponent } from '../../shared/ui/page-header/page-header.component';
 import { sourceLabel } from '../../shared/util/format';
+import { DiscoveryTermsComponent } from './discovery-terms/discovery-terms.component';
 
-type Tab = 'provisional_listing' | 'suggested_type';
+type Tab = 'provisional_listing' | 'suggested_type' | 'discovery_terms';
 
 @Component({
   selector: 'app-revisao',
   standalone: true,
-  imports: [FormsModule, PageHeaderComponent],
+  imports: [FormsModule, PageHeaderComponent, DiscoveryTermsComponent],
   templateUrl: './revisao.component.html',
   styleUrl: './revisao.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +51,7 @@ export class RevisaoComponent {
       next: (c) => this.counts.set(c),
       error: (e: unknown) => this.queueError.set(this.queueErrorMessage(e)),
     });
+    if (this.tab() === 'discovery_terms') return;
     if (this.tab() === 'provisional_listing') {
       this.catalog.reviewList('provisional_listing').subscribe({
         next: (r) => this.listingItems.set(r.items),

@@ -141,7 +141,11 @@ def _source_term(
     cluster: str,
     keyword_map: Mapping[str, Mapping[str, list[str]]],
     variant: int = 0,
+    exact: bool = False,
 ) -> str:
+    # Subprojeto D: termo aprovado no radar é buscado literalmente.
+    if exact:
+        return term
     if source in BR_SOURCES:
         return _keyword_for_geo(term, cluster, "BR", keyword_map, variant)
     return _keyword_for_geo(term, cluster, "US", keyword_map, variant)
@@ -199,6 +203,7 @@ def run(
     window_days: int = 7,
     keyword_variant: Optional[int] = None,
     max_calls: Optional[int] = None,
+    exact_term: bool = False,
 ) -> dict[str, Any]:
     requested_term = term.strip()
     if not requested_term:
@@ -256,7 +261,7 @@ def run(
     source_stats: list[dict[str, Any]] = []
 
     def collect_source(source: str) -> tuple[list[dict[str, Any]], list[dict[str, str]], dict[str, Any]]:
-        query = _source_term(requested_term, source, cluster, base_keyword_map, variant)
+        query = _source_term(requested_term, source, cluster, base_keyword_map, variant, exact=exact_term)
         try:
             result = registry[source](client=active_client).extract(
                 query,
@@ -376,6 +381,7 @@ def run(
 
     summary: dict[str, Any] = {
         "term": requested_term,
+        "exact_term": exact_term,
         "cluster": cluster,
         "keyword_variant": variant,
         "window_days": bounded_window_days,

@@ -156,6 +156,12 @@ class BrightDataClient:
         # Consumimos somente até o primeiro resultado/erro JSON-RPC para não
         # aguardar indefinidamente o fechamento da conexão.
         if "text/event-stream" in content_type and hasattr(response, "iter_lines"):
+            # SSE sem charset: o requests assume ISO-8859-1 e quebra os acentos
+            # (ex.: "acupressÃ£o" no radar, Subprojeto D). A Bright Data envia UTF-8.
+            try:
+                response.encoding = "utf-8"
+            except AttributeError:
+                pass
             messages: list[Any] = []
             deadline = (
                 time.monotonic() + max_wait_seconds

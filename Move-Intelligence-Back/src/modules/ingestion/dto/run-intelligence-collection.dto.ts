@@ -54,6 +54,11 @@ export class RunIntelligenceCollectionDto {
   @IsBoolean()
   includeDemand?: boolean;
 
+  /** Subprojeto D: busca o termo literal em todas as fontes (--exact-term). */
+  @IsOptional()
+  @IsBoolean()
+  exactTerm?: boolean;
+
   @Type(() => Number)
   @IsInt()
   @Min(7)

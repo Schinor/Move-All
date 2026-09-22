@@ -101,6 +101,11 @@ def main():
         help="Coleta somente marketplaces, sem Google Trends/TikTok Search.",
     )
     parser.add_argument(
+        "--exact-term",
+        action="store_true",
+        help="Busca o --term literal em todas as fontes (descoberta pelos termos em alta).",
+    )
+    parser.add_argument(
         "--window-days",
         type=int,
         default=7,
@@ -168,6 +173,7 @@ def main():
                 dry_run=args.dry_run,
                 window_days=args.window_days,
                 max_calls=args.max_calls,
+                exact_term=args.exact_term,
             )
             print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False))
         elif pipeline == "weekly-intelligence":

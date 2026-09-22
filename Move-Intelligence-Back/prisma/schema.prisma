@@ -307,6 +307,9 @@ model TrackedListing {
   lastSuccessAt       DateTime?            @map("last_success_at")
   consecutiveFailures Int                  @default(0) @map("consecutive_failures")
   nextDueAt           DateTime             @default(now()) @map("next_due_at")
+  // Subprojeto D: motivo do nível (watchlist | top50 | descoberta | radar | demais).
+  tierReason          String?              @map("tier_reason")
+  tierUpdatedAt       DateTime?            @map("tier_updated_at")
   observations        ListingObservation[]
   // Contagem de reviews na última amostra de textos (A5): nova amostra só
   // quando crescer ≥ 10 ou ≥ 10% (limiares configuráveis).
@@ -845,6 +848,31 @@ model SearchTrendSnapshot {
 
   @@index([typeKey, geo, capturedAt], map: "search_trend_snapshots_type_geo_captured_idx")
   @@map("search_trend_snapshots")
+}
+
+/// Subprojeto D: termos em alta do radar. O ADMIN aprova; a coleta semanal busca anúncios.
+model DiscoveryTerm {
+  id          String    @id @default(uuid()) @db.Uuid
+  typeKey     String    @map("type_key")
+  geo         String
+  term        String
+  termNorm    String    @map("term_norm")
+  risingValue Int       @default(0) @map("rising_value")
+  risingLabel String    @default("") @map("rising_label")
+  breakout    Boolean   @default(false)
+  status      String    @default("new")
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  decidedBy   String?   @map("decided_by") @db.Uuid
+  decidedAt   DateTime? @map("decided_at")
+  searchedAt  DateTime? @map("searched_at")
+  searchJobId String?   @map("search_job_id") @db.Uuid
+  newListings Int?      @map("new_listings")
+  searchError String?   @map("search_error")
+
+  @@unique([geo, termNorm], map: "discovery_terms_geo_term_norm_key")
+  @@index([status], map: "discovery_terms_status_idx")
+  @@map("discovery_terms")
 }
 
 /// Histórico de decisões da revisão (para desfazer).

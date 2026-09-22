@@ -8,6 +8,7 @@
     Tipos novos sugeridos
     @if (queueError()) { <span aria-label="contagem indisponível">—</span> } @else { ({{ counts().suggestedType }}) }
   </button>
+  <button type="button" [class.active]="tab() === 'discovery_terms'" (click)="setTab('discovery_terms')">Termos em alta</button>
 </div>
 
 @if (queueError()) {
@@ -52,7 +53,7 @@
       <p class="empty">Nenhum anúncio aguardando revisão.</p>
     }
   }
-} @else {
+} @else if (tab() === 'suggested_type') {
   @if (queueError()) {
     <p class="empty queue-error" role="alert">{{ queueError() }}</p>
   } @else {
@@ -86,4 +87,7 @@
       <p class="empty">Nenhum tipo novo sugerido.</p>
     }
   }
+}
+@if (tab() === 'discovery_terms') {
+  <app-discovery-terms />
 }
