@@ -3,6 +3,7 @@ from . import run_weekly_intelligence
 from . import run_historical_collection
 from . import run_track_listings
 from . import run_exchange_rates
+from . import run_search_trends
 
 __all__ = [
     "run_intelligence_etl",
@@ -10,4 +11,5 @@ __all__ = [
     "run_historical_collection",
     "run_track_listings",
     "run_exchange_rates",
+    "run_search_trends",
 ]

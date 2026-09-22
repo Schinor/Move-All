@@ -10,6 +10,7 @@ import { ReviewSentiment, ExecutiveRecommendationItem,
   MonteCarloDefaults,
   MonteCarloSimulationRequest,
   MonteCarloSimulationResult,
+  SearchTrends,
   Series,
   Supplier,
   TimeWindow,
@@ -81,6 +82,10 @@ export class TrendsService {
 
   offers(id: string): Observable<CardOffers> {
     return this.api.get<CardOffers>(`/products/${id}/offers`);
+  }
+
+  searchTrends(id: string): Observable<SearchTrends> {
+    return this.api.get<SearchTrends>(`/products/${id}/search-trends`);
   }
 
   monteCarloDefaults(id: string, offerKey?: string): Observable<MonteCarloDefaults> {

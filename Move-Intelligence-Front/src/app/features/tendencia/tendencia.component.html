@@ -137,7 +137,7 @@
                 <button
                   type="button"
                   class="metric-btn"
-                  [class.active]="historyMetric() === 'volume'"
+                  [class.active]="adoptionView() === 'history' && historyMetric() === 'volume'"
                   (click)="setHistoryMetric('volume')"
                 >
                   Volume
@@ -145,7 +145,7 @@
                 <button
                   type="button"
                   class="metric-btn"
-                  [class.active]="historyMetric() === 'price'"
+                  [class.active]="adoptionView() === 'history' && historyMetric() === 'price'"
                   (click)="setHistoryMetric('price')"
                 >
                   Preço Médio
@@ -153,19 +153,34 @@
                 <button
                   type="button"
                   class="metric-btn"
-                  [class.active]="historyMetric() === 'review'"
+                  [class.active]="adoptionView() === 'history' && historyMetric() === 'review'"
                   (click)="setHistoryMetric('review')"
                 >
                   Avaliações
                 </button>
+                <button
+                  type="button"
+                  class="metric-btn"
+                  [class.active]="adoptionView() === 'search'"
+                  (click)="setAdoptionView('search')"
+                >
+                  Buscas (Google)
+                </button>
               </div>
-              <app-window-selector [value]="window()" (changed)="setWindow($event)" />
-              <label class="toggle compare-toggle">
-                <input type="checkbox" [checked]="comparePrevious()" (change)="toggleComparePrevious($event)" />
-                Comparar com período anterior
-              </label>
+              @if (adoptionView() === 'history') {
+                <app-window-selector [value]="window()" (changed)="setWindow($event)" />
+                <label class="toggle compare-toggle">
+                  <input type="checkbox" [checked]="comparePrevious()" (change)="toggleComparePrevious($event)" />
+                  Comparar com período anterior
+                </label>
+              }
             </div>
-            @if (historyMetric() === 'review') {
+            @if (adoptionView() === 'search') {
+              @switch (searchTrends().status) {
+                @case ('ready') { <app-search-trend-chart [series]="$any(searchTrends()).data.series" /> }
+                @default { <app-state-panel [state]="searchTrends()" emptyMessage="Ainda não há coleta de buscas para este tipo." /> }
+              }
+            } @else if (historyMetric() === 'review') {
               @switch (reviewSentiment().status) {
                 @case ('ready') {
                   <app-review-sentiment-chart [data]="$any(reviewSentiment()).data" />
@@ -280,11 +295,19 @@
                     } @else { <strong>—</strong> }</div>
                   <div><span>Ofertas</span><strong>{{ data.offers.length }}</strong><small>{{ offerStoreCount(data.offers) }} lojas</small></div>
                 </div>
+                @if (offerChips().length > 2) {
+                  <div class="mp-chips" role="group" aria-label="Filtrar ofertas por marketplace">
+                    @for (c of offerChips(); track c.marketplace ?? 'todos') {
+                      <button type="button" class="mp-chip" [class.active]="offerMarketplace() === c.marketplace"
+                        (click)="offerMarketplace.set(c.marketplace)">{{ c.label }} ({{ c.count }})</button>
+                    }
+                  </div>
+                }
                 <div class="table-scroll">
                   <table class="offers-table">
                     <thead><tr><th>Score</th><th>Oferta</th><th>Fonte</th><th>Preço no MOQ</th><th>MOQ</th><th>Capital 1º pedido</th><th>P(VPL&gt;0)</th><th>Nota</th><th></th></tr></thead>
                     <tbody>
-                      @for (o of data.offers; track o.key) {
+                      @for (o of visibleOffers(); track o.key) {
                         <tr>
                           <td>@if (o.score !== null) { <strong>{{ o.score }}</strong> } @else { <span class="muted">{{ offerStateLabel(o.state) }}</span> }</td>
                           <td>{{ offerLabel(o) }}</td>

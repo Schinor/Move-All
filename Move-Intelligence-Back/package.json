@@ -17,6 +17,7 @@
     "prisma:sync": "prisma db push",
     "prisma:studio": "prisma studio",
     "catalog:seed": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-seed.ts",
+    "catalog:sync-suppliers": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-sync-suppliers.ts",
     "catalog:auto-resolve": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-auto-resolve.ts",
     "catalog:reprocess": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-reprocess.ts",
     "catalog:import-fichas": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register scripts/catalog-import-fichas.ts",

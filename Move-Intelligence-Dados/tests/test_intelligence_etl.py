@@ -5,7 +5,12 @@ from unittest.mock import patch
 from app.etl.extract.demand_signal.google_trends import GoogleTrendsExtractor, parse_bright_data_response
 from app.etl.extract.demand_signal.tiktok_search import parse_tiktok_search_response
 from app.etl.extract.marketplace.amazon_br import AmazonBRExtractor
-from app.etl.extract.marketplace.common import BrightDataClient, MarketplaceExtractor, MarketplaceProfile
+from app.etl.extract.marketplace.common import (
+    BrightDataClient,
+    BrightDataMcpError,
+    MarketplaceExtractor,
+    MarketplaceProfile,
+)
 from app.etl.load.database import DemandSignalModel, ProductDemandLinkModel, ProductSnapshotModel, get_session
 from app.etl.load.products import upsert_products
 from app.etl.transform.correlate import build_product_demand_links
@@ -243,6 +248,54 @@ def test_bright_data_mcp_client_owns_session_and_unwraps_tool_result():
     assert request.call_args_list[1].kwargs["headers"]["Mcp-Session-Id"] == "test-session"
     assert request.call_args_list[2].kwargs["json"]["params"]["name"] == "search_engine"
     assert "Authorization" not in request.call_args_list[2].kwargs["headers"]
+
+
+def test_bright_data_mcp_descarta_sessao_e_inicializa_novamente_apos_erro():
+    class FakeResponse:
+        def __init__(self, text, headers=None, status_code=200):
+            self.text = text
+            self.content = text.encode("utf-8")
+            self.headers = headers or {}
+            self.status_code = status_code
+            self.ok = 200 <= status_code < 300
+
+    def initialize(session_id):
+        return FakeResponse(
+            '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26"}}',
+            {"content-type": "application/json", "mcp-session-id": session_id},
+        )
+
+    initialized = FakeResponse("", {"content-type": "application/json"}, 202)
+    failed = FakeResponse(
+        '{"jsonrpc":"2.0","error":{"message":"session expired"}}',
+        {"content-type": "application/json"},
+        200,
+    )
+    succeeded = FakeResponse(
+        '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"ok"}]}}',
+        {"content-type": "application/json"},
+    )
+
+    with patch(
+        "app.etl.extract.marketplace.common.requests.post",
+        side_effect=[initialize("session-1"), initialized, failed, initialize("session-2"), initialized, succeeded],
+    ) as request:
+        client = BrightDataClient(provider="mcp", mcp_url="https://mcp.example.test/token")
+        try:
+            client._call_mcp_tool("search_engine", {})
+        except BrightDataMcpError as error:
+            assert "session" in str(error)
+        else:
+            raise AssertionError("a falha de sessão deveria ser propagada")
+        assert client._mcp_session_id is None
+        assert client._call_mcp_tool("search_engine", {}) == "ok"
+
+    initialize_calls = [
+        call for call in request.call_args_list if call.kwargs["json"].get("method") == "initialize"
+    ]
+    assert len(initialize_calls) == 2
+    assert request.call_args_list[3].kwargs["json"]["method"] == "initialize"
+    assert request.call_args_list[5].kwargs["headers"]["Mcp-Session-Id"] == "session-2"
 
 
 def test_product_loader_is_idempotent(tmp_path):

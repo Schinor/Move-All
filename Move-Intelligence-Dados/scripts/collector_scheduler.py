@@ -28,7 +28,7 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger("CollectorScheduler")
 
-from app.pipelines import run_historical_collection, run_weekly_intelligence
+from app.pipelines import run_historical_collection, run_search_trends, run_weekly_intelligence
 
 RUNNING = True
 
@@ -100,6 +100,11 @@ def main():
                 LOGGER.info("Varredura periódica finalizada: %s", res)
             except Exception as err:
                 LOGGER.error("Falha na varredura periódica: %s", err, exc_info=True)
+            if os.getenv("SEARCH_TRENDS_ENABLED", "false").lower() in ("true", "1", "yes"):
+                try:
+                    LOGGER.info("Radar de demanda: %s", run_search_trends.run(database_url=database_url))
+                except Exception as err:
+                    LOGGER.error("Falha no radar de demanda: %s", err, exc_info=True)
             last_run = time.time()
             LOGGER.info("Aguardando próximo ciclo (%.1f horas)...", interval_hours)
 

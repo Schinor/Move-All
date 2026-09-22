@@ -308,16 +308,14 @@ def run(
 
     used_keywords: dict[str, str] = {}
     if include_demand:
-        # F1.6: janela longa com âncora fixa por geo. O Google Trends já é
-        # 0–100 por requisição; a âncora (termo canônico do cluster) e o
-        # request_id gravados em cada linha tornam execuções comparáveis sem
-        # reescalar. O TikTok guarda a contagem bruta (snapshot semanal).
-        # A3.8: a âncora passa a ser um termo fixo enviado na MESMA requisição
-        # do Trends (TRENDS_ANCHOR_KEYWORD, default "academia"); a série da
-        # âncora é persistida junto (mesmo request_id) para encadear execuções.
+        # F1.6: o Google Trends é relativo a cada requisição; o request_id e o
+        # timeframe gravados em cada linha identificam a coleta. A âncora é
+        # opcional para manter compatibilidade quando explicitamente definida.
+        # O TikTok guarda a contagem bruta (snapshot semanal).
         demand_timeframe = "today 12-m"
         demand_request_id = uuid.uuid4().hex
-        demand_anchor = os.getenv("TRENDS_ANCHOR_KEYWORD", "academia").strip() or "academia"
+        # Subprojeto C: a âncora "academia" zerava termos pequenos.
+        demand_anchor = os.getenv("TRENDS_ANCHOR_KEYWORD", "").strip() or None
         demand_cutoff = window_end - timedelta(days=370)
         trends = GoogleTrendsExtractor(
             client=active_client,

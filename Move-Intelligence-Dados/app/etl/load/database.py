@@ -22,10 +22,13 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Float,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
     create_engine,
     event,
@@ -106,6 +109,35 @@ class DemandSignalModel(ETLBase):
             "week_start",
             name="uq_demand_keyword_geo_source_week",
         ),
+    )
+
+
+class SearchTrendSnapshotModel(ETLBase):
+    """Subprojeto C: espelha a tabela Prisma `search_trend_snapshots`."""
+
+    __tablename__ = "search_trend_snapshots"
+
+    id = Column(IDENTIFIER_TYPE, primary_key=True)
+    type_key = Column(String, nullable=False)
+    term = Column(String, nullable=False)
+    geo = Column(String(16), nullable=False)
+    timeframe = Column(String(32), nullable=False)
+    status = Column(String(16), nullable=False)
+    error = Column(Text)
+    points = Column(JSON_TYPE, nullable=False, default=list)
+    last_value = Column(Integer)
+    growth_4w = Column(Float)
+    growth_12w = Column(Float)
+    related_top = Column(JSON_TYPE, nullable=False, default=list)
+    related_rising = Column(JSON_TYPE, nullable=False, default=list)
+    captured_at = Column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+
+    __table_args__ = (
+        Index("search_trend_snapshots_type_geo_captured_idx", "type_key", "geo", "captured_at"),
     )
 
 
@@ -410,6 +442,7 @@ __all__ = [
     "ETLBase",
     "ProductDemandLinkModel",
     "ProductSnapshotModel",
+    "SearchTrendSnapshotModel",
     "get_engine",
     "get_session",
     "init_db",

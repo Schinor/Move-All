@@ -404,6 +404,10 @@
   overflow-x: auto;
 }
 
+.mp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.mp-chip { border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+.mp-chip.active { border-color: var(--accent, var(--brand)); }
+
 .offers-table {
   width: 100%;
   border-collapse: collapse;

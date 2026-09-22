@@ -109,6 +109,7 @@ import {
 } from '../../shared/scoring/product-score-loader';
 import { includeSyntheticData, syntheticSnapshotWhere } from '../../shared/synthetic-data/synthetic-data.filter';
 import { buildReviewSentimentSeries } from '../../shared/scoring/review-sentiment';
+import { latestSeriesByGeo } from './search-trends';
 
 /** Cenários do lote OFICIAL que grava o ProductScore (F2.4). */
 const OFFICIAL_SCENARIO_COUNT = 50_000;
@@ -752,6 +753,40 @@ export class ProductsService {
       },
       best_offer_key: best?.key ?? null,
       offers,
+    };
+  }
+
+  /** Subprojeto C: curva de buscas (Google Trends) do tipo do card. */
+  async getSearchTrends(productClusterId: string) {
+    const cluster = await this.prisma.productCluster.findUnique({
+      where: { id: productClusterId },
+      select: { typeId: true },
+    });
+    if (!cluster) throw new NotFoundException(`Produto não encontrado: ${productClusterId}`);
+    if (!cluster.typeId) return { type_key: null, series: [] };
+
+    const type = await this.prisma.catalogType.findUnique({
+      where: { id: cluster.typeId },
+      select: { key: true },
+    });
+    if (!type) return { type_key: null, series: [] };
+
+    const rows = await this.prisma.searchTrendSnapshot.findMany({
+      where: { typeKey: type.key },
+      orderBy: { capturedAt: 'desc' },
+      take: 20,
+    });
+    return {
+      type_key: type.key,
+      series: latestSeriesByGeo(rows).map((row) => ({
+        geo: row.geo,
+        term: row.term,
+        captured_at: row.capturedAt,
+        status: row.status,
+        points: row.points,
+        growth_4w: row.growth4w,
+        growth_12w: row.growth12w,
+      })),
     };
   }
 

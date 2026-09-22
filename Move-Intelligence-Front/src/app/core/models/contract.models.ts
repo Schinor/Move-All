@@ -175,6 +175,27 @@ export interface Series {
   points: SeriesPoint[];
 }
 
+export interface SearchTrendPoint {
+  weekStart: string;
+  value: number;
+  partial: boolean;
+}
+
+export interface SearchTrendSeries {
+  geo: 'BR' | 'US' | string;
+  term: string;
+  capturedAt: string;
+  status: 'ok' | 'sem_volume';
+  points: SearchTrendPoint[];
+  growth4w: number | null;
+  growth12w: number | null;
+}
+
+export interface SearchTrends {
+  typeKey: string | null;
+  series: SearchTrendSeries[];
+}
+
 /** Avaliações por semana (positivas 4–5★, neutras 3★, negativas 1–2★) + nota média. */
 export interface ReviewSentimentPoint {
   t: string;

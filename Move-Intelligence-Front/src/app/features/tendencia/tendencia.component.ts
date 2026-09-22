@@ -27,6 +27,7 @@ import { SparklineComponent } from '../../shared/components/intel/sparkline/spar
 import { ScoreGaugeComponent } from '../../shared/components/intel/score-gauge/score-gauge.component';
 import { OpportunityRadarComponent } from '../../shared/components/intel/opportunity-radar/opportunity-radar.component';
 import { AdoptionCurveChartComponent } from '../../shared/components/intel/adoption-curve-chart/adoption-curve-chart.component';
+import { SearchTrendChartComponent } from '../../shared/components/intel/search-trend-chart/search-trend-chart.component';
 import { ReviewSentimentChartComponent } from '../../shared/components/intel/review-sentiment-chart/review-sentiment-chart.component';
 import { AiRecommendationCardComponent } from '../../shared/components/intel/ai-recommendation-card/ai-recommendation-card.component';
 import { SignalSourceCardComponent } from '../../shared/components/intel/signal-source-card/signal-source-card.component';
@@ -42,6 +43,7 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { comparisonCountText, listingsText } from '../../shared/util/card-format';
 import { categoryLabel, dataConfidenceLabel, decisionLabel, premiseSourceLabel, actionTooltip, scoreBandLabel, socialSignalLabel, sourceLabel } from '../../shared/util/format';
 import { offerLabel, offerStateLabel, offerStoreCount } from '../../shared/util/offer-format';
+import { filterByMarketplace, marketplaceChips } from '../../shared/util/marketplace-filter';
 
 type PremiseKey = keyof MonteCarloPremises;
 
@@ -66,6 +68,7 @@ interface PremiseField {
     ScoreGaugeComponent,
     OpportunityRadarComponent,
     AdoptionCurveChartComponent,
+    SearchTrendChartComponent,
     ReviewSentimentChartComponent,
     AiRecommendationCardComponent,
     MonteCarloHistogramComponent,
@@ -112,9 +115,11 @@ export class TendenciaComponent {
   ];
 
   readonly historyMetric = signal<'volume' | 'price' | 'review'>('volume');
+  readonly adoptionView = signal<'history' | 'search'>('history');
   readonly comparePrevious = signal(false);
 
   readonly product = toAsyncState(this.trends.getProduct(this.id));
+  readonly searchTrends = toAsyncState(this.trends.searchTrends(this.id));
   readonly isAdmin = computed(() => this.auth.currentUser()?.role === 'ADMIN');
   readonly countText = comparisonCountText;
   readonly listingsText = listingsText;
@@ -123,6 +128,19 @@ export class TendenciaComponent {
     if (target && typeof window !== 'undefined') window.location.replace(`/tendencia/${target}`);
   });
   readonly offers = toAsyncState(this.trends.offers(this.id), (v: CardOffers) => v.offers.length === 0);
+  readonly offerMarketplace = signal<string | null>(null);
+  readonly offerChips = computed(() => {
+    const state = this.offers();
+    return state.status === 'ready'
+      ? marketplaceChips(state.data.offers, (offer) => offer.marketplace, (marketplace) => this.sourceName(marketplace))
+      : [];
+  });
+  readonly visibleOffers = computed(() => {
+    const state = this.offers();
+    return state.status === 'ready'
+      ? filterByMarketplace(state.data.offers, (offer) => offer.marketplace, this.offerMarketplace())
+      : [];
+  });
   readonly offerLabel = offerLabel;
   readonly offerStateLabel = offerStateLabel;
   readonly offerStoreCount = offerStoreCount;
@@ -287,7 +305,12 @@ export class TendenciaComponent {
   }
 
   setHistoryMetric(metric: 'volume' | 'price' | 'review'): void {
+    this.adoptionView.set('history');
     this.historyMetric.set(metric);
+  }
+
+  setAdoptionView(view: 'history' | 'search'): void {
+    this.adoptionView.set(view);
   }
 
   toggleComparePrevious(event: Event): void {

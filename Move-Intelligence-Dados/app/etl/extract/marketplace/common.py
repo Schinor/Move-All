@@ -211,6 +211,16 @@ class BrightDataClient:
                 continue
         return messages[-1] if messages else None
 
+    @staticmethod
+    def _contains_session_marker(value: Any) -> bool:
+        if value is None:
+            return False
+        text = str(value).casefold()
+        return "sessão" in text or "session" in text
+
+    def _discard_mcp_session(self) -> None:
+        self._mcp_session_id = None
+
     def _mcp_post(self, payload: Mapping[str, Any], *, initialize_session: bool = True) -> Any:
         headers = {
             "Accept": "application/json, text/event-stream",
@@ -231,14 +241,26 @@ class BrightDataClient:
                     stream=True,
                 )
             except requests.RequestException:
+                self._discard_mcp_session()
                 raise BrightDataMcpError("Falha de conexão com o MCP Bright Data") from None
-            if not response.ok:
+            status_code = getattr(response, "status_code", None)
+            if isinstance(status_code, int) and 400 <= status_code < 600:
+                self._discard_mcp_session()
                 raise BrightDataMcpError(f"MCP Bright Data retornou HTTP {response.status_code}")
-            decoded = self._decode_mcp_response(response, self.timeout)
+            try:
+                decoded = self._decode_mcp_response(response, self.timeout)
+            except BrightDataMcpError:
+                self._discard_mcp_session()
+                raise
         if isinstance(decoded, Mapping) and decoded.get("error"):
             error = decoded["error"]
             message = error.get("message") if isinstance(error, Mapping) else str(error)
+            if self._contains_session_marker(decoded) or self._contains_session_marker(message):
+                self._discard_mcp_session()
             raise BrightDataMcpError(f"MCP Bright Data rejeitou a solicitação: {message}")
+        if decoded is None and self._contains_session_marker(getattr(response, "text", None)):
+            self._discard_mcp_session()
+            raise BrightDataMcpError("MCP Bright Data retornou uma resposta de sessão inválida")
         return decoded
 
     def _ensure_mcp_session(self) -> None:
@@ -270,16 +292,25 @@ class BrightDataClient:
                     stream=True,
                 )
             except requests.RequestException:
+                self._discard_mcp_session()
                 raise BrightDataMcpError("Falha ao iniciar sessão com o MCP Bright Data") from None
-            if not response.ok:
+            status_code = getattr(response, "status_code", None)
+            if isinstance(status_code, int) and 400 <= status_code < 600:
+                self._discard_mcp_session()
                 raise BrightDataMcpError(
                     f"MCP Bright Data recusou a inicialização com HTTP {response.status_code}"
                 )
-            decoded = self._decode_mcp_response(response, self.timeout)
+            try:
+                decoded = self._decode_mcp_response(response, self.timeout)
+            except BrightDataMcpError:
+                self._discard_mcp_session()
+                raise
             if not isinstance(decoded, Mapping) or decoded.get("error"):
+                self._discard_mcp_session()
                 raise BrightDataMcpError("Resposta de inicialização inválida do MCP Bright Data")
             session_id = response.headers.get("mcp-session-id")
             if not session_id:
+                self._discard_mcp_session()
                 raise BrightDataMcpError("MCP Bright Data não retornou um identificador de sessão")
             self._mcp_session_id = session_id
             self._mcp_post(
@@ -325,6 +356,8 @@ class BrightDataClient:
         ] if isinstance(content, list) else []
         text = "\n".join(texts)
         if result.get("isError"):
+            if self._contains_session_marker(response) or self._contains_session_marker(text):
+                self._discard_mcp_session()
             raise BrightDataMcpError(
                 f"Ferramenta MCP {name!r} falhou: {self._unwrap_mcp_text(text)[:500]}"
             )

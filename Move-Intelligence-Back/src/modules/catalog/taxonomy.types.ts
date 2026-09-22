@@ -40,6 +40,7 @@ export interface TaxonomySeedFile {
     name_pt: string;
     ncm: string | null;
     description_en: string;
+    trend_terms?: { pt: string; en: string };
     card_key_attrs: Array<{
       attr: string;
       label_pt: string;

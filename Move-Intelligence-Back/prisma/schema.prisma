@@ -825,6 +825,28 @@ model CatalogReviewItem {
   @@map("catalog_review_items")
 }
 
+/// Subprojeto C: coleta do Google Trends por termo/país. O índice (0–100) é relativo
+/// a cada coleta; crescimento é calculado dentro da mesma coleta.
+model SearchTrendSnapshot {
+  id            String   @id @default(uuid()) @db.Uuid
+  typeKey       String   @map("type_key")
+  term          String
+  geo           String
+  timeframe     String
+  status        String
+  error         String?
+  points        Json     @default("[]")
+  lastValue     Int?     @map("last_value")
+  growth4w      Float?   @map("growth_4w")
+  growth12w     Float?   @map("growth_12w")
+  relatedTop    Json     @default("[]") @map("related_top")
+  relatedRising Json     @default("[]") @map("related_rising")
+  capturedAt    DateTime @default(now()) @map("captured_at")
+
+  @@index([typeKey, geo, capturedAt], map: "search_trend_snapshots_type_geo_captured_idx")
+  @@map("search_trend_snapshots")
+}
+
 /// Histórico de decisões da revisão (para desfazer).
 model CatalogDecision {
   id                 String   @id @default(uuid()) @db.Uuid

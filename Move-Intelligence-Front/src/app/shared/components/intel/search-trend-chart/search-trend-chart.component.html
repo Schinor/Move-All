@@ -1,0 +1,21 @@
+@if (series().length === 0) {
+  <p class="empty">Ainda não há coleta de buscas para este tipo.</p>
+} @else {
+  <svg [attr.viewBox]="'0 0 ' + width + ' ' + height" class="trend-svg" role="img" aria-label="Buscas no Google por semana">
+    @for (s of series(); track s.geo) {
+      @if (s.status === 'ok') {
+        <polyline [attr.points]="polyline(s.points, width, height)" [class]="'line line-' + s.geo" fill="none" />
+      }
+    }
+  </svg>
+  <ul class="trend-legend">
+    @for (s of series(); track s.geo) {
+      <li [class]="'legend-' + s.geo">
+        <strong>{{ s.geo }}</strong> · "{{ s.term }}"
+        @if (s.status === 'sem_volume') { · volume baixo demais no Google }
+        @else { · 4 sem.: {{ growth(s.growth4w) }} · 12 sem.: {{ growth(s.growth12w) }} }
+      </li>
+    }
+  </ul>
+  <p class="note">Índice relativo do Google (100 = pico do período em cada país); não compare BR com US em valor absoluto.</p>
+}

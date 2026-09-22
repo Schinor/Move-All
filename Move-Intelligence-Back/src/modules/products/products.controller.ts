@@ -32,6 +32,11 @@ export class ProductsController {
     return this.products.getOffers(id);
   }
 
+  @Get(':id/search-trends')
+  getSearchTrends(@Param('id') id: string) {
+    return this.products.getSearchTrends(id);
+  }
+
   @Get(':id/price-history')
   getPriceHistory(
     @Param('id') id: string,

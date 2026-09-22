@@ -1,0 +1,6 @@
+.trend-svg { width: 100%; height: 160px; display: block; }
+.line { stroke-width: 2; }
+.line-BR { stroke: var(--chart-1); }
+.line-US { stroke: var(--chart-2); }
+.trend-legend { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.note, .empty { color: var(--text-2); font-size: 12px; }

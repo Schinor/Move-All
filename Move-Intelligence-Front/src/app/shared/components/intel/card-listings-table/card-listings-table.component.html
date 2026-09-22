@@ -1,10 +1,18 @@
 <section class="card-listings">
   <h3>Anúncios deste card</h3>
-  @if ($any(listings()).data; as rows) {
+  @if ($any(listings()).data) {
+    @if (chips().length > 2) {
+      <div class="mp-chips" role="group" aria-label="Filtrar por marketplace">
+        @for (c of chips(); track c.marketplace ?? 'todos') {
+          <button type="button" class="mp-chip" [class.active]="selectedMarketplace() === c.marketplace"
+            (click)="selectedMarketplace.set(c.marketplace)">{{ c.label }} ({{ c.count }})</button>
+        }
+      </div>
+    }
     <table>
       <thead><tr><th>Anúncio</th><th>Loja</th><th>Variação</th><th>Preço</th><th>Nota</th><th>Status</th></tr></thead>
       <tbody>
-        @for (l of $any(rows); track l.marketplace + l.externalProductId) {
+        @for (l of visibleRows(); track l.marketplace + l.externalProductId) {
           <tr>
             <td>@if (l.url) { <a [href]="l.url" target="_blank" rel="noopener">{{ l.title }}</a> } @else { {{ l.title }} }</td>
             <td>{{ store(l) }}</td>

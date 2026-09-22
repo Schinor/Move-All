@@ -98,6 +98,40 @@ export class TaxonomyService {
     return new Map((await this.listActiveTypes()).map((t) => [t.key, t]));
   }
 
+  /** Subprojeto C: termos do radar por tipo → keyword_terms (pt = BR, en = US). Nunca apaga. */
+  async seedTrendTerms(file: TaxonomySeedFile): Promise<{ activated: number; deactivated: number }> {
+    const wanted: Array<{ term: string; language: 'pt' | 'en'; category: string }> = [];
+    for (const type of file.types) {
+      const terms = type.trend_terms;
+      if (!terms) continue;
+      for (const language of ['pt', 'en'] as const) {
+        const term = terms[language]?.trim().toLowerCase();
+        if (term) wanted.push({ term, language, category: type.key });
+      }
+    }
+    if (wanted.length === 0) return { activated: 0, deactivated: 0 };
+
+    const categories = [...new Set(wanted.map((term) => term.category))];
+    const existing = await this.prisma.keywordTerm.findMany({
+      where: { category: { in: categories }, active: true },
+    });
+    const wantedKeys = new Set(wanted.map((term) => `${term.term}|${term.language}|${term.category}`));
+    const stale = existing
+      .filter((term) => !wantedKeys.has(`${term.term}|${term.language}|${term.category}`))
+      .map((term) => term.id);
+    if (stale.length > 0) {
+      await this.prisma.keywordTerm.updateMany({ where: { id: { in: stale } }, data: { active: false } });
+    }
+    for (const term of wanted) {
+      await this.prisma.keywordTerm.upsert({
+        where: { term_language_category: term },
+        create: { ...term, active: true, priority: 100 },
+        update: { active: true },
+      });
+    }
+    return { activated: wanted.length, deactivated: stale.length };
+  }
+
   /** Idempotente: upsert por `key`. Tipos com source='approved' (criados na revisão) não são tocados. */
   async seedFromFile(file: TaxonomySeedFile): Promise<{ families: number; types: number }> {
     const familyIds = new Map<string, string>();
@@ -136,6 +170,7 @@ export class TaxonomyService {
       });
       types += 1;
     }
+    await this.seedTrendTerms(file);
     return { families: file.families.length, types };
   }
 }

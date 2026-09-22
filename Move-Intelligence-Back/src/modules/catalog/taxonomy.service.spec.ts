@@ -83,6 +83,11 @@ describe('TaxonomyService', () => {
           where.key === 'spin_bike' ? { id: 't1', source: 'approved' } : null),
         upsert: jest.fn(),
       },
+      keywordTerm: {
+        findMany: jest.fn().mockResolvedValue([]),
+        upsert: jest.fn(),
+        updateMany: jest.fn(),
+      },
     };
     const service = new TaxonomyService(prisma as unknown as PrismaService);
     const result = await service.seedFromFile(SEED);
@@ -143,5 +148,48 @@ describe('TaxonomyService', () => {
       comparisonAttrs: [{ attr: 'carga_max_kg', label_pt: 'carga máx.', kind: 'number', unit: 'kg' }],
       variationAttrs: ['cor'],
     }), create: expect.anything() });
+  });
+});
+
+describe('TaxonomyService.seedTrendTerms', () => {
+  function build(existing: Array<{ id: string; term: string; language: string; category: string; active: boolean }>) {
+    const prisma = {
+      keywordTerm: {
+        findMany: jest.fn().mockResolvedValue(existing),
+        upsert: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    return { service: new TaxonomyService(prisma as never), prisma };
+  }
+
+  const file = {
+    families: [],
+    types: [{ key: 'spin_bike', trend_terms: { pt: 'bike spinning', en: 'spin bike' } }],
+  } as never;
+
+  it('cria/ativa os termos pt e en do tipo', async () => {
+    const { service, prisma } = build([]);
+    const out = await service.seedTrendTerms(file);
+    expect(prisma.keywordTerm.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { term_language_category: { term: 'bike spinning', language: 'pt', category: 'spin_bike' } },
+      create: expect.objectContaining({ term: 'bike spinning', language: 'pt', category: 'spin_bike', active: true }),
+      update: { active: true },
+    }));
+    expect(prisma.keywordTerm.upsert).toHaveBeenCalledTimes(2);
+    expect(out).toEqual({ activated: 2, deactivated: 0 });
+  });
+
+  it('termo trocado desativa o antigo (não apaga)', async () => {
+    const { service, prisma } = build([{ id: 'k1', term: 'bicicleta spinning', language: 'pt', category: 'spin_bike', active: true }]);
+    const out = await service.seedTrendTerms(file);
+    expect(prisma.keywordTerm.updateMany).toHaveBeenCalledWith({ where: { id: { in: ['k1'] } }, data: { active: false } });
+    expect(out.deactivated).toBe(1);
+  });
+
+  it('tipo sem trend_terms é ignorado', async () => {
+    const { service, prisma } = build([]);
+    await service.seedTrendTerms({ families: [], types: [{ key: 'x' }] } as never);
+    expect(prisma.keywordTerm.upsert).not.toHaveBeenCalled();
   });
 });

@@ -96,6 +96,53 @@ describe('ProductsService — simulateUnitEconomics', () => {
   });
 });
 
+describe('ProductsService — getSearchTrends (Subprojeto C)', () => {
+  it('card sem tipo devolve series vazia', async () => {
+    const prisma = {
+      productCluster: { findUnique: jest.fn().mockResolvedValue({ typeId: null }) },
+    };
+    const service = new ProductsService(prisma as unknown as PrismaService, {} as OpenRouterService);
+
+    await expect(service.getSearchTrends('c1')).resolves.toEqual({ type_key: null, series: [] });
+  });
+
+  it('devolve a última coleta válida de cada país do tipo', async () => {
+    const prisma = {
+      productCluster: { findUnique: jest.fn().mockResolvedValue({ typeId: 't1' }) },
+      catalogType: { findUnique: jest.fn().mockResolvedValue({ key: 'spin_bike' }) },
+      searchTrendSnapshot: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            geo: 'BR',
+            status: 'ok',
+            term: 'bike spinning',
+            capturedAt: new Date('2026-09-20'),
+            points: [{ week_start: '2026-09-13', value: 56, partial: true }],
+            growth4w: 0.1,
+            growth12w: -0.2,
+          },
+          {
+            geo: 'US',
+            status: 'erro',
+            term: 'spin bike',
+            capturedAt: new Date('2026-09-20'),
+            points: [],
+            growth4w: null,
+            growth12w: null,
+          },
+        ]),
+      },
+    };
+    const service = new ProductsService(prisma as unknown as PrismaService, {} as OpenRouterService);
+
+    const out = await service.getSearchTrends('c1');
+
+    expect(out.type_key).toBe('spin_bike');
+    expect(out.series).toHaveLength(1);
+    expect(out.series[0]).toMatchObject({ geo: 'BR', term: 'bike spinning', growth_4w: 0.1 });
+  });
+});
+
 // S7 (RELATORIO_ANALISE_DADOS_E_SCORES.md seção 3.2): a simulação "e se" do
 // usuário (com overrides de premissas) não pode sobrescrever o score oficial
 // do ranking nem invalida o cache — só a simulação sem overrides e o lote
