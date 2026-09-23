@@ -38,6 +38,7 @@ from app.etl.load.tracked import candidate_url, load_tracked_keys, register_new_
 from app.etl.transform.correlate import build_product_demand_links, load_keyword_map
 from app.etl.transform.normalize_demand import normalize_demand_records
 from app.etl.transform.normalize_product import canonical_cluster, normalize_products
+from app.etl.transform.term_match import title_matches_term
 
 
 LOGGER = logging.getLogger(__name__)
@@ -249,7 +250,13 @@ def run(
         finally:
             key_session.close()
 
+    relevance_skipped: dict[str, int] = {}
+
     def _keep_candidate(source: str, candidate: Mapping[str, Any]) -> bool:
+        # Subprojeto E-D1/§4.3: com --exact-term, não raspa resultado sem relação com o termo.
+        if exact_term and not title_matches_term(str(candidate.get("title") or ""), requested_term):
+            relevance_skipped[source] = relevance_skipped.get(source, 0) + 1
+            return False
         url = candidate_url(candidate)
         if not url:
             return True
@@ -289,6 +296,7 @@ def run(
                 }
                 for item in result.get("errors", [])
             ]
+            result["metadata"]["relevance_skipped"] = relevance_skipped.get(source, 0)
             return records, detail_failures, result["metadata"]
         except Exception as error:
             return (

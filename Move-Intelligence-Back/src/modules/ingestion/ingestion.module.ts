@@ -12,6 +12,7 @@ import { ExchangeRatesScheduler } from './exchange-rates.scheduler';
 import { TrackListingsScheduler } from './track-listings.scheduler';
 import { TrackingTiersService } from './tracking-tiers.service';
 import { WeeklyCollectionScheduler } from './weekly-collection.scheduler';
+import { SearchTrendsScheduler } from './search-trends.scheduler';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { WeeklyCollectionScheduler } from './weekly-collection.scheduler';
     WeeklyCollectionScheduler,
     TrackListingsScheduler,
     ExchangeRatesScheduler,
+    SearchTrendsScheduler,
   ],
 })
 export class IngestionModule {}

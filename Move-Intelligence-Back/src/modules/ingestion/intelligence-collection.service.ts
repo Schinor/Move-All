@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { CollectionStatus, Prisma } from '@prisma/client';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
+import { CardRollupsService } from '../../shared/card-rollups/card-rollups.service';
 import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
 import { DiscoverySearchService } from '../radar-discovery/discovery-search.service';
@@ -40,6 +41,8 @@ const COLLECTION_CATEGORIES = [
 
 @Injectable()
 export class IntelligenceCollectionService {
+  private searchTrendsRunning = false;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly fichas: FichaService,
@@ -47,6 +50,7 @@ export class IntelligenceCollectionService {
     private readonly discovery: DiscoverySearchService,
     private readonly tiers: TrackingTiersService,
     private readonly cache?: RedisCacheService,
+    @Optional() private readonly cardRollups?: CardRollupsService,
   ) {}
 
   async start(dto: RunIntelligenceCollectionDto) {
@@ -289,6 +293,18 @@ export class IntelligenceCollectionService {
 
     try {
       const summary = await this.runPythonTrack(dto);
+      if (summary.status === 'not_configured') {
+        await this.prisma.collectionJob.update({
+          where: { id: jobId },
+          data: {
+            status: CollectionStatus.FAILED,
+            finishedAt: new Date(),
+            stats: this.toJson(summary),
+            errorMessage: 'Bright Data não configurada: acompanhamento não executado.',
+          },
+        });
+        return;
+      }
       const observationIds = Array.isArray(summary.observation_ids)
         ? (summary.observation_ids as string[]).filter(
             (id): id is string => typeof id === 'string' && !id.startsWith('dry-run:'),
@@ -298,6 +314,7 @@ export class IntelligenceCollectionService {
       const batch = await this.products.simulateBatchForRanking(TRACK_BATCH_LIMIT);
       const tiers = await this.tiers.recalculate();
       await this.cache?.delPattern('dashboard:trends:products:*');
+      this.cardRollups?.markStale();
       const failures = Array.isArray(summary.failures) ? summary.failures : [];
       const status =
         failures.length > 0 ? CollectionStatus.PARTIAL : CollectionStatus.SUCCESS;
@@ -364,11 +381,31 @@ export class IntelligenceCollectionService {
     }
   }
 
-  private runPython(dto: RunIntelligenceCollectionDto): Promise<PipelineSummary> {
-    const dataDirectory = resolve(
-      process.env.MOVE_INTELLIGENCE_DATA_DIR ??
-        resolve(process.cwd(), '..', 'Move-Intelligence-Dados'),
+  /** Pasta do ETL Python. `||` (não `??`): variável vazia no .env cai no padrão. */
+  private dataDirectory(): string {
+    return resolve(
+      process.env.MOVE_INTELLIGENCE_DATA_DIR || resolve(process.cwd(), '..', 'Move-Intelligence-Dados'),
     );
+  }
+
+  /** Radar do Google Trends (Subprojeto C) disparado pelo Nest (spec E-D3). */
+  async runSearchTrends(opts: { maxRequests?: number } = {}): Promise<PipelineSummary> {
+    if (this.searchTrendsRunning) throw new ConflictException('Radar já está rodando');
+    this.searchTrendsRunning = true;
+    try {
+      const dataDirectory = this.dataDirectory();
+      const mainFile = resolve(dataDirectory, 'main.py');
+      if (!existsSync(mainFile)) throw new Error(`Move-Intelligence-Dados não encontrado em ${dataDirectory}`);
+      const args = [mainFile, '--pipeline', 'search-trends'];
+      if (opts.maxRequests) args.push('--max-requests', String(opts.maxRequests));
+      return await this.spawnPython(dataDirectory, args);
+    } finally {
+      this.searchTrendsRunning = false;
+    }
+  }
+
+  private runPython(dto: RunIntelligenceCollectionDto): Promise<PipelineSummary> {
+    const dataDirectory = this.dataDirectory();
     const mainFile = resolve(dataDirectory, 'main.py');
     if (!existsSync(mainFile)) {
       throw new Error(`Move-Intelligence-Dados não encontrado em ${dataDirectory}`);
@@ -446,10 +483,7 @@ export class IntelligenceCollectionService {
     dto: RunWeeklyIntelligenceCollectionDto,
     onProgress?: (progress: Record<string, unknown>) => void,
   ): Promise<PipelineSummary> {
-    const dataDirectory = resolve(
-      process.env.MOVE_INTELLIGENCE_DATA_DIR ??
-        resolve(process.cwd(), '..', 'Move-Intelligence-Dados'),
-    );
+    const dataDirectory = this.dataDirectory();
     const mainFile = resolve(dataDirectory, 'main.py');
     if (!existsSync(mainFile)) {
       throw new Error(`Move-Intelligence-Dados não encontrado em ${dataDirectory}`);
@@ -477,10 +511,8 @@ export class IntelligenceCollectionService {
     return this.spawnPython(dataDirectory, args, onProgress);
   }
 
-  private runPythonTrack(dto: RunTrackListingsDto): Promise<PipelineSummary> {    const dataDirectory = resolve(
-      process.env.MOVE_INTELLIGENCE_DATA_DIR ??
-        resolve(process.cwd(), '..', 'Move-Intelligence-Dados'),
-    );
+  private runPythonTrack(dto: RunTrackListingsDto): Promise<PipelineSummary> {
+    const dataDirectory = this.dataDirectory();
     const mainFile = resolve(dataDirectory, 'main.py');
     if (!existsSync(mainFile)) {
       throw new Error(`Move-Intelligence-Dados não encontrado em ${dataDirectory}`);
@@ -499,10 +531,7 @@ export class IntelligenceCollectionService {
    * sem lock de job (pode rodar todo dia sem risco de duplicar).
    */
   async refreshExchangeRates(): Promise<PipelineSummary> {
-    const dataDirectory = resolve(
-      process.env.MOVE_INTELLIGENCE_DATA_DIR ??
-        resolve(process.cwd(), '..', 'Move-Intelligence-Dados'),
-    );
+    const dataDirectory = this.dataDirectory();
     const mainFile = resolve(dataDirectory, 'main.py');
     if (!existsSync(mainFile)) {
       throw new Error(`Move-Intelligence-Dados não encontrado em ${dataDirectory}`);
@@ -603,6 +632,7 @@ export class IntelligenceCollectionService {
     }
     if (snapshots > 0) {
       await this.cache?.delPattern('dashboard:trends:products:*');
+      this.cardRollups?.markStale();
     }
     return { analytical_snapshots: snapshots, registered_listings: registered };
   }
@@ -748,6 +778,7 @@ export class IntelligenceCollectionService {
     }
     if (synchronized > 0) {
       await this.cache?.delPattern('dashboard:trends:products:*');
+      this.cardRollups?.markStale();
     }
     return synchronized;
   }

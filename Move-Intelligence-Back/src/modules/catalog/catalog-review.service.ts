@@ -1,6 +1,7 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { CardRollupsService } from '../../shared/card-rollups/card-rollups.service';
 import { CardAssignerService, ItemStatus, ListingRef } from './card-assigner.service';
 import { ACTIVE_CARD_STATUSES, PRIORITY, UNKNOWN_TYPE } from './catalog.constants';
 import { TRACK_CADENCE_DAYS } from '../ingestion/tracking-tiers';
@@ -39,6 +40,7 @@ export class CatalogReviewService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly assigner: CardAssignerService,
+    @Optional() private readonly cardRollups?: CardRollupsService,
   ) {}
 
   // ---------- leitura ----------
@@ -211,6 +213,7 @@ export class CatalogReviewService {
     const before = await this.state(this.listingOf(review));
     const clusterId = await this.assigner.createCardForType(dto.typeKey, dto.cardKeyValues, dto.name);
     const result = await this.applyListing(review, 'create_card', before, clusterId, 'confirmed', actorId);
+    this.cardRollups?.markStale();
     return { ...result, clusterId };
   }
 
@@ -253,6 +256,7 @@ export class CatalogReviewService {
     }
     await this.resolveReview(review.id, 'approve_type', actorId);
     const result = await this.decision('approve_type', actorId, review.id, { aliases: review.suggestedTypeAliases }, { typeKey: dto.key, typeId: type.id });
+    this.cardRollups?.markStale();
     return { ...result, typeId: type.id };
   }
 
@@ -266,6 +270,7 @@ export class CatalogReviewService {
     });
     await this.resolveReview(review.id, 'merge_type', actorId);
     const result = await this.decision('merge_type', actorId, review.id, { aliases: review.suggestedTypeAliases }, { typeKey, requeued: count });
+    this.cardRollups?.markStale();
     return { ...result, requeued: count };
   }
 
@@ -307,6 +312,7 @@ export class CatalogReviewService {
     const card = await this.prisma.productCluster.findUnique({ where: { id: clusterId } });
     if (!card) throw new NotFoundException('Card inexistente.');
     await this.prisma.productCluster.update({ where: { id: clusterId }, data: { canonicalName: name, nameLocked: true } });
+    this.cardRollups?.markStale();
     return this.decision('rename_card', actorId, null,
       { clusterId, name: card.canonicalName, nameLocked: card.nameLocked },
       { clusterId, name, nameLocked: true });
@@ -348,6 +354,7 @@ export class CatalogReviewService {
     }
     const undo = await this.decision('undo', actorId, decision.reviewItemId, decision.after as object, decision.before as object);
     await this.prisma.catalogDecision.update({ where: { id: decision.id }, data: { undoneByDecisionId: undo.decisionId } });
+    this.cardRollups?.markStale();
     return undo;
   }
 

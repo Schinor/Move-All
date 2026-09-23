@@ -559,7 +559,10 @@ describe('ProductsService — compareProducts com Move Score (F2.5)', () => {
           snapshots: [],
         }),
       },
-      productListingSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      productListingSnapshot: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       productScore: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -599,7 +602,10 @@ describe('ProductsService — compareProducts com Move Score (F2.5)', () => {
         ]),
         findUnique: jest.fn().mockResolvedValue({ id: 'c1', canonicalName: 'Halteres', category: 'dumbbells', snapshots: [] }),
       },
-      productListingSnapshot: { findMany: jest.fn().mockResolvedValue([]) },
+      productListingSnapshot: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       productScore: {
         findMany: jest.fn().mockResolvedValue([
           {
@@ -637,8 +643,12 @@ describe('ProductsService — séries com compare=previous (C3)', () => {
   }
 
   function buildService() {
+    const rows = snapshots();
     const prisma = {
-      productListingSnapshot: { findMany: jest.fn().mockResolvedValue(snapshots()) },
+      productListingSnapshot: {
+        findFirst: jest.fn().mockResolvedValue({ collectedAt: rows.at(-1)?.collectedAt }),
+        findMany: jest.fn().mockResolvedValue(rows),
+      },
       exchangeRate: { findMany: jest.fn().mockResolvedValue([]) },
       logisticsCostParam: { findFirst: jest.fn().mockResolvedValue(null) },
     };
@@ -668,6 +678,49 @@ describe('ProductsService — séries com compare=previous (C3)', () => {
   });
 });
 
+describe('ProductsService — limite e janela das séries (Tarefa 11)', () => {
+  const latestAt = new Date('2026-09-20T00:00:00Z');
+
+  function build() {
+    const prisma = {
+      productListingSnapshot: {
+        findFirst: jest.fn(async (_args: {
+          where: Record<string, unknown>;
+          orderBy: { collectedAt: 'desc' };
+          select: { collectedAt: true };
+        }) => ({ collectedAt: latestAt })),
+        findMany: jest.fn(async (_args: {
+          where: Record<string, unknown>;
+          orderBy: { collectedAt: 'asc' | 'desc' };
+          take?: number;
+        }) => [] as Array<Record<string, unknown>>),
+      },
+    };
+    const service = new ProductsService(prisma as unknown as PrismaService, {} as OpenRouterService);
+    return { service, prisma };
+  }
+
+  it('séries: com mais de 5.000 snapshots, "all" usa os 5.000 mais recentes', async () => {
+    const { service, prisma } = build();
+    await (service as unknown as {
+      loadSeriesSnapshots: (productClusterId: string, lookbackMs: number | null) => Promise<unknown[]>;
+    }).loadSeriesSnapshots('c1', null);
+    const args = prisma.productListingSnapshot.findMany.mock.calls[0][0];
+    expect(args.orderBy).toEqual({ collectedAt: 'desc' });
+    expect(args.take).toBe(5000);
+  });
+
+  it('séries: com janela, filtra no banco a partir do mais recente', async () => {
+    const { service, prisma } = build();
+    await (service as unknown as {
+      loadSeriesSnapshots: (productClusterId: string, lookbackMs: number | null) => Promise<unknown[]>;
+    }).loadSeriesSnapshots('c1', 30 * 86_400_000);
+    const args = prisma.productListingSnapshot.findMany.mock.calls[0][0];
+    expect(args.where.collectedAt).toEqual({ gte: new Date('2026-08-21T00:00:00Z') });
+    expect(args.orderBy).toEqual({ collectedAt: 'asc' });
+  });
+});
+
 describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
   // Resposta real do print do Raul: cerca de abertura sem fechamento (truncada).
   const TRUNCATED =
@@ -686,6 +739,15 @@ describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
           alerts: [],
         }),
       },
+      productListingSnapshot: {
+        aggregate: jest.fn().mockResolvedValue({
+          _count: { _all: 0 },
+          _avg: { priceMin: null },
+          _min: { priceMin: null },
+          _max: { priceMin: null },
+        }),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
       aiRecommendation: {
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockImplementation(async (args: { data: Record<string, unknown> }) => {
@@ -694,6 +756,7 @@ describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
         }),
       },
       productScore: {
+        findFirst: jest.fn().mockResolvedValue({ computedAt: new Date('2026-09-14T00:00:00.000Z') }),
         findMany: jest.fn().mockResolvedValue([
           {
             productClusterId: 'c1',
@@ -729,6 +792,36 @@ describe('ProductsService — getAiRecommendation robusto (P0-2)', () => {
     );
     return { service, prisma, openRouter, created, logs };
   }
+
+  it('recomendação por IA: cache vale enquanto não houver score mais novo', async () => {
+    const { service, prisma, openRouter } = buildAiService('{}');
+    const computedAt = new Date('2026-09-10T00:00:00Z');
+    (prisma.productScore.findFirst as jest.Mock).mockResolvedValue({ computedAt });
+    (prisma.aiRecommendation.findFirst as jest.Mock).mockResolvedValue({
+      id: 'r1', action: 'DECIDIR_AGORA', decision: 'AVANCAR', rationale: 'ok', generatedText: '{}',
+      modelVersion: 'm', createdAt: new Date('2026-09-11T00:00:00Z'),
+    });
+
+    const out = await service.getAiRecommendation('c1');
+
+    expect(out.cached).toBe(true);
+    const where = prisma.aiRecommendation.findFirst.mock.calls[0][0].where;
+    expect(where.createdAt).toEqual({ gte: computedAt });
+    expect(openRouter.chatCompletion).not.toHaveBeenCalled();
+  });
+
+  it('recomendação por IA: preços e contagem vêm de agregação, sem carregar snapshots', async () => {
+    const { service, prisma } = buildAiService(JSON.stringify({
+      action: 'DECIDIR_AGORA', rationale: 'Dados conferidos.', key_drivers: [],
+    }));
+
+    await service.getAiRecommendation('c1');
+
+    expect(prisma.productListingSnapshot.aggregate).toHaveBeenCalledTimes(2);
+    expect(prisma.productListingSnapshot.aggregate.mock.calls[0][0]).toHaveProperty('_count._all', true);
+    const clusterQuery = prisma.productCluster.findUnique.mock.calls[0][0];
+    expect(clusterQuery.include.snapshots).toBeUndefined();
+  });
 
   it('resposta truncada com cerca → fallback determinístico, sem JSON na tela, ação das regras', async () => {
     const { service, created, logs, openRouter } = buildAiService(TRUNCATED);

@@ -4,12 +4,14 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { CardRollupsService } from '../../shared/card-rollups/card-rollups.service';
 import {
   SupplierClusterRow,
   suppliersFromCluster,
@@ -168,6 +170,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly openRouter: OpenRouterService,
     private readonly cache?: RedisCacheService,
+    @Optional() private readonly cardRollups?: CardRollupsService,
   ) {}
 
   private offerRepository?: OfferRepository;
@@ -241,6 +244,7 @@ export class ProductsService {
       if (!hasOverrides) {
         await this.persistSimulationOutcome(productClusterId, result);
         await this.cache?.delPattern('dashboard:trends:products:*');
+        this.cardRollups?.markStale();
       }
 
       return {
@@ -429,6 +433,7 @@ export class ProductsService {
     if (summary.simulated > 0) {
       await this.cache?.delPattern('monte-carlo:*');
       await this.cache?.delPattern('dashboard:trends:products:*');
+      this.cardRollups?.markStale();
     }
     return summary;
   }
@@ -662,7 +667,17 @@ export class ProductsService {
     // sintéticos quando INCLUDE_SYNTHETIC_DATA=false.
     const cluster = (await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
-      include: { snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' } } },
+      include: {
+        snapshots: {
+          where: syntheticSnapshotWhere(),
+          orderBy: { collectedAt: 'asc' },
+          select: {
+            marketplace: true, currency: true, priceMin: true, priceMax: true, salesSignalRaw: true,
+            salesSignalType: true, reviewCount: true, rating: true, moq: true, collectedAt: true,
+            externalProductId: true, sellerName: true,
+          },
+        },
+      },
     })) as unknown as ClusterForSimulation | null;
 
     if (!cluster || cluster.snapshots.length === 0) {
@@ -677,7 +692,16 @@ export class ProductsService {
     const cluster = (await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
       // Com INCLUDE_SYNTHETIC_DATA=false, fornecedores derivam só de snapshots reais.
-      include: { snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'desc' } } },
+      include: {
+        snapshots: {
+          where: syntheticSnapshotWhere(),
+          orderBy: { collectedAt: 'desc' },
+          select: {
+            marketplace: true, externalProductId: true, sellerId: true, sellerName: true,
+            priceMin: true, moq: true, collectedAt: true, rating: true, salesSignalRaw: true,
+          },
+        },
+      },
     })) as unknown as SupplierClusterRow | null;
 
     return cluster ? suppliersFromCluster(cluster) : [];
@@ -874,11 +898,7 @@ export class ProductsService {
       return { current, previous: [] };
     }
     // Sem cache aqui (combina dois intervalos); seriesPoints tem cache próprio.
-    const allSnapshots = await this.prisma.productListingSnapshot.findMany({
-      where: { productClusterId, ...syntheticSnapshotWhere() },
-      orderBy: { collectedAt: 'asc' },
-      take: 5_000,
-    });
+    const allSnapshots = await this.loadSeriesSnapshots(productClusterId, 2 * windowMs);
     if (allSnapshots.length === 0) return { current: [], previous: [] };
     const latestTime = allSnapshots[allSnapshots.length - 1].collectedAt.getTime();
     const currentCutoff = latestTime - windowMs;
@@ -1175,8 +1195,6 @@ export class ProductsService {
     const cluster = await this.prisma.productCluster.findUnique({
       where: { id: productClusterId },
       include: {
-        // Com INCLUDE_SYNTHETIC_DATA=false, a recomendação usa só snapshots reais.
-        snapshots: { where: syntheticSnapshotWhere(), orderBy: { collectedAt: 'asc' } },
         alerts: { orderBy: { createdAt: 'desc' }, take: 5 },
       },
     });
@@ -1185,12 +1203,19 @@ export class ProductsService {
       throw new NotFoundException(`Product cluster not found: ${productClusterId}`);
     }
 
-    // 1. Cache de 24h na tabela ai_recommendations. Linhas inválidas
-    // (ação fora das 5 ou rationale cru com ```/{) são ignoradas e regeradas.
+    // Um resultado segue válido até surgir um score mais novo; sem score, vale por 24h.
+    const latestScore = await this.prisma.productScore.findFirst({
+      where: { productClusterId },
+      orderBy: { computedAt: 'desc' },
+      select: { computedAt: true },
+    });
+    const validSince = latestScore?.computedAt ?? new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // Linhas inválidas (ação fora das 5 ou rationale cru com ```/{) são ignoradas e regeradas.
     const cached = await this.prisma.aiRecommendation.findFirst({
       where: {
         productClusterId,
-        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        createdAt: { gte: validSince },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1217,19 +1242,14 @@ export class ProductsService {
     const scores = await loadLatestMoveScores(this.prisma, [productClusterId]);
     const moveScore = scores.get(productClusterId) ?? EMPTY_MOVE_SCORE;
 
-    const prices = cluster.snapshots
-      .map((s) => Number(s.priceMin))
-      .filter((p) => p > 0);
-    const avgPrice = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
-    const minPrice = prices.length ? Math.min(...prices) : 0;
-    const maxPrice = prices.length ? Math.max(...prices) : 0;
+    const priceCtx = await this.aiPriceContext(productClusterId);
 
     const contextPayload = {
       product: {
         id: cluster.id,
         name: cluster.canonicalName,
         category: cluster.category,
-        snapshots_count: cluster.snapshots.length,
+        snapshots_count: priceCtx.count,
       },
       move_score: {
         score: moveScore.moveScore,
@@ -1247,9 +1267,9 @@ export class ProductsService {
         risk_drivers: moveScore.riskDrivers,
       },
       pricing: {
-        avg_price_usd: avgPrice ? Math.round(avgPrice * 100) / 100 : null,
-        min_price_usd: minPrice || null,
-        max_price_usd: maxPrice || null,
+        avg_price_usd: priceCtx.avg ? Math.round(priceCtx.avg * 100) / 100 : null,
+        min_price_usd: priceCtx.min || null,
+        max_price_usd: priceCtx.max || null,
       },
       recent_alerts: cluster.alerts.map((a) => a.message),
     };
@@ -1324,7 +1344,7 @@ Responda APENAS um objeto JSON com o seguinte formato:
         generatedText: aiResponse.content ?? '',
         modelVersion: aiResponse.model,
         promptVersion: usedFallback ? 'v2.1-deterministic-fallback' : 'v2.1-rules-action',
-        scoreSnapshotId: cluster.snapshots.at(-1)?.id ?? null,
+        scoreSnapshotId: priceCtx.lastSnapshotId,
       },
     });
 
@@ -1340,6 +1360,32 @@ Responda APENAS um objeto JSON com o seguinte formato:
       model_version: saved.modelVersion,
       cached: false,
       created_at: saved.createdAt.toISOString(),
+    };
+  }
+
+  /** Preços, contagem e último snapshot para a recomendação sem carregar o histórico inteiro. */
+  private async aiPriceContext(productClusterId: string) {
+    const where = { productClusterId, ...syntheticSnapshotWhere() };
+    const [all, priced, last] = await Promise.all([
+      this.prisma.productListingSnapshot.aggregate({ where, _count: { _all: true } }),
+      this.prisma.productListingSnapshot.aggregate({
+        where: { ...where, priceMin: { gt: 0 } },
+        _avg: { priceMin: true },
+        _min: { priceMin: true },
+        _max: { priceMin: true },
+      }),
+      this.prisma.productListingSnapshot.findFirst({
+        where,
+        orderBy: { collectedAt: 'desc' },
+        select: { id: true },
+      }),
+    ]);
+    return {
+      count: all._count._all,
+      avg: priced._avg.priceMin === null ? 0 : Number(priced._avg.priceMin),
+      min: priced._min.priceMin === null ? 0 : Number(priced._min.priceMin),
+      max: priced._max.priceMin === null ? 0 : Number(priced._max.priceMin),
+      lastSnapshotId: last?.id ?? null,
     };
   }
 
@@ -1590,19 +1636,15 @@ Responda APENAS um objeto JSON com o seguinte formato:
     metricType: 'volume' | 'price' | 'reviews' | 'general' = 'general',
   ) {
     return this.cached(`products:series:${productClusterId}:${window}:${metricType}`, 3600, async () => {
-      // Com INCLUDE_SYNTHETIC_DATA=false, as séries ignoram snapshots sintéticos.
-      const allSnapshots = await this.prisma.productListingSnapshot.findMany({
-        where: { productClusterId, ...syntheticSnapshotWhere() },
-        orderBy: { collectedAt: 'asc' },
-        take: 5_000,
-      });
+      const windowMs = WINDOW_MS[window] ?? Number.MAX_SAFE_INTEGER;
+      const finite = window && window !== 'all' && windowMs && windowMs !== Number.MAX_SAFE_INTEGER;
+      const allSnapshots = await this.loadSeriesSnapshots(productClusterId, finite ? windowMs : null);
 
       if (allSnapshots.length === 0) {
         return [];
       }
 
       const latestTime = allSnapshots[allSnapshots.length - 1].collectedAt.getTime();
-      const windowMs = WINDOW_MS[window] ?? Number.MAX_SAFE_INTEGER;
       const cutoffTime =
         window && window !== 'all' && windowMs && windowMs !== Number.MAX_SAFE_INTEGER
           ? latestTime - windowMs
@@ -1671,6 +1713,29 @@ Responda APENAS um objeto JSON com o seguinte formato:
       }
 
       return points;
+    });
+  }
+
+  /** Snapshots para séries: janelas filtradas no banco; "all" usa os 5.000 mais recentes. */
+  private async loadSeriesSnapshots(productClusterId: string, lookbackMs: number | null) {
+    const where = { productClusterId, ...syntheticSnapshotWhere() };
+    const latest = await this.prisma.productListingSnapshot.findFirst({
+      where,
+      orderBy: { collectedAt: 'desc' },
+      select: { collectedAt: true },
+    });
+    if (!latest) return [];
+    if (lookbackMs === null) {
+      const recent = await this.prisma.productListingSnapshot.findMany({
+        where,
+        orderBy: { collectedAt: 'desc' },
+        take: 5_000,
+      });
+      return recent.reverse();
+    }
+    return this.prisma.productListingSnapshot.findMany({
+      where: { ...where, collectedAt: { gte: new Date(latest.collectedAt.getTime() - lookbackMs) } },
+      orderBy: { collectedAt: 'asc' },
     });
   }
 

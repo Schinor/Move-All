@@ -24,6 +24,7 @@ describe('DiscoverySearchService', () => {
   });
 
   it('busca os aprovados mais antigos, um por vez, com as fontes do país e o termo literal', async () => {
+    expect(DISCOVERY_SOURCES.US).toEqual(['amazon', 'alibaba', 'aliexpress']);
     const { prisma, service } = build([
       { id: 't1', term: 'nike adjustable dumbbells', geo: 'US' },
       { id: 't2', term: 'reformer dobrável', geo: 'BR' },

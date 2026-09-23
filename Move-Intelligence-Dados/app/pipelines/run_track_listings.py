@@ -23,7 +23,7 @@ from statistics import median
 from typing import Any, Optional
 
 from app.etl.extract.marketplace import parsers
-from app.etl.extract.marketplace.common import BrightDataClient
+from app.etl.extract.marketplace.common import BrightDataClient, BrightDataMcpError
 from app.etl.load.database import ListingObservationModel, TrackedListingModel, get_session
 
 LOGGER = logging.getLogger(__name__)
@@ -68,6 +68,24 @@ def _resolve_budget(max_calls: Optional[int]) -> int:
         return 50
 
 
+_MCP_NOT_PAGE_ERRORS = (
+    "no codex",
+    "não encontrado no codex",
+    "nao encontrado no codex",
+    "not found in codex",
+    "não configurada",
+    "nao configurada",
+    "descoberta pelo codex",
+    "falha de conexão",
+    "falha de conexao",
+    "sessão",
+    "sessao",
+    "inicializa",
+    "excedeu o tempo",
+    "retornou http 5",
+)
+
+
 def _classify_error(error: Exception) -> str:
     """'not_found' | 'blocked' | 'error'.
 
@@ -80,6 +98,8 @@ def _classify_error(error: Exception) -> str:
     except (TypeError, ValueError):
         status_code = None
     message = str(error or "").casefold()
+    if isinstance(error, BrightDataMcpError) and any(marker in message for marker in _MCP_NOT_PAGE_ERRORS):
+        return "error"
     if status_code == 404 or "not found" in message or "não encontrad" in message:
         return "not_found"
     if status_code == 403 or "captcha" in message or "blocked" in message or "bloque" in message:
@@ -131,6 +151,16 @@ def run(
     moment = _naive_utc(now or datetime.now(timezone.utc))
     budget = _resolve_budget(max_calls)
     active_client = client or BrightDataClient()
+    if client is None and not active_client.is_configured():
+        LOGGER.error("Bright Data não configurada (BRIGHTDATA_MCP_URL/API key): acompanhamento não executado.")
+        return {
+            "status": "not_configured",
+            "dry_run": dry_run,
+            "due_selected": 0,
+            "processed": 0,
+            "failures": 0,
+            "observation_ids": [],
+        }
 
     db = get_session(database_url)
     try:

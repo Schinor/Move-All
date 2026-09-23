@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ListingFicha, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { CardRollupsService } from '../../shared/card-rollups/card-rollups.service';
 import { buildCardName, evaluateCardKey, KeyEvaluation, normalizeDifferential } from './card-key';
 import { decideMissingSpec, Candidate } from './auto-assign';
 import {
@@ -56,6 +57,7 @@ export class CardAssignerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly taxonomy: TaxonomyService,
+    @Optional() private readonly cardRollups?: CardRollupsService,
   ) {}
 
   private async types(): Promise<Map<string, CatalogTypeDef>> {
@@ -75,7 +77,7 @@ export class CardAssignerService {
     this.typeCache = null;
   }
 
-  async assign(ficha: ListingFicha, opts: { deferRefresh?: boolean } = {}): Promise<AssignResult> {
+  async assign(ficha: ListingFicha, opts: { deferRefresh?: boolean; guardHuman?: boolean } = {}): Promise<AssignResult> {
     const listing: ListingRef = { marketplace: ficha.marketplace, externalProductId: ficha.externalProductId };
     const current = await this.prisma.productClusterItem.findUnique({
       where: { marketplace_externalProductId: listing },
@@ -87,12 +89,14 @@ export class CardAssignerService {
     }
     if (ficha.inScope === false) {
       const moved = await this.moveListing(listing, null, 'confirmed', opts);
+      if (moved.blocked) return { outcome: 'error_review', clusterId: current?.clusterId ?? null, touched: [] };
       await this.resolveListingReviews(listing, 'auto_out_of_scope');
       return { outcome: 'out_of_scope', clusterId: null, touched: moved.touched };
     }
     const type = ficha.typeKey ? (await this.types()).get(ficha.typeKey) : undefined;
     if (!type) {
       const moved = await this.moveListing(listing, null, 'confirmed', opts);
+      if (moved.blocked) return { outcome: 'error_review', clusterId: current?.clusterId ?? null, touched: [] };
       await this.registerSuggestedType(ficha.suggestedType);
       return { outcome: 'suggested_type', clusterId: null, touched: moved.touched };
     }
@@ -128,6 +132,7 @@ export class CardAssignerService {
         };
         const after = { listing, clusterId, status, rule: decision.rule };
         const moved = await this.moveListing(listing, clusterId, status, opts);
+        if (moved.blocked) return { outcome: 'error_review', clusterId: current?.clusterId ?? null, touched: [] };
         const review = await this.prisma.catalogReviewItem.findFirst({
           where: { kind: 'provisional_listing', status: 'pending', ...listing },
           select: { id: true },
@@ -151,6 +156,7 @@ export class CardAssignerService {
     }
 
     const moved = await this.moveListing(listing, clusterId, status, opts);
+    if (moved.blocked) return { outcome: 'error_review', clusterId: current?.clusterId ?? null, touched: [] };
     if (reason) await this.ensureListingReview(listing, clusterId, reason);
     else await this.resolveListingReviews(listing, 'auto_confirmed');
     return { outcome: status, clusterId, touched: moved.touched };
@@ -191,16 +197,41 @@ export class CardAssignerService {
     return { kind: 'review', clusterId: null, reason: decision.reason };
   }
 
+  /** Card em que um ADMIN colocou o anúncio (decisão mais recente, não desfeita), ou null. */
+  async humanDecisionCard(listing: ListingRef): Promise<string | null> {
+    const decision = await this.prisma.catalogDecision.findFirst({
+      where: {
+        actorUserId: { not: null },
+        undoneByDecisionId: null,
+        AND: [
+          { after: { path: ['listing', 'marketplace'], equals: listing.marketplace } },
+          { after: { path: ['listing', 'externalProductId'], equals: listing.externalProductId } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { after: true },
+    });
+    const after = (decision?.after ?? null) as { clusterId?: string | null } | null;
+    return after?.clusterId ?? null;
+  }
+
   async moveListing(
     listing: ListingRef,
     targetClusterId: string | null,
     status: ItemStatus,
-    opts: { deferRefresh?: boolean } = {},
-  ): Promise<{ fromClusterId: string | null; touched: string[] }> {
+    opts: { deferRefresh?: boolean; guardHuman?: boolean } = {},
+  ): Promise<{ fromClusterId: string | null; touched: string[]; blocked?: boolean }> {
     const current = await this.prisma.productClusterItem.findUnique({
       where: { marketplace_externalProductId: listing },
     });
     const from = current?.clusterId ?? null;
+    if (opts.guardHuman && current && current.clusterId !== targetClusterId) {
+      const adminCard = await this.humanDecisionCard(listing);
+      if (adminCard && adminCard === current.clusterId) {
+        await this.ensureListingReview(listing, current.clusterId, 'ficha refeita discorda da decisão do ADMIN');
+        return { fromClusterId: current.clusterId, touched: [], blocked: true };
+      }
+    }
     if (targetClusterId === null) {
       if (current) await this.prisma.productClusterItem.delete({ where: { id: current.id } });
     } else if (current) {
@@ -226,6 +257,7 @@ export class CardAssignerService {
       if (targetClusterId) await this.refreshCard(targetClusterId);
       if (from && from !== targetClusterId) await this.refreshCard(from, targetClusterId);
     }
+    this.cardRollups?.markStale();
     return { fromClusterId: from, touched };
   }
 
@@ -247,10 +279,12 @@ export class CardAssignerService {
       } else {
         await this.prisma.productCluster.update({ where: { id: clusterId }, data: { simulatedAt: null } });
       }
+      this.cardRollups?.markStale();
       return;
     }
     if (card.cardKey === null) {
       await this.prisma.productCluster.update({ where: { id: clusterId }, data: { simulatedAt: null } });
+      this.cardRollups?.markStale();
       return;
     }
     const hasConfirmed = card.items.some((item) =>
@@ -279,6 +313,7 @@ export class CardAssignerService {
       data.canonicalName = buildCardName(type, (card.cardKeyValues ?? {}) as Record<string, string>);
     }
     await this.prisma.productCluster.update({ where: { id: clusterId }, data });
+    this.cardRollups?.markStale();
   }
 
   /** Usado pela revisão ("criar card novo" / "aprovar tipo"). Reaproveita card ativo com a mesma chave. */
@@ -419,7 +454,7 @@ export class CardAssignerService {
     current: { clusterId: string; status: string } | null,
     type: CatalogTypeDef,
     evaluation: KeyEvaluation,
-    opts: { deferRefresh?: boolean },
+    opts: { deferRefresh?: boolean; guardHuman?: boolean },
   ): Promise<AssignResult | null> {
     const context = await this.differentialContext(ficha, listing, type, evaluation);
     const { differential, matching, belowLimit } = context;
@@ -441,6 +476,7 @@ export class CardAssignerService {
         note: `diferencial pendente: ${differential}`,
       };
       const moved = await this.moveListing(listing, baseClusterId, 'auto', opts);
+      if (moved.blocked) return { outcome: 'error_review', clusterId: current?.clusterId ?? null, touched: [] };
       const review = await this.prisma.catalogReviewItem.findFirst({
         where: { kind: 'provisional_listing', status: 'pending', ...listing },
         select: { id: true },
@@ -475,7 +511,8 @@ export class CardAssignerService {
         clusterId: item?.clusterId ?? null,
         status: (item?.status as ItemStatus | null) ?? null,
       };
-      const moved = await this.moveListing(ref, targetClusterId, 'auto', { deferRefresh: true });
+      const moved = await this.moveListing(ref, targetClusterId, 'auto', { deferRefresh: true, guardHuman: opts.guardHuman });
+      if (moved.blocked) continue;
       moved.touched.forEach((id) => touched.add(id));
       const review = await this.prisma.catalogReviewItem.findFirst({
         where: { kind: 'provisional_listing', status: 'pending', ...ref },
@@ -592,9 +629,11 @@ export class CardAssignerService {
         where: { id: adoptClusterId },
         data: { ...data, ...(cluster?.nameLocked ? {} : { canonicalName }) },
       });
+      this.cardRollups?.markStale();
       return adoptClusterId;
     }
     const created = await this.prisma.productCluster.create({ data: { ...data, canonicalName } });
+    this.cardRollups?.markStale();
     return created.id;
   }
 

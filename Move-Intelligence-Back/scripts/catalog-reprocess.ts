@@ -31,6 +31,17 @@ async function main() {
       console.log(`Recalculados ${total} scores.`);
       return;
     }
+    const modelIndex = process.argv.indexOf('--llm-model');
+    if (modelIndex >= 0) {
+      const llmModel = process.argv[modelIndex + 1];
+      if (!llmModel) throw new Error('Informe o valor: --llm-model codex-manual');
+      const result = await prisma.listingFicha.updateMany({
+        where: { llmModel, status: { in: ['done', 'error'] } },
+        data: { status: 'pending', priority: PRIORITY.REPROCESS, attempts: 0, lastError: null },
+      });
+      console.log(`catalog:reprocess --llm-model ${llmModel} — ${result.count} fichas voltaram para a fila.`);
+      return;
+    }
     const fichas = app.get(FichaService);
     const promptVersionOnly = process.argv.includes('--prompt-version');
     const seen = new Set<string>();

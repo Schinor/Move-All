@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { CardRollupsService } from '../../shared/card-rollups/card-rollups.service';
 import {
   CardKeyAttr,
   CatalogTypeDef,
@@ -72,7 +73,10 @@ function mergeStringValues(existing: unknown, incoming: string[]): string[] {
 
 @Injectable()
 export class TaxonomyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly cardRollups?: CardRollupsService,
+  ) {}
 
   async listActiveTypes(): Promise<CatalogTypeDef[]> {
     const rows = await this.prisma.catalogType.findMany({
@@ -129,6 +133,7 @@ export class TaxonomyService {
         update: { active: true },
       });
     }
+    this.cardRollups?.markStale();
     return { activated: wanted.length, deactivated: stale.length };
   }
 
@@ -171,6 +176,7 @@ export class TaxonomyService {
       types += 1;
     }
     await this.seedTrendTerms(file);
+    this.cardRollups?.markStale();
     return { families: file.families.length, types };
   }
 }

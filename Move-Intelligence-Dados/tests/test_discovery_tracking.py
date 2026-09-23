@@ -469,3 +469,32 @@ def test_main_aceita_exact_term(monkeypatch):
     entrypoint.main()
     assert captured["exact_term"] is True
     assert captured["term"] == "nike adjustable dumbbells"
+
+
+def test_exact_term_nao_raspa_resultado_sem_relacao(monkeypatch):
+    from app.pipelines import run_live_intelligence as live
+
+    captured = {}
+
+    class FakeExtractor:
+        def __init__(self, client=None):
+            pass
+
+        def extract(self, query, limit, concurrency, candidate_filter):
+            candidates = [
+                {"url": "https://www.amazon.com/dp/B0AAAAAAA1", "title": "Adjustable Dumbbell & Weight Bench"},
+                {"url": "https://www.amazon.com/dp/B0AAAAAAA2", "title": "Adjustable Aerobic Step Platform"},
+            ]
+            kept = [candidate for candidate in candidates if candidate_filter(candidate)]
+            captured["kept"] = [candidate["title"] for candidate in kept]
+            return {
+                "records": [],
+                "errors": [],
+                "metadata": {"source": "amazon", "records_count": 0, "relevance_skipped": len(candidates) - len(kept)},
+            }
+
+    monkeypatch.setattr(live, "_extractor_registry", lambda: {"amazon": FakeExtractor})
+    monkeypatch.setattr(live, "normalize_products", lambda records: [{"id": "p1", "source": "amazon", "cluster": "strength_training"}])
+    summary = live.run(term="adjustable aerobic step", sources=["amazon"], include_demand=False, dry_run=True, exact_term=True)
+    assert captured["kept"] == ["Adjustable Aerobic Step Platform"]
+    assert summary["sources"][0]["relevance_skipped"] == 1

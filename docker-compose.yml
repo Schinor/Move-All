@@ -56,6 +56,11 @@ services:
       OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-http://localhost:4200}
       OPENROUTER_X_TITLE: ${OPENROUTER_X_TITLE:-Move Intelligence}
       BRIGHTDATA_MCP_URL: ${BRIGHTDATA_MCP_URL:-}
+      # Coleta real (plano de coleta real): tudo desligado por padrão no ambiente local.
+      FICHA_ENABLED: ${FICHA_ENABLED:-false}
+      TRACK_LISTINGS_CRON_ENABLED: ${TRACK_LISTINGS_CRON_ENABLED:-false}
+      RADAR_DISCOVERY_ENABLED: ${RADAR_DISCOVERY_ENABLED:-false}
+      SEARCH_TRENDS_CRON_ENABLED: ${SEARCH_TRENDS_CRON_ENABLED:-false}
     depends_on:
       postgres:
         condition: service_healthy

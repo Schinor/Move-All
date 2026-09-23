@@ -189,6 +189,59 @@ describe('FichaService.runOnce', () => {
     await expect(service.runOnce()).resolves.toMatchObject({ stoppedBy: 'daily_limit' });
     expect(prisma.listingFicha.update).not.toHaveBeenCalled();
   });
+
+  it('runOnce com hold grava held e não atribui card', async () => {
+    const { service, prisma, llm, assigner } = build();
+    prisma.listingFicha.findMany.mockResolvedValueOnce([
+      { id: 'f1', marketplace: 'ml', externalProductId: 'X', title: 'Bike X', inputHash: 'h1', attempts: 0 },
+    ]).mockResolvedValueOnce([]);
+    llm.chatCompletion.mockResolvedValue({
+      content: '{"ref":"L1","type_key":"spin_bike","in_scope":true,"card_key_values":{"resistencia":"magnetica"}}',
+      model: 'm',
+    });
+
+    await service.runOnce(undefined, { hold: true });
+
+    expect(prisma.listingFicha.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'held' }),
+    }));
+    expect(assigner.assign).not.toHaveBeenCalled();
+  });
+
+  it('runOnce com maxCalls para ao atingir o limite', async () => {
+    const { service, prisma, llm } = build();
+    process.env.FICHA_BATCH_SIZE = '1';
+    prisma.listingFicha.findMany
+      .mockResolvedValueOnce([
+        { id: 'a', marketplace: 'ml', externalProductId: 'A', title: 'Bike A', inputHash: 'h1', attempts: 0 },
+        { id: 'b', marketplace: 'ml', externalProductId: 'B', title: 'Bike B', inputHash: 'h2', attempts: 0 },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'b', marketplace: 'ml', externalProductId: 'B', title: 'Bike B', inputHash: 'h2', attempts: 0 },
+      ]);
+    llm.chatCompletion.mockResolvedValue({
+      content: '{"ref":"L1","type_key":"spin_bike","in_scope":true,"card_key_values":{"resistencia":"magnetica"}}',
+      model: 'm',
+    });
+
+    const summary = await service.runOnce(undefined, { maxCalls: 1 });
+
+    expect(summary.calls).toBe(1);
+    expect(summary.stoppedBy).toBe('max_calls');
+    expect(llm.chatCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it('applyHeld grava done e atribui com guardHuman', async () => {
+    const { service, prisma, assigner } = build();
+    prisma.listingFicha.findMany.mockResolvedValue([
+      { id: 'f1', marketplace: 'ml', externalProductId: 'X', status: 'held' },
+    ]);
+
+    await service.applyHeld();
+
+    expect(prisma.listingFicha.update).toHaveBeenCalledWith({ where: { id: 'f1' }, data: { status: 'done' } });
+    expect(assigner.assign).toHaveBeenCalledWith(expect.objectContaining({ id: 'f1' }), { deferRefresh: true, guardHuman: true });
+  });
 });
 
 describe('FichaService.currentCardId', () => {

@@ -890,3 +890,24 @@ model CatalogDecision {
   @@index([createdAt])
   @@map("catalog_decisions")
 }
+
+/// Pré-cálculo de loadClusterRollups (plano de coleta real e desempenho). `row` = linha crua do SQL.
+model CardRollup {
+  includeSynthetic Boolean @map("include_synthetic")
+  productClusterId String  @map("product_cluster_id") @db.Uuid
+  category         String?
+  sortOrder        Int     @map("sort_order")
+  row              Json
+
+  @@id([includeSynthetic, productClusterId])
+  @@index([includeSynthetic, sortOrder], map: "card_rollups_order_idx")
+  @@map("card_rollups")
+}
+
+model CardRollupState {
+  includeSynthetic Boolean  @id @map("include_synthetic")
+  computedAt       DateTime @map("computed_at")
+  stale            Boolean  @default(false)
+
+  @@map("card_rollup_state")
+}

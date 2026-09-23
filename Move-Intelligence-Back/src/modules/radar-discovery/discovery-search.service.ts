@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
 
-/** Spec D-D3: termo BR → marketplaces BR; termo US → Amazon US + fornecedores. */
+/** Spec D-D3 + §4.3: termo BR → marketplaces BR; termo US → Amazon US + fornecedores (1688 não responde a inglês). */
 export const DISCOVERY_SOURCES: Record<string, string[]> = {
   BR: ['amazon_br', 'mercado_livre', 'shopee_br'],
-  US: ['amazon', 'alibaba', 'aliexpress', '1688'],
+  US: ['amazon', 'alibaba', 'aliexpress'],
 };
 export const RADAR_DISCOVERY_CATEGORY = 'radar_discovery';
 

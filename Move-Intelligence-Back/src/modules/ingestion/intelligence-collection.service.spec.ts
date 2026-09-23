@@ -235,3 +235,48 @@ describe('IntelligenceCollectionService — track-listings (F1.5)', () => {
     });
   });
 });
+
+describe('IntelligenceCollectionService — caminho do ETL', () => {
+  const original = process.env.MOVE_INTELLIGENCE_DATA_DIR;
+  afterEach(() => { process.env.MOVE_INTELLIGENCE_DATA_DIR = original; });
+
+  it('variável vazia usa o caminho padrão', () => {
+    const { service } = buildService();
+    process.env.MOVE_INTELLIGENCE_DATA_DIR = '';
+    expect((service as any).dataDirectory()).toMatch(/Move-Intelligence-Dados$/);
+  });
+
+  it('variável preenchida é respeitada', () => {
+    const { service } = buildService();
+    process.env.MOVE_INTELLIGENCE_DATA_DIR = '/app/data';
+    expect((service as any).dataDirectory()).toBe('/app/data');
+  });
+});
+
+describe('IntelligenceCollectionService — acompanhamento sem Bright Data', () => {
+  it('track-listings sem Bright Data configurada: job FAILED e nada é recalculado', async () => {
+    const { service, prisma, tiers, products } = buildService();
+    jest.spyOn(service as any, 'runPythonTrack').mockResolvedValue({ status: 'not_configured', processed: 0, observation_ids: [] });
+    await (service as any).executeTrackListings('job-t', new RunTrackListingsDto());
+    const last = prisma.collectionJob.update.mock.calls.at(-1)![0];
+    expect(last.data.status).toBe('FAILED');
+    expect(last.data.errorMessage).toContain('Bright Data não configurada');
+    expect(products.simulateBatchForRanking).not.toHaveBeenCalled();
+    expect(tiers.recalculate).not.toHaveBeenCalled();
+  });
+});
+
+describe('IntelligenceCollectionService — radar (search-trends)', () => {
+  it('runSearchTrends chama o pipeline search-trends e trava execução dupla', async () => {
+    const { service } = buildService();
+    let release!: () => void;
+    const spawn = jest.spyOn(service as any, 'spawnPython').mockImplementation(
+      () => new Promise((r) => { release = () => r({ attempted: 1 }); }),
+    );
+    const first = service.runSearchTrends({ maxRequests: 2 });
+    await expect(service.runSearchTrends()).rejects.toThrow('Radar já está rodando');
+    release();
+    await first;
+    expect(spawn.mock.calls[0][1]).toEqual(expect.arrayContaining(['--pipeline', 'search-trends', '--max-requests', '2']));
+  });
+});

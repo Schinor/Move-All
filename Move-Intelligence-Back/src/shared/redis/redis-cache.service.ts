@@ -7,6 +7,7 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   private client: Redis | null = null;
   private isConnected = false;
   private readonly memoryCache = new Map<string, { value: string; expiresAt: number }>();
+  private readonly inflight = new Map<string, Promise<unknown>>();
 
   onModuleInit() {
     const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
@@ -111,10 +112,12 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   async delPattern(pattern: string): Promise<void> {
     try {
       if (this.isAvailable && this.client) {
-        const keys = await this.client.keys(pattern);
-        if (keys.length > 0) {
-          await this.client.del(...keys);
-        }
+        let cursor = '0';
+        do {
+          const [next, keys] = await this.client.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
+          if (keys.length > 0) await this.client.del(...keys);
+          cursor = next;
+        } while (cursor !== '0');
       }
     } catch (err) {
       this.logger.debug(`Erro ao limpar padrão Redis (${pattern}): ${err}`);
@@ -135,10 +138,21 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
       return cached;
     }
 
-    const fresh = await factory();
-    if (fresh !== null && fresh !== undefined) {
-      await this.set(key, fresh, ttlSeconds);
+    const running = this.inflight.get(key) as Promise<T> | undefined;
+    if (running) return running;
+
+    const job = (async () => {
+      const fresh = await factory();
+      if (fresh !== null && fresh !== undefined) {
+        await this.set(key, fresh, ttlSeconds);
+      }
+      return fresh;
+    })();
+    this.inflight.set(key, job);
+    try {
+      return await job;
+    } finally {
+      this.inflight.delete(key);
     }
-    return fresh;
   }
 }

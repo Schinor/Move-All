@@ -337,3 +337,14 @@ def test_timeout_de_trends_vem_do_env(monkeypatch):
     monkeypatch.setenv("BRIGHTDATA_TRENDS_TIMEOUT", "240")
     assert trends_timeout_seconds() == 240
     assert GoogleTrendsExtractor().timeout == 240
+
+
+def test_main_search_trends_emite_resumo(monkeypatch, capsys):
+    import main as entrypoint
+
+    monkeypatch.setattr(entrypoint.run_search_trends, "run", lambda **kw: {"attempted": 0, "ok": 0, "kw": kw})
+    monkeypatch.setattr("sys.argv", ["main.py", "--pipeline", "search-trends", "--max-requests", "3"])
+    entrypoint.main()
+    out = capsys.readouterr().out
+    line = [line for line in out.splitlines() if line.startswith("MOVE_ETL_RESULT=")][0]
+    assert '"max_requests": 3' in line

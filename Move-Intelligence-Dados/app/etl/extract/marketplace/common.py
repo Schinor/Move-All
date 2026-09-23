@@ -95,6 +95,15 @@ class BrightDataClient:
             else "Bright Data SERP API + Web Unlocker"
         )
 
+    def is_configured(self) -> bool:
+        """Há como chamar a Bright Data? REST: API key. MCP: URL definida ou descoberta pelo Codex."""
+        if self.provider == "rest":
+            return bool(self.api_key)
+        try:
+            return bool(self._resolve_mcp_url())
+        except BrightDataMcpError:
+            return False
+
     def _rest_request(self, payload: Mapping[str, Any]) -> Any:
         if not self.api_key:
             raise ValueError("BRIGHTDATA_API_KEY não configurada")

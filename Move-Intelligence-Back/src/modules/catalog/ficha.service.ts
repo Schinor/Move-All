@@ -18,6 +18,7 @@ import { buildFichaInput, inputHash } from './ficha-input';
 import { parseFichaJsonLines, validateFicha } from './ficha-parser';
 import { buildFichaSystemPrompt, buildFichaUserMessage } from './ficha-prompt';
 import { TaxonomyService } from './taxonomy.service';
+import { evaluateCardKey } from './card-key';
 
 export interface RegisterListingInput {
   marketplace: string;
@@ -32,7 +33,13 @@ export interface FichaRunSummary {
   done: number;
   copied: number;
   failed: number;
-  stoppedBy: 'disabled' | 'running' | 'empty' | 'budget' | 'daily_limit' | 'error' | 'max_rounds';
+  stoppedBy: 'disabled' | 'running' | 'empty' | 'budget' | 'daily_limit' | 'error' | 'max_rounds' | 'max_calls';
+}
+export type HeldOutcome = 'fica' | 'muda' | 'fora_do_escopo' | 'tipo_sugerido' | 'revisao_admin' | 'novo';
+export interface HeldReport {
+  total: number;
+  counts: Partial<Record<HeldOutcome, number>>;
+  examples: Partial<Record<HeldOutcome, Array<{ title: string; from: string | null; typeKey: string | null }>>>;
 }
 
 const MAX_ROUNDS = 500;
@@ -102,7 +109,7 @@ export class FichaService {
     return existing ? 'updated' : 'created';
   }
 
-  async runOnce(now: () => Date = () => new Date()): Promise<FichaRunSummary> {
+  async runOnce(now: () => Date = () => new Date(), opts: { maxCalls?: number; hold?: boolean } = {}): Promise<FichaRunSummary> {
     const cfg = fichaConfig();
     const summary: FichaRunSummary = { calls: 0, done: 0, copied: 0, failed: 0, stoppedBy: 'empty' };
     if (!cfg.enabled) return { ...summary, stoppedBy: 'disabled' };
@@ -123,10 +130,14 @@ export class FichaService {
         const batch: ListingFicha[] = [];
         const hashesInBatch = new Set<string>();
         for (const ficha of pending) {
-          const copied = await this.copyFromTwin(ficha, true);
+          const copied = await this.copyFromTwin(ficha, true, opts.hold === true);
           if (copied) {
             summary.copied += 1;
             refresh.push(...this.refreshPairs(copied));
+            continue;
+          }
+          if (opts.hold && ficha.status === 'held') {
+            summary.copied += 1;
             continue;
           }
           if (hashesInBatch.has(ficha.inputHash)) continue; // a gêmea copia na próxima rodada
@@ -168,6 +179,10 @@ export class FichaService {
         let content: string | null;
         let model: string;
         try {
+          if (opts.maxCalls !== undefined && summary.calls >= opts.maxCalls) {
+            await this.assigner.refreshMany(refresh);
+            return { ...summary, stoppedBy: 'max_calls' };
+          }
           const response = await requestBatch(batch);
           content = response.content;
           model = response.model;
@@ -185,6 +200,10 @@ export class FichaService {
 
         let parsed = parseFichaJsonLines(content);
         if (parsed.length === 0 && batch.length > 1 && (await remainingFichaCalls(this.prisma, cfg.dailyCallLimit, now())) > 0) {
+          if (opts.maxCalls !== undefined && summary.calls >= opts.maxCalls) {
+            await this.assigner.refreshMany(refresh);
+            return { ...summary, stoppedBy: 'max_calls' };
+          }
           const retryBatch = batch.slice(0, Math.ceil(batch.length / 2));
           try {
             const retryResponse = await requestBatch(retryBatch);
@@ -213,10 +232,12 @@ export class FichaService {
           }
           const updated = await this.prisma.listingFicha.update({
             where: { id: ficha.id },
-            data: { ...fichaDbFields(validateFicha(line, types)), status: 'done', lastError: null, llmModel: model, promptVersion: FICHA_PROMPT_VERSION },
+            data: { ...fichaDbFields(validateFicha(line, types)), status: opts.hold ? 'held' : 'done', lastError: null, llmModel: model, promptVersion: FICHA_PROMPT_VERSION },
           });
-          const result = await this.assigner.assign(updated, { deferRefresh: true });
-          refresh.push(...this.refreshPairs(result));
+          if (!opts.hold) {
+            const result = await this.assigner.assign(updated, { deferRefresh: true });
+            refresh.push(...this.refreshPairs(result));
+          }
           summary.done += 1;
         }
         await this.assigner.refreshMany(refresh);
@@ -225,6 +246,48 @@ export class FichaService {
     } finally {
       this.running = false;
     }
+  }
+
+  async previewHeld(): Promise<HeldReport> {
+    const held = await this.prisma.listingFicha.findMany({ where: { status: 'held' } });
+    const types = await this.taxonomy.getTypeMap();
+    const report: HeldReport = { total: held.length, counts: {}, examples: {} };
+    for (const ficha of held) {
+      const listing = { marketplace: ficha.marketplace, externalProductId: ficha.externalProductId };
+      const item = await this.prisma.productClusterItem.findUnique({ where: { marketplace_externalProductId: listing } });
+      const card = item ? await this.prisma.productCluster.findUnique({ where: { id: item.clusterId }, select: { cardKey: true, canonicalName: true } }) : null;
+      let outcome: HeldOutcome;
+      const type = ficha.typeKey ? types.get(ficha.typeKey) : undefined;
+      if (ficha.inScope === false) outcome = 'fora_do_escopo';
+      else if (!type) outcome = 'tipo_sugerido';
+      else if (!item) outcome = 'novo';
+      else {
+        const key = evaluateCardKey(type, (ficha.cardKeyValues ?? {}) as Record<string, unknown>, ficha.newDifferential).cardKey;
+        outcome = key === card?.cardKey ? 'fica' : 'muda';
+      }
+      if ((outcome === 'muda' || outcome === 'fora_do_escopo' || outcome === 'tipo_sugerido') && item
+        && (await this.assigner.humanDecisionCard(listing)) === item.clusterId) outcome = 'revisao_admin';
+      report.counts[outcome] = (report.counts[outcome] ?? 0) + 1;
+      const list = (report.examples[outcome] ??= []);
+      if (list.length < 20) list.push({ title: ficha.title, from: card?.canonicalName ?? null, typeKey: ficha.typeKey });
+    }
+    return report;
+  }
+
+  async applyHeld(): Promise<{ applied: number; blocked: number }> {
+    const held = await this.prisma.listingFicha.findMany({ where: { status: 'held' }, orderBy: { updatedAt: 'asc' } });
+    const refresh: Array<{ clusterId: string; lastDestination: string | null }> = [];
+    let applied = 0;
+    let blocked = 0;
+    for (const ficha of held) {
+      const updated = await this.prisma.listingFicha.update({ where: { id: ficha.id }, data: { status: 'done' } });
+      const result = await this.assigner.assign(updated, { deferRefresh: true, guardHuman: true });
+      if (result.outcome === 'error_review') blocked += 1;
+      refresh.push(...this.refreshPairs(result));
+      applied += 1;
+    }
+    await this.assigner.refreshMany(refresh);
+    return { applied, blocked };
   }
 
   private refreshPairs(result: AssignResult): Array<{ clusterId: string; lastDestination: string | null }> {
@@ -301,18 +364,23 @@ export class FichaService {
     return { requeued: true, count };
   }
 
-  private async copyFromTwin(ficha: ListingFicha, deferRefresh: boolean): Promise<AssignResult | null> {
+  private async copyFromTwin(ficha: ListingFicha, deferRefresh: boolean, hold = false): Promise<AssignResult | null> {
     const twin = await this.prisma.listingFicha.findFirst({
-      where: { inputHash: ficha.inputHash, status: 'done', id: { not: ficha.id } },
+      where: { inputHash: ficha.inputHash, status: hold ? { in: ['done', 'held'] } : 'done', id: { not: ficha.id } },
       orderBy: { updatedAt: 'desc' },
     });
     if (!twin) return null;
-    const data: Record<string, unknown> = { status: 'done', lastError: null, copiedFromFichaId: twin.copiedFromFichaId ?? twin.id };
+    const data: Record<string, unknown> = { status: hold ? 'held' : 'done', lastError: null, copiedFromFichaId: twin.copiedFromFichaId ?? twin.id };
     for (const field of COPY_FIELDS) data[field] = (twin as unknown as Record<string, unknown>)[field];
     const updated = await this.prisma.listingFicha.update({
       where: { id: ficha.id },
       data: data as Prisma.ListingFichaUpdateInput,
     });
+    if (hold) {
+      // Marca a cópia no objeto da fila para runOnce contabilizá-la sem atribuir card.
+      ficha.status = 'held';
+      return null;
+    }
     return this.assigner.assign(updated, { deferRefresh });
   }
 

@@ -25,6 +25,7 @@ import { AppConfigModule } from './shared/config/app-config.module';
 import { DatabaseModule } from './shared/database/database.module';
 import { HttpModule } from './shared/http/http.module';
 import { RedisModule } from './shared/redis/redis.module';
+import { CardRollupsModule } from './shared/card-rollups/card-rollups.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { RedisModule } from './shared/redis/redis.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     AppConfigModule,
     DatabaseModule,
+    CardRollupsModule,
     RedisModule,
     HttpModule,
     BusinessRulesModule,

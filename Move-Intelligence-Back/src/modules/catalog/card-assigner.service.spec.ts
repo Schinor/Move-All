@@ -44,7 +44,10 @@ function build() {
       update: jest.fn().mockImplementation(({ data }) => ({ id: 'rev1', suggestedTypeAliases: data.suggestedTypeAliases ?? ['squat_cage'] })),
       updateMany: jest.fn(),
     },
-    catalogDecision: { create: jest.fn().mockResolvedValue({ id: 'decision-1' }) },
+    catalogDecision: {
+      create: jest.fn().mockResolvedValue({ id: 'decision-1' }),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     listingFicha: { count: jest.fn().mockResolvedValue(1), findMany: jest.fn().mockResolvedValue([]) },
     catalogType: { findUnique: jest.fn(), update: jest.fn() },
     $queryRaw: jest.fn().mockResolvedValue([]),
@@ -362,5 +365,42 @@ describe('CardAssignerService.refreshCard', () => {
     expect(prisma.productCluster.update).toHaveBeenCalledWith({
       where: { id: 'c1' }, data: { cardStatus: 'confirmed', simulatedAt: null },
     });
+  });
+});
+
+describe('CardAssignerService.guardHuman', () => {
+  it('guardHuman: anúncio posto no card por ADMIN não muda de card; abre revisão', async () => {
+    const { service, prisma } = build();
+    prisma.productClusterItem.findUnique.mockResolvedValue({ id: 'i1', clusterId: 'card-admin', status: 'confirmed' });
+    prisma.catalogDecision.findFirst.mockResolvedValue({ after: { clusterId: 'card-admin', listing: { marketplace: 'amazon', externalProductId: 'X' } } });
+    const ensure = jest.spyOn(service, 'ensureListingReview').mockResolvedValue(undefined);
+    const out = await service.moveListing({ marketplace: 'amazon', externalProductId: 'X' }, 'card-outro', 'confirmed', { guardHuman: true });
+    expect(out.blocked).toBe(true);
+    expect(prisma.productClusterItem.update).not.toHaveBeenCalled();
+    expect(ensure).toHaveBeenCalledWith({ marketplace: 'amazon', externalProductId: 'X' }, 'card-admin', 'ficha refeita discorda da decisão do ADMIN');
+  });
+
+  it('guardHuman: sem decisão de ADMIN, move normalmente', async () => {
+    const { service, prisma } = build();
+    prisma.productClusterItem.findUnique.mockResolvedValue({ id: 'i1', clusterId: 'card-a', status: 'auto' });
+    prisma.catalogDecision.findFirst.mockResolvedValue(null);
+    const out = await service.moveListing({ marketplace: 'amazon', externalProductId: 'X' }, 'card-b', 'confirmed', { guardHuman: true, deferRefresh: true });
+    expect(out.blocked).toBeFalsy();
+    expect(prisma.productClusterItem.update).toHaveBeenCalled();
+  });
+
+  it('humanDecisionCard consulta só decisões de ADMIN não desfeitas do anúncio', async () => {
+    const { service, prisma } = build();
+    prisma.catalogDecision.findFirst.mockResolvedValue(null);
+    await service.humanDecisionCard({ marketplace: 'amazon', externalProductId: 'X' });
+    const where = prisma.catalogDecision.findFirst.mock.calls[0][0].where;
+    expect(where).toEqual(expect.objectContaining({
+      actorUserId: { not: null },
+      undoneByDecisionId: null,
+      AND: [
+        { after: { path: ['listing', 'marketplace'], equals: 'amazon' } },
+        { after: { path: ['listing', 'externalProductId'], equals: 'X' } },
+      ],
+    }));
   });
 });

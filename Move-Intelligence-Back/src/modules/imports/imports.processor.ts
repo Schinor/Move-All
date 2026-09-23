@@ -1,9 +1,10 @@
 import { promises as fs } from 'node:fs';
 import { dirname } from 'node:path';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ImportSourceType, ImportStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { RedisCacheService } from '../../shared/redis/redis-cache.service';
+import { CardRollupsService } from '../../shared/card-rollups/card-rollups.service';
 import { FichaService } from '../catalog/ficha.service';
 import { ProductsService } from '../products/products.service';
 import { parseComex } from './parsers/comex.parser';
@@ -50,6 +51,7 @@ export class ImportsProcessor {
     private readonly products: ProductsService,
     private readonly fichas: FichaService,
     private readonly cache?: RedisCacheService,
+    @Optional() private readonly cardRollups?: CardRollupsService,
   ) {}
 
   /**
@@ -147,6 +149,7 @@ export class ImportsProcessor {
 
       if (isMarketplaceImport && rowsImported > 0) {
         await this.cache?.delPattern('dashboard:trends:products:*');
+        this.cardRollups?.markStale();
         this.scheduleRankingSimulation(jobId);
       }
     } catch (error) {

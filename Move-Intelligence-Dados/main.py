@@ -22,6 +22,7 @@ from app.pipelines import (
     run_historical_collection,
     run_track_listings,
     run_exchange_rates,
+    run_search_trends,
 )
 
 def main():
@@ -38,6 +39,7 @@ def main():
             "historical-collection",
             "track-listings",
             "exchange-rates",
+            "search-trends",
         ],
         required=True,
         help="A pipeline de dados que deseja executar."
@@ -134,6 +136,8 @@ def main():
             "descoberta, TRACK_LISTINGS_MAX_CALLS no acompanhamento)."
         ),
     )
+    parser.add_argument("--max-requests", type=int, help="Limita as requisições do radar de Google Trends.")
+    parser.add_argument("--force", action="store_true", help="Ignora snapshots recentes no radar de Google Trends.")
     parser.add_argument(
         "--allow-synthetic",
         action="store_true",
@@ -220,6 +224,14 @@ def main():
                 dry_run=args.dry_run,
             )
             print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False))
+        elif pipeline == "search-trends":
+            result = run_search_trends.run(
+                database_url=args.database_url,
+                dry_run=args.dry_run,
+                max_requests=args.max_requests,
+                force=args.force,
+            )
+            print("MOVE_ETL_RESULT=" + __import__("json").dumps(result, ensure_ascii=False, default=str))
             
     except Exception as e:
         logging.critical(f"Erro fatal durante a execução da pipeline '{pipeline}': {e}", exc_info=True)

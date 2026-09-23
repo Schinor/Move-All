@@ -276,3 +276,42 @@ def test_cadencia_nivel_3_mensal():
     from app.pipelines.run_track_listings import TIER_CADENCE_DAYS
 
     assert TIER_CADENCE_DAYS == {1: 3.5, 2: 7.0, 3: 30.0}
+
+
+def test_erro_de_configuracao_do_mcp_nao_vira_not_found():
+    from app.etl.extract.marketplace.common import BrightDataMcpError, BrightDataRequestError
+    from app.pipelines.run_track_listings import _classify_error
+
+    config = BrightDataMcpError(
+        "MCP Bright Data 'bright_data' não encontrado no Codex; configure-o localmente ou defina BRIGHTDATA_MCP_URL no servidor"
+    )
+    assert _classify_error(config) == "error"
+    assert _classify_error(BrightDataMcpError("BRIGHTDATA_MCP_URL não configurada e descoberta pelo Codex desativada")) == "error"
+    assert _classify_error(BrightDataMcpError("Falha de conexão com o MCP Bright Data")) == "error"
+    assert _classify_error(BrightDataRequestError(404, "Not Found")) == "not_found"
+    assert _classify_error(BrightDataMcpError("MCP Bright Data rejeitou a solicitação: 404 Not Found")) == "not_found"
+
+
+def test_sem_bright_data_configurada_nao_toca_nos_anuncios(tmp_path, monkeypatch):
+    database_url = f"sqlite:///{tmp_path / 'track.db'}"
+    db = get_session(database_url)
+    try:
+        listing = _seed_listing(db)
+        listing_id = listing.id
+    finally:
+        db.close()
+
+    monkeypatch.setattr(
+        "app.pipelines.run_track_listings.BrightDataClient.is_configured", lambda self: False
+    )
+    summary = run(database_url=database_url, max_calls=10)
+    assert summary["status"] == "not_configured"
+    assert summary["processed"] == 0
+
+    db = get_session(database_url)
+    try:
+        row = db.get(TrackedListingModel, listing_id)
+        assert row.consecutive_failures == 0
+        assert db.query(ListingObservationModel).filter_by(listing_id=listing_id).count() == 0
+    finally:
+        db.close()
